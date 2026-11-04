@@ -138,6 +138,68 @@ enum PlaylistMenuBuilder {
         return menu
     }
 
+    // MARK: - A skin's REM, SEL and MISC buttons
+
+    /// Winamp's `PE_REM`, for a skin that draws the playlist editor's buttons itself. "Selected" and
+    /// "Crop" are disabled with nothing selected rather than hidden — a greyed item says *why* it did
+    /// nothing, an absent one does not.
+    static func removeMenu(target: PlaylistMenuTarget, hasSelection: Bool) -> NSMenu {
+        sectionMenu("Remove", target: target, [
+            ("Remove Selected", #selector(PlaylistMenuTarget.removeSelected(_:)), hasSelection),
+            ("Crop Selection", #selector(PlaylistMenuTarget.cropSelection(_:)), hasSelection),
+            ("Remove All", #selector(PlaylistMenuTarget.removeAll(_:)), true),
+            ("Remove Dead Files", #selector(PlaylistMenuTarget.removeDeadFiles(_:)), true)
+        ])
+    }
+
+    /// Winamp's `PE_SEL`.
+    static func selectMenu(target: PlaylistMenuTarget) -> NSMenu {
+        sectionMenu("Select", target: target, [
+            ("Select All", #selector(PlaylistMenuTarget.selectAll(_:)), true),
+            ("Select None", #selector(PlaylistMenuTarget.selectNone(_:)), true),
+            ("Invert Selection", #selector(PlaylistMenuTarget.invertSelection(_:)), true)
+        ])
+    }
+
+    /// Winamp's `PE_MISC`: its sort submenu, and File Info for `selectedRows` (enabled when the target
+    /// has a track to show), with the EQ-profile and row-field items every playlist menu carries.
+    static func miscMenu(target: PlaylistMenuTarget, selectedRows: Set<Int>, canShowFileInfo: Bool) -> NSMenu {
+        let sort = sectionMenu("Sort", target: target, [
+            ("Sort by Title", #selector(PlaylistMenuTarget.sortByTitle(_:)), true),
+            ("Sort by Filename", #selector(PlaylistMenuTarget.sortByFilename(_:)), true),
+            ("Sort by Path", #selector(PlaylistMenuTarget.sortByPath(_:)), true),
+            ("Randomize", #selector(PlaylistMenuTarget.randomize(_:)), true),
+            ("Reverse", #selector(PlaylistMenuTarget.reverse(_:)), true)
+        ])
+        let menu = NSMenu(title: "Misc")
+        menu.autoenablesItems = false
+        let sortItem = NSMenuItem(title: "Sort", action: nil, keyEquivalent: "")
+        sortItem.submenu = sort
+        menu.addItem(sortItem)
+        menu.addItem(.separator())
+        let info = NSMenuItem(title: "File Info...", action: #selector(PlaylistMenuTarget.showFileInfo(_:)),
+                              keyEquivalent: "")
+        info.target = target
+        info.isEnabled = canShowFileInfo
+        menu.addItem(info)
+        EQProfileMenu.addAssignItem(to: menu, queueRows: selectedRows)
+        PlaylistRowFields.addItems(to: menu)
+        return menu
+    }
+
+    private static func sectionMenu(_ title: String, target: PlaylistMenuTarget,
+                                    _ rows: [(String, Selector, Bool)]) -> NSMenu {
+        let menu = NSMenu(title: title)
+        menu.autoenablesItems = false
+        for (title, selector, enabled) in rows {
+            let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
+            item.target = target
+            item.isEnabled = enabled
+            menu.addItem(item)
+        }
+        return menu
+    }
+
     // MARK: - Add ▸ and Playlist ▸
 
     /// Ask for a URL and append it with `AudioEngine.appendFiles`. True when a URL was added.
