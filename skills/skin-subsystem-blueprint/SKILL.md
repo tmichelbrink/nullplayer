@@ -105,7 +105,9 @@ go through it (Sonique S13, 2026-10-18). Beside it, **`SkinSelection(key:)`** is
 main window that loads one skin file itself (`SkinFileMainWindow`, Audion and Sonique) supplies its
 selection, URL lookup,
 loader, `loadedSkinURL` and `present(_:error:)`, and gets `reloadSelectedSkin`, `selectSkin(named:)` and
-`resetToUnskinned` over one `SkinLoadTask` (`App/Skinning/`, Sonique S18).
+`resetToUnskinned` over one `SkinLoadTask` (`App/Skinning/`, Sonique S18). A family that imports
+`.zip`s unpacks them through **`SkinZipExtraction`** (`App/Skinning/`; Audion) with its own
+`SkinZipLimits` and its own choice of entries, mapping the shared rejections to its findings.
 
 One seam the compiler will not list: **the window drop shadow.** A family's windows never set
 `hasShadow`; they set `window.hasSkinShadow = true`, or attach `SkinWindowShadow` to the outline the
