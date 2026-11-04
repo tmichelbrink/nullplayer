@@ -1035,7 +1035,7 @@ class WindowManager {
         case .wmp:
             return (mainWindowController as? WMPMainWindowController)?.loadedSkinURL?.path
         case .audion, .sonique:
-            return (mainWindowController as? any SingleCanvasMainWindow)?.loadedSkinURL?.path
+            return (mainWindowController as? any SkinFileMainWindow)?.loadedSkinURL?.path
         }
     }
 
@@ -1238,8 +1238,8 @@ class WindowManager {
         return palette.surfaceStyle
     }
 
-    /// A single-canvas family's colours: its window's, or its unskinned ones before there is one.
-    private func singleCanvasSurfaceStyle<Window: SingleCanvasMainWindow>(_: Window.Type) -> SkinnedSurfaceStyle {
+    /// A skin-file family's colours: its window's, or its unskinned ones before there is one.
+    private func skinFileSurfaceStyle<Window: SkinFileMainWindow>(_: Window.Type) -> SkinnedSurfaceStyle {
         (mainWindowController as? Window)?.surfaceStyle ?? Window.unskinnedSurfaceStyle
     }
 
@@ -1254,8 +1254,8 @@ class WindowManager {
         case .classic, .nullPlayerModern: return nil
         case .winampModern: return winampModernSurfaceStyle
         case .wmp: return wmpSurfaceStyle
-        case .audion: return singleCanvasSurfaceStyle(AudionFaceMainWindowController.self)
-        case .sonique: return singleCanvasSurfaceStyle(SoniqueSkinMainWindowController.self)
+        case .audion: return skinFileSurfaceStyle(AudionFaceMainWindowController.self)
+        case .sonique: return skinFileSurfaceStyle(SoniqueSkinMainWindowController.self)
         }
     }
 
