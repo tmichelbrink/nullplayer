@@ -102,7 +102,7 @@ final class SoniqueSkinSceneTests: XCTestCase {
 
     /// The scene and renderer read these with no fallback, so a key without a default traps.
     func testEveryTypedKeyHasADefault() {
-        let settings = SoniqueSkinSettings(SoniqueSkinINI(""))
+        let settings = SoniqueSkinSettings(INIFile("", repeatedSections: .ignored))
         for state in SoniqueLitState.allCases {
             _ = settings.origin(state)
             _ = settings.origin(state, navigator: true)
