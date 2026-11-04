@@ -105,7 +105,10 @@ go through it (Sonique S13, 2026-10-18). Beside it, **`SkinSelection(key:)`** is
 main window that loads one skin file itself (`SkinFileMainWindow`, Audion and Sonique) supplies its
 selection, URL lookup,
 loader, `loadedSkinURL` and `present(_:error:)`, and gets `reloadSelectedSkin`, `selectSkin(named:)` and
-`resetToUnskinned` over one `SkinLoadTask` (`App/Skinning/`, Sonique S18). A family that imports
+`resetToUnskinned` over one `SkinLoadTask` (`App/Skinning/`, Sonique S18). A family whose skin is one
+file conforms to **`SkinFileCatalogue`** (`App/Skinning/`; Sonique): it names its folder, selection,
+family and extensions, and gets the listing by name (one name is one skin across its extensions), the
+selection lookup, removal and the install commit; it keeps its own loader check. A family that imports
 `.zip`s unpacks them through **`SkinZipExtraction`** (`App/Skinning/`; Audion) with its own
 `SkinZipLimits` and its own choice of entries, mapping the shared rejections to its findings.
 
