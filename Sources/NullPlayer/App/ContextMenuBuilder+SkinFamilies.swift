@@ -757,60 +757,21 @@ extension MenuActions {
 
 // MARK: - Audion Faces actions
 
+/// The Skins menu's Audion entries; all but Get More are `SkinFileFamilyActions`.
 extension MenuActions {
 
-    private var audionController: AudionFaceMainWindowController? {
-        WindowManager.shared.mainWindowController as? AudionFaceMainWindowController
-    }
+    @objc func setAudionMode() { SkinFileFamilyActions.audion.switchToFamily() }
 
-    @objc func setAudionMode() {
-        guard AppCapabilities.supports(.audionFaceMode), WindowManager.shared.uiMode != .audion else { return }
-        WindowManager.shared.reloadUI(to: .audion)
-    }
+    @objc func selectAudionFace(_ sender: NSMenuItem) { SkinFileFamilyActions.audion.select(sender) }
 
-    /// In place inside the family; otherwise the selection is saved and entering the family loads it.
-    @objc func selectAudionFace(_ sender: NSMenuItem) {
-        guard AppCapabilities.supports(.audionFaceMode), let name = sender.representedObject as? String else { return }
-        if let controller = audionController {
-            controller.selectSkin(named: name)
-        } else {
-            AudionFaceImporter().selection.select(name)
-            WindowManager.shared.reloadUI(to: .audion)
-        }
-    }
-
-    @objc func loadAudionFaceFromFile() {
-        guard AppCapabilities.supports(.audionFaceMode) else { return }
-        if let controller = audionController {
-            controller.importFaceFromPanel()
-        } else {
-            WindowManager.shared.reloadUI(to: .audion) { [weak self] in self?.audionController?.importFaceFromPanel() }
-        }
-    }
+    @objc func loadAudionFaceFromFile() { SkinFileFamilyActions.audion.loadFromFile() }
 
     @objc func getMoreAudionFaces() {
         guard let url = URL(string: "https://download.panic.com/audion/") else { return }
         NSWorkspace.shared.open(url)
     }
 
-    @objc func openAudionFacesFolder() {
-        let importer = AudionFaceImporter()
-        do {
-            try importer.folder.ensureExists()
-            NSWorkspace.shared.open(importer.directoryURL)
-        } catch {
-            NSAlert(error: error).runModal()
-        }
-    }
+    @objc func openAudionFacesFolder() { SkinFileFamilyActions.audion.openFolder() }
 
-    fileprivate func removeAudionFace(named name: String) {
-        Task { @MainActor in
-            do {
-                try await AudionFaceImporter().removeFace(named: name)
-                self.audionController?.resetToUnskinned()
-            } catch {
-                NSAlert(error: error).runModal()
-            }
-        }
-    }
+    fileprivate func removeAudionFace(named name: String) { SkinFileFamilyActions.audion.remove(named: name) }
 }
