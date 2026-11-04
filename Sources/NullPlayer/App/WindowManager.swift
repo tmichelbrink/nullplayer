@@ -1177,6 +1177,47 @@ class WindowManager {
         return (mainWindowController as? WinampModernMainWindowController)?.surfaceCoordinator
     }
 
+    // MARK: - Skin surface routing
+
+    /// The router for the playlist, library and equalizer the loaded skin may draw itself, or nil
+    /// when this mode or skin has no opinion and NullPlayer's windows are the only ones.
+    ///
+    /// Each family keeps the guard it had before the route was shared: `.wal` through
+    /// `winampModernSurfaces`, `.wmz` only in its own mode, and a main window that routes for itself
+    /// (Sonique) by what it is. Only one of those controllers exists at a time, so the order is not
+    /// observable; do not fold the guards into one cast, since `uiMode` and the controller can
+    /// disagree mid-switch.
+    private var skinSurfaceRouter: SkinSurfaceRouter? {
+        if let coordinator = winampModernSurfaces { return coordinator }
+        if uiMode.controllerFamily == .wmp, let controller = mainWindowController as? WMPMainWindowController {
+            return WMPSkinSurfaceRouter(controller: controller)
+        }
+        return mainWindowController as? SkinSurfaceRouter
+    }
+
+    /// Gives the skin's own copy of `surface` the show or toggle; false when the skin does not draw
+    /// it and NullPlayer's window should answer.
+    @discardableResult
+    private func routeSkinSurface(_ surface: SkinSurface, toggle: Bool, restoredFrame: NSRect? = nil) -> Bool {
+        guard let router = skinSurfaceRouter, router.drawsSurface(surface) else { return false }
+        router.revealSurface(surface, toggle: toggle, restoredFrame: restoredFrame)
+        notifyMainWindowVisibilityChanged()
+        postLayoutChangeNotification()
+        return true
+    }
+
+    /// Holds the opening of NullPlayer's window until the skin has said whether it draws `surface`
+    /// (a `.wmz` at launch flashed ours beside the held player). Asked after a failed route.
+    private func deferUntilSkinLoads(_ surface: SkinSurface, _ open: @escaping () -> Void) -> Bool {
+        skinSurfaceRouter?.deferUntilSkinLoads(surface, open) ?? false
+    }
+
+    /// Whether the skin's copy of `surface` is on screen, or nil when the skin does not draw it.
+    private func skinSurfaceVisibility(_ surface: SkinSurface) -> Bool? {
+        guard let router = skinSurfaceRouter, router.drawsSurface(surface) else { return nil }
+        return router.isShowingSurface(surface)
+    }
+
     /// Whether the placement and ordering corrections this branch introduced for `.wal` window
     /// management apply right now.
     ///
@@ -1742,23 +1783,14 @@ class WindowManager {
     private func routeWinampModernSurface(_ kind: WinampModernComponentKind, toggle: Bool,
                                           restoredFrame: NSRect? = nil) -> Bool {
         guard let coordinator = winampModernSurfaces, coordinator.handles(kind) else { return false }
-        if toggle { coordinator.toggleSurface(kind) } else { coordinator.showSurface(kind) }
-        // A skin-owned *container* window keeps its saved geometry; an embedded surface has no window
-        // of its own and is never fed a frame.
-        if let restoredFrame, restoredFrame != .zero, let window = coordinator.nativeWindow(for: kind) {
-            window.setFrame(restoredFrame, display: true)
-        }
+        coordinator.reveal(kind, toggle: toggle, restoredFrame: restoredFrame)
         notifyMainWindowVisibilityChanged()
         postLayoutChangeNotification()
         return true
     }
 
-    /// Give a `.wmz` skin's own playlist or equaliser the toggle before NullPlayer opens one.
-    ///
-    /// The `.wmz` counterpart of `routeWinampModernSurface`, and it matters more here than there:
-    /// **171 of the 180 corpus skins declare a playlist and 164 an equaliser** (`WMPSkinSurfaces`),
-    /// so opening ours unconditionally would put a second, differently-styled playlist over nearly
-    /// every skin. Ours is the fallback for the handful that declare none.
+    /// Give a `.wmz` skin's own video window the toggle before NullPlayer opens one. The playlist and
+    /// the equaliser take the shared route (`routeSkinSurface`, through `WMPSkinSurfaceRouter`).
     ///
     /// A surface in a view of its own is opened beside the player, the way the skin's own button
     /// does — for a toggle, the launch restore and a mode-switch rebuild alike, since each means
@@ -1775,15 +1807,6 @@ class WindowManager {
         return true
     }
 
-    /// At launch a `.wmz` has not said yet which surfaces it draws, so opening NullPlayer's fallback
-    /// then flashed it beside the held player; the open is replayed once the skin has loaded. See
-    /// `WMPMainWindowController.launchHoldTimeout`.
-    private func deferWMPFallbackUntilSkinLoads(_ open: @escaping () -> Void) -> Bool {
-        guard uiMode.controllerFamily == .wmp,
-              let controller = mainWindowController as? WMPMainWindowController else { return false }
-        return controller.deferUntilLaunchSettles(open)
-    }
-
     /// Whether the skin's own copy of this surface is on screen in **any** open WMP window — the
     /// case where there is nothing for a menu item to open, because the skin is already showing it.
     ///
@@ -1796,41 +1819,31 @@ class WindowManager {
         return controller.windowShowing(surface) != nil
     }
 
-    /// Put away NullPlayer's own playlist or equalizer when the `.wmz` now on screen draws that
-    /// surface itself.
+    /// Put away NullPlayer's own playlist, equalizer or library when the skin now on screen draws
+    /// that surface itself.
     ///
-    /// Ours is a *fallback* — `routeWMPSkinSurface` gives the skin's own copy the toggle first, and
-    /// only the handful of archives declaring neither ever open one of these windows. But the
+    /// Ours is a *fallback* — `routeSkinSurface` gives the skin's own copy the toggle first. But the
     /// fallback is decided at the moment a window is opened, and the skin can change underneath it:
     /// loading a `.wmz` with no equaliser of its own opens ours, and switching from there to one
     /// that has an equaliser (164 of the 180 corpus archives do) left our window standing beside the
     /// skin's. Reported on `xsn_sports` as two equalizer windows.
     ///
-    /// Called on every skin presentation, so it is the skin *currently* loaded that decides, and it
-    /// closes rather than destroys: the window keeps its frame for the next skin that needs it.
-    func dismissWMPFallbackSurfacesTheSkinProvides() {
-        guard uiMode.controllerFamily == .wmp else { return }
+    /// A family calls it on every skin presentation (`.wmz` today), so it is the skin *currently*
+    /// loaded that decides, and it closes rather than destroys: the window keeps its frame for the
+    /// next skin that needs it.
+    func dismissFallbackSurfacesTheSkinProvides() {
+        guard let router = skinSurfaceRouter else { return }
         var closed = false
-        for (surface, window) in [(WMPSkinSurface.playlist, playlistWindowController?.window),
-                                  (WMPSkinSurface.equalizer, equalizerWindowController?.window)] {
-            guard wmpSkinProvides(surface), let window, window.isVisible else { continue }
+        for (surface, window) in [(SkinSurface.playlist, playlistWindowController?.window),
+                                  (SkinSurface.equalizer, equalizerWindowController?.window),
+                                  (SkinSurface.library, plexBrowserWindowController?.window)] {
+            guard router.drawsSurface(surface), let window, window.isVisible else { continue }
             window.orderOut(nil)
             closed = true
         }
         guard closed else { return }
         notifyMainWindowVisibilityChanged()
         postLayoutChangeNotification()
-    }
-
-    /// A main window whose skin draws the equaliser itself in every skin (a Sonique navigator's
-    /// drawer) answers every Equalizer show and toggle, so NullPlayer's EQ window never opens beside
-    /// it — `routeWMPSkinSurface`'s rule, without the fallback.
-    private func routeSkinDrawnEqualizer(toggle: Bool) -> Bool {
-        guard let controller = mainWindowController as? SkinDrawnEqualizer else { return false }
-        controller.revealEqualizer(toggle: toggle)
-        notifyMainWindowVisibilityChanged()
-        postLayoutChangeNotification()
-        return true
     }
 
     /// Whether the active `.wmz` skin owns this surface. Answers false in every other mode, so the
@@ -2190,9 +2203,8 @@ class WindowManager {
     }
 
     func showPlaylist(at restoredFrame: NSRect? = nil) {
-        if routeWinampModernSurface(.playlist, toggle: false, restoredFrame: restoredFrame) { return }
-        if routeWMPSkinSurface(.playlist) { return }
-        if deferWMPFallbackUntilSkinLoads({ [weak self] in self?.showPlaylist(at: restoredFrame) }) { return }
+        if routeSkinSurface(.playlist, toggle: false, restoredFrame: restoredFrame) { return }
+        if deferUntilSkinLoads(.playlist, { [weak self] in self?.showPlaylist(at: restoredFrame) }) { return }
         let isNewWindow = playlistWindowController == nil
         if isNewWindow {
             switch auxiliaryControllerStyle {
@@ -2233,18 +2245,12 @@ class WindowManager {
     }
 
     var isPlaylistVisible: Bool {
-        if let coordinator = winampModernSurfaces, coordinator.handles(.playlist) {
-            return coordinator.isSurfaceVisible(.playlist)
-        }
-        // A `.wmz` that declares its own playlist is showing it whenever that view is the one on
-        // screen, and NullPlayer never opened a window to ask about.
-        if wmpSkinProvides(.playlist) { return wmpSkinShowsInActiveView(.playlist) }
+        if let shown = skinSurfaceVisibility(.playlist) { return shown }
         return playlistWindowController?.window?.isVisible == true
     }
 
     func togglePlaylist() {
-        if routeWinampModernSurface(.playlist, toggle: true) { return }
-        if routeWMPSkinSurface(.playlist) { return }
+        if routeSkinSurface(.playlist, toggle: true) { return }
         classicTogglePlaylist()
     }
 
@@ -2265,10 +2271,8 @@ class WindowManager {
     }
     
     func showEqualizer(at restoredFrame: NSRect? = nil) {
-        if routeSkinDrawnEqualizer(toggle: false) { return }
-        if routeWinampModernSurface(.equalizer, toggle: false, restoredFrame: restoredFrame) { return }
-        if routeWMPSkinSurface(.equalizer) { return }
-        if deferWMPFallbackUntilSkinLoads({ [weak self] in self?.showEqualizer(at: restoredFrame) }) { return }
+        if routeSkinSurface(.equalizer, toggle: false, restoredFrame: restoredFrame) { return }
+        if deferUntilSkinLoads(.equalizer, { [weak self] in self?.showEqualizer(at: restoredFrame) }) { return }
         // The skin owns no equalizer, so NullPlayer's goes inside the skin's own frame when one
         // qualifies (B55) and into the standalone window below when none does.
         if routeWinampModernHostedWindow(.equalizer, toggle: false, restoredFrame: restoredFrame) { return }
@@ -2304,14 +2308,10 @@ class WindowManager {
     }
 
     var isEqualizerVisible: Bool {
-        if let controller = mainWindowController as? SkinDrawnEqualizer { return controller.isEqualizerShowing }
-        if let coordinator = winampModernSurfaces, coordinator.handles(.equalizer) {
-            return coordinator.isSurfaceVisible(.equalizer)
-        }
+        if let shown = skinSurfaceVisibility(.equalizer) { return shown }
         if winampModernHostedController?.handlesHostedWindow(.equalizer) == true {
             return winampModernHostedController?.isHostedWindowVisible(.equalizer) == true
         }
-        if wmpSkinProvides(.equalizer) { return wmpSkinShowsInActiveView(.equalizer) }
         return equalizerWindowController?.window?.isVisible == true
     }
 
@@ -2331,9 +2331,7 @@ class WindowManager {
     }
 
     func toggleEqualizer() {
-        if routeSkinDrawnEqualizer(toggle: true) { return }
-        if routeWinampModernSurface(.equalizer, toggle: true) { return }
-        if routeWMPSkinSurface(.equalizer) { return }
+        if routeSkinSurface(.equalizer, toggle: true) { return }
         if routeWinampModernHostedWindow(.equalizer, toggle: true) { return }
         classicToggleEqualizer()
     }
@@ -2651,7 +2649,8 @@ class WindowManager {
     // MARK: - Plex Browser Window
     
     func showPlexBrowser(at restoredFrame: NSRect? = nil) {
-        if routeWinampModernSurface(.library, toggle: false, restoredFrame: restoredFrame) { return }
+        if routeSkinSurface(.library, toggle: false, restoredFrame: restoredFrame) { return }
+        if deferUntilSkinLoads(.library, { [weak self] in self?.showPlexBrowser(at: restoredFrame) }) { return }
         let isNewWindow = plexBrowserWindowController == nil
         if isNewWindow {
             createPlexBrowserWindowController()
@@ -2708,9 +2707,7 @@ class WindowManager {
     }
 
     var isPlexBrowserVisible: Bool {
-        if let coordinator = winampModernSurfaces, coordinator.handles(.library) {
-            return coordinator.isSurfaceVisible(.library)
-        }
+        if let shown = skinSurfaceVisibility(.library) { return shown }
         return plexBrowserWindowController?.window?.isVisible == true
     }
     
@@ -2803,7 +2800,7 @@ class WindowManager {
     }
 
     func togglePlexBrowser() {
-        if routeWinampModernSurface(.library, toggle: true) { return }
+        if routeSkinSurface(.library, toggle: true) { return }
         classicTogglePlexBrowser()
     }
 
@@ -6192,7 +6189,7 @@ class WindowManager {
     ///
     /// Left to fall through, the command reached the Classic stack routine, which measures against
     /// `screen.frame` rather than `visibleFrame`, builds its column from the per-feature controllers
-    /// — the very windows `dismissWMPFallbackSurfacesTheSkinProvides` has closed when the skin
+    /// — the very windows `dismissFallbackSurfacesTheSkinProvides` has closed when the skin
     /// provides those surfaces — and ends with no reachability pass. In `.wmz` that left a skin's own
     /// panel, which is borderless and carries no title bar to drag, with no route back onto the
     /// display at all. This is `snapWinampModernToDefaultPositions`' reasoning applied to the one
