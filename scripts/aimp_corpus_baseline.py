@@ -35,12 +35,27 @@ def main():
         rows = list(csv.DictReader(f, delimiter="\t"))
     if not rows:
         sys.exit(f"{census} has no rows")
+    # Merged into the baseline by sha256, not replacing it: a corpus is personal, so a census of
+    # part of it must not drop the records of skins it did not measure, which would come back
+    # unranked and free to regress.
+    merged = {}
+    if os.path.exists(DEST):
+        with open(DEST, newline="") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if not line or line.startswith("#"):
+                    continue
+                fields = line.split("\t")
+                if len(fields) == 6:
+                    merged[fields[0]] = fields
+    for row in rows:
+        merged[row["sha256"]] = [row["sha256"], row["outcome"], row["codes"], row["scripts_ran"],
+                                 row["scripts"], row["file"]]
     os.makedirs(os.path.dirname(DEST), exist_ok=True)
     with open(DEST, "w") as out:
         out.write(HEADER)
-        for row in sorted(rows, key=lambda r: r["file"].lower()):
-            out.write("\t".join([row["sha256"], row["outcome"], row["codes"], row["scripts_ran"],
-                                 row["scripts"], row["file"]]) + "\n")
+        for fields in sorted(merged.values(), key=lambda r: r[5].lower()):
+            out.write("\t".join(fields) + "\n")
     ok = sum(1 for r in rows if r["outcome"] == "ok")
     print(f"recorded {len(rows)} skin(s), {ok} ok -> {os.path.normpath(DEST)}")
 

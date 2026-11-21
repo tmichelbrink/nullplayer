@@ -24,7 +24,9 @@ final class AIMPSkinDocuments {
         guard let entry = archive.entry(name) else { return nil }
         return reading(entry.name) {
             var text = String(decoding: try archive.payload(entry), as: UTF8.self)
-            if let declaration = text.range(of: "?>") { text = String(text[declaration.upperBound...]) }
+            // Only a leading declaration goes (after a byte-order mark): a `?>` later is the document's.
+            let start = text.drop { $0 == "\u{FEFF}" || $0.isWhitespace }
+            if start.prefix(5).lowercased() == "<?xml", let declaration = start.range(of: "?>") { text = String(start[declaration.upperBound...]) }
             return try AIMPNode.parse(Data("<layout>\(text)</layout>".utf8), name: entry.name).children("item")
         }
     }

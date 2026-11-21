@@ -15,10 +15,15 @@ struct AIMPSkinCustomMenu: Sendable {
         let items: [Item]
 
         var isSeparator: Bool { caption == "-" }
-        /// An AIMP action NullPlayer does not do: shown, but not available (`AIMPAction.isHandled`).
+        /// An AIMP action NullPlayer does not do (`AIMPAction.isHandled`), a popup it has nothing like
+        /// (`AIMPSkinPopup.unavailable`), or handlers run only as a key goes down and comes up, which a
+        /// menu choice has no press for: shown, but not available.
         var isUnavailable: Bool {
-            if case .action(let action)? = press { return !action.isHandled }
-            return false
+            switch press {
+            case .action(let action)?: return !action.isHandled
+            case .menu(.unavailable?)?, .hold(_, _)?: return true
+            default: return false
+            }
         }
     }
 

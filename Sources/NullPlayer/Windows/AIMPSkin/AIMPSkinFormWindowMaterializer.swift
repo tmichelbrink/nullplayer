@@ -127,6 +127,9 @@ final class AIMPSkinFormWindowMaterializer: NSObject, NSWindowDelegate {
                 place(window, as: form, beside: deck, scale: view.uiScale)
             }
             if window.isMiniaturized { window.deminiaturize(nil) } else { window.orderFront(nil) }
+            // Its lists were reported before its window showed, which the library browser refuses
+            // while the deck holds it (`AIMPSkinLibraryHost.libraryArea`); on screen, it may take it.
+            view.reportLibraryArea()
         }
     }
 

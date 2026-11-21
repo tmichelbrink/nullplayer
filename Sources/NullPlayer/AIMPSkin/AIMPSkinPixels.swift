@@ -208,11 +208,13 @@ final class AIMPSkinPixels: @unchecked Sendable {
                 }
                 bytes = packed as CFData
             }
-            views = (0..<frames).map(view)
+            // A header claiming more frames than the strip has pixels across (u32 frame counts) cuts
+            // frames of no size, which draw nothing: none are made, rather than billions of nils.
+            views = frameWidth > 0 && frameHeight > 0 ? (0..<frames).map(view) : []
         }
 
-        /// Frame `index`, clamped to the last.
-        func frame(_ index: Int) -> CGImage? { views[min(max(index, 0), count - 1)] }
+        /// Frame `index`, clamped to the last; nil when the frames have no size.
+        func frame(_ index: Int) -> CGImage? { views.isEmpty ? nil : views[min(max(index, 0), views.count - 1)] }
 
         private func view(_ i: Int) -> CGImage? {
             guard frameWidth > 0, frameHeight > 0 else { return nil }

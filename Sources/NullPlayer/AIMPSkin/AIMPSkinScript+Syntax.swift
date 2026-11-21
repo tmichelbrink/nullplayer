@@ -503,8 +503,13 @@ extension AIMPSkinScript {
         /// `Delete` on a variable come before the program's routines; every other built-in after.
         private func call(_ name: String, _ argumentNodes: [AIMPNode]) throws -> Call {
             let key = name.lowercased()
-            let arguments = try argumentNodes.map {
-                Argument(value: try expression($0), variable: $0.child("dsgn")?.child("node")?["text"]?.lowercased())
+            // Only a bare name is a variable a `var` parameter writes back to: `Inc(A[I])` or
+            // `Inc(X.Y)` would otherwise write the whole of `A` or `X`, so these take no variable, and
+            // `Inc`/`Dec`/`Delete` on them stop the run as unsupported rather than clobber it.
+            let arguments = try argumentNodes.map { node -> Argument in
+                let designator = node.child("dsgn")
+                let variable = designator?.children.count == 1 ? designator?.child("node")?["text"]?.lowercased() : nil
+                return Argument(value: try expression(node), variable: variable)
             }
             let target: Call.Target
             if let builtin = Builtin.writingVariable(key, arguments) {

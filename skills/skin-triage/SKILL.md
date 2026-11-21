@@ -163,7 +163,7 @@ grep sweep output for them.
 | `.wal` | the interaction sweep over a folder holding only this skin (`harness.md` § *The interaction sweep*), then the click/hover and state flags in § *Debugging a skin*, and `wal_motion_sweep.sh` (§ *The motion sweep*) |
 | `.wmz` | the click/hover and state flags in `harness/probe-flags.md`; a control's corpus-wide reach by `harness/live-loop.md` § *Auditing one authored control* |
 | Audion | `audion-face-guide/reference/harness.md` § *Probe flags*; the oracle per state |
-| AIMP | `AIMP_RENDER_TARGETS`, then `AIMP_RENDER_CLICK`/`AIMP_RENDER_WHEEL`/`AIMP_RENDER_HOVER` per control, `AIMP_RENDER_PAGES`/`AIMP_RENDER_COUNTERS` per state, and `AIMP_RENDER_LIVE` for every safe control at once (`aimp-skin-guide/reference/harness.md` § *Flags*) |
+| AIMP | `AIMP_RENDER_TARGETS`, then `AIMP_RENDER_CLICK`/`AIMP_RENDER_WHEEL`/`AIMP_RENDER_HOVER` per control, `AIMP_RENDER_PAGES`/`AIMP_RENDER_COUNTERS` per state, and `AIMP_RENDER_LIVE` for every safe control at once (`aimp-skin-guide/reference/harness.md` § *Flags*); no flag drags or right-clicks, so each slider's drag and each right-click are driven live in Phase 7 |
 
 **Test every button.** Every control in every window, layout, view, tab and drawer gets every gesture
 it can take, and **driven rows = Phase 2 control count**. Use the sweep first. Then drive whatever

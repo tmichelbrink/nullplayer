@@ -89,6 +89,7 @@ extension AIMPSkinScript {
         /// argument position.
         func call(_ args: [Value]) -> (value: Value, outputs: [Int: Value]) {
             func number(_ i: Int) -> Double { i < args.count ? args[i].number : 0 }
+            func integer(_ i: Int) -> Int { AIMPSkinScript.integer(number(i)) }
             func text(_ i: Int) -> String { i < args.count ? args[i].string : "" }
             func value(_ value: Value) -> (Value, [Int: Value]) { (value, [:]) }
             switch self {
@@ -98,23 +99,24 @@ extension AIMPSkinScript {
             // Denon's EQ bands read their number from their name: `Band_7` less its first five letters.
             case .delete:
                 var chars = Array(text(0))
-                let start = Swift.max(0, Int(number(1)) - 1), count = Swift.max(0, Int(number(2)))
-                if start < chars.count { chars.removeSubrange(start..<Swift.min(chars.count, start + count)) }
+                // Clamped before it is added, so `Delete(S, 1, MaxInt)` takes the rest without overflowing.
+                let start = Swift.max(1, integer(1)) - 1, count = Swift.max(0, integer(2))
+                if start < chars.count { chars.removeSubrange(start..<start + Swift.min(chars.count - start, count)) }
                 return (.none, [0: .string(String(chars))])
             case .toText: return value(.string(text(0)))
             case .toNumber: return value(.number(Double(text(0)) ?? number(1)))
             case .copy:
-                let chars = Array(text(0)), start = Swift.max(0, Int(number(1)) - 1)
-                let count = args.count > 2 ? Swift.max(0, Int(number(2))) : chars.count
-                return value(.string(start < chars.count ? String(chars[start..<Swift.min(chars.count, start + count)]) : ""))
+                let chars = Array(text(0)), start = Swift.max(1, integer(1)) - 1
+                let count = args.count > 2 ? Swift.max(0, integer(2)) : chars.count
+                return value(.string(start < chars.count ? String(chars[start..<start + Swift.min(chars.count - start, count)]) : ""))
             case .pos:
                 guard let range = text(1).range(of: text(0)), !text(0).isEmpty else { return value(.number(0)) }
                 return value(.number(Double(text(1).distance(from: text(1).startIndex, to: range.lowerBound) + 1)))
-            case .chr: return value(.string(UnicodeScalar(UInt32(Swift.max(0, number(0)))).map { String(Character($0)) } ?? ""))
+            case .chr: return value(.string(UInt32(exactly: Swift.max(0, integer(0))).flatMap { UnicodeScalar($0) }.map { String(Character($0)) } ?? ""))
             case .ord: return value(.number(Double(text(0).unicodeScalars.first?.value ?? 0)))
             case .insert:
                 var target = Array(text(1))
-                target.insert(contentsOf: Array(text(0)), at: Swift.min(Swift.max(0, Int(number(2)) - 1), target.count))
+                target.insert(contentsOf: Array(text(0)), at: Swift.min(Swift.max(1, integer(2)) - 1, target.count))
                 return (.none, [1: .string(String(target))])
             case .compareText, .compareStr:
                 let a = self == .compareText ? text(0).lowercased() : text(0), b = self == .compareText ? text(1).lowercased() : text(1)
@@ -157,23 +159,23 @@ extension AIMPSkinScript {
                 return value(.number(Self.argb(hue: number(0), saturation: number(1), value: number(2), alpha: alpha)))
             case .colorToHSV:
                 // `ColorToHSV(Color, var H, S, V)`: hue 0–360, saturation and value 0–100.
-                let c = UInt32(truncatingIfNeeded: Int(number(0)))
+                let c = UInt32(truncatingIfNeeded: integer(0))
                 let r = Double(c & 0xFF) / 255, g = Double((c >> 8) & 0xFF) / 255, b = Double((c >> 16) & 0xFF) / 255
                 let high = Swift.max(r, g, b), low = Swift.min(r, g, b), d = high - low
                 var h = 0.0
                 if d > 0 { h = high == r ? 60 * ((g - b) / d).truncatingRemainder(dividingBy: 6) : high == g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4) }
                 if h < 0 { h += 360 }
                 return (.none, [1: .number(h.rounded()), 2: .number(high > 0 ? (d / high * 100).rounded() : 0), 3: .number((high * 100).rounded())])
-            case .colorToString: return value(.string(String(format: "$%08X", UInt32(truncatingIfNeeded: Int(number(0))))))
+            case .colorToString: return value(.string(String(format: "$%08X", UInt32(truncatingIfNeeded: integer(0)))))
             case .stringToColor:
                 let s = text(0)
                 if s.hasPrefix("$") { return value(.number(Double(UInt32(s.dropFirst(), radix: 16) ?? 0))) }
                 return value(.number(Double(s) ?? 0))
             case .argbToColor:
-                let v = UInt32(truncatingIfNeeded: Int(number(0)))
+                let v = UInt32(truncatingIfNeeded: integer(0))
                 return value(.number(Double((v >> 16) & 0xFF | (v & 0xFF00) | (v & 0xFF) << 16)))
             case .colorToARGB:
-                let c = UInt32(truncatingIfNeeded: Int(number(0))), alpha = args.count > 1 ? UInt32(Swift.max(0, Swift.min(255, number(1)))) : 255
+                let c = UInt32(truncatingIfNeeded: integer(0)), alpha = args.count > 1 ? UInt32(Swift.max(0, Swift.min(255, number(1)))) : 255
                 return value(.number(Double(alpha << 24 | (c & 0xFF) << 16 | (c & 0xFF00) | (c >> 16) & 0xFF)))
             case .now: return value(.number(Self.dateTime(Date())))
             case .date: return value(.number(Self.dateTime(Date()).rounded(.down)))
@@ -181,15 +183,17 @@ extension AIMPSkinScript {
                 let now = Self.dateTime(Date())
                 return value(.number(now - now.rounded(.down)))
             case .encodeDate:
-                let parts = DateComponents(calendar: Calendar(identifier: .gregorian), year: Int(number(0)), month: Int(number(1)), day: Int(number(2)))
+                let parts = DateComponents(calendar: Calendar(identifier: .gregorian), year: integer(0), month: integer(1), day: integer(2))
                 return value(.number(parts.date.map { ($0.timeIntervalSince(Self.epoch) / 86_400).rounded() } ?? 0))
             case .encodeTime: return value(.number((number(0) * 3_600 + number(1) * 60 + number(2) + number(3) / 1_000) / 86_400))
             case .decodeTime:
-                let seconds = (number(0) - number(0).rounded(.down)) * 86_400
-                return (.none, [1: .number((seconds / 3_600).rounded(.down)),
-                                2: .number((seconds / 60).truncatingRemainder(dividingBy: 60).rounded(.down)),
-                                3: .number(seconds.truncatingRemainder(dividingBy: 60).rounded(.down)),
-                                4: .number((seconds * 1_000).truncatingRemainder(dividingBy: 1_000).rounded(.down))])
+                // Whole milliseconds first, as Delphi's `DecodeTime` takes them: split from the raw
+                // fraction, `EncodeTime(12, 0, 0, 0)` read back as 11:59:59.999. A fraction that rounds
+                // up to the next midnight is midnight.
+                let day = 86_400_000
+                let ms = AIMPSkinScript.integer(((number(0) - number(0).rounded(.down)) * Double(day)).rounded()) % day
+                return (.none, [1: .number(Double(ms / 3_600_000)), 2: .number(Double(ms / 60_000 % 60)),
+                                3: .number(Double(ms / 1_000 % 60)), 4: .number(Double(ms % 1_000))])
             case .decodeDate:
                 let parts = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: Self.date(number(0)))
                 return (.none, [1: .number(Double(parts.year ?? 0)), 2: .number(Double(parts.month ?? 0)), 3: .number(Double(parts.day ?? 0))])
@@ -256,7 +260,7 @@ extension AIMPSkinScript {
             let c = v * saturation / 100, x = c * (1 - Swift.abs(h.truncatingRemainder(dividingBy: 2) - 1)), m = v - c
             let (r, g, b): (Double, Double, Double) = h < 1 ? (c, x, 0) : h < 2 ? (x, c, 0) : h < 3 ? (0, c, x)
                 : h < 4 ? (0, x, c) : h < 5 ? (x, 0, c) : (c, 0, x)
-            func byte(_ f: Double) -> Int { Int(((f + m) * 255).rounded()) }
+            func byte(_ f: Double) -> Int { AIMPSkinScript.integer(((f + m) * 255).rounded()) }
             return Double(alpha << 24 | byte(r) << 16 | byte(g) << 8 | byte(b))
         }
     }
@@ -264,6 +268,7 @@ extension AIMPSkinScript {
     /// Delphi's `Format(pattern, [values])`: `%d`, `%s`, `%f`, `%x` with width and precision
     /// (`%.2d` zero-pads to two), and `%%`.
     static func format(_ pattern: String, _ values: Value) -> String {
+        let formatWidthLimit = 1_024
         var list: [Value] = []
         if case .array(let elements) = values { list = elements.keys.sorted().compactMap { elements[$0] } }
         else if case .none = values {} else { list = [values] }
@@ -279,15 +284,16 @@ extension AIMPSkinScript {
             let value = next < list.count ? list[next] : .number(0)
             next += 1
             let parts = spec.split(separator: ".", omittingEmptySubsequences: false)
-            let width = Int(parts.first ?? "") ?? 0
-            let precision = parts.count > 1 ? Int(parts[1]) : nil
+            // Held to `formatWidthLimit`: `%999999999d` would otherwise pad to a gigabyte.
+            let width = Swift.min(Int(parts.first ?? "") ?? 0, formatWidthLimit)
+            let precision = parts.count > 1 ? Int(parts[1]).map { Swift.min($0, formatWidthLimit) } : nil
             var text: String
             switch kind.lowercased() {
             case "d", "u":
-                text = String(Int(value.number.rounded(.towardZero)))
+                text = String(AIMPSkinScript.integer(value.number))
                 if let precision, text.count < precision { text = String(repeating: "0", count: precision - text.count) + text }
             case "f", "n": text = String(format: "%.\(precision ?? 2)f", value.number)
-            case "x": text = String(Int(value.number), radix: 16, uppercase: true)
+            case "x": text = String(AIMPSkinScript.integer(value.number), radix: 16, uppercase: true)
             default: text = value.string
             }
             if width > text.count { text = String(repeating: " ", count: width - text.count) + text }

@@ -52,21 +52,6 @@ final class AIMPSkinWorker: @unchecked Sendable {
         }
     }
 
-    /// `body` on a thread of its own with the deep stack, the caller waiting for its result.
-    static func runWaiting<T>(qos: QualityOfService = .userInitiated, _ body: @escaping () throws -> T) throws -> T {
-        var result: Result<T, Error>?
-        let done = DispatchSemaphore(value: 0)
-        let thread = Thread {
-            result = Result(catching: body)
-            done.signal()
-        }
-        thread.qualityOfService = qos
-        thread.stackSize = stackSize
-        thread.start()
-        done.wait()
-        return try result!.get()
-    }
-
     /// `body` on a thread of its own with the deep stack, its result handed back to the caller.
     static func run<T: Sendable>(qos: QualityOfService = .userInitiated, _ body: @escaping @Sendable () throws -> T) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in

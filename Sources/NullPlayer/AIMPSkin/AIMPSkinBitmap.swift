@@ -121,7 +121,8 @@ enum AIMPSkinBitmap {
         func scale(_ value: UInt32) -> UInt8 {
             guard mask != 0 else { return 0 }
             let shift = mask.trailingZeroBitCount
-            return UInt8(((value & mask) >> shift) * 255 / (mask >> shift))
+            // Widened: a mask of more than 24 bits (a header's `0xFFFFFFFF`) overflows 32 bits at × 255.
+            return UInt8(UInt64((value & mask) >> shift) * 255 / UInt64(mask >> shift))
         }
     }
 

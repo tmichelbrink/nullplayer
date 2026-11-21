@@ -255,8 +255,8 @@ final class AIMPSkinModelTests: XCTestCase {
     /// run on a spent budget stops at once: one tick's script work is bounded, however the skin is
     /// written. Prints the worst case's time, the cost a runaway skin adds to a frame on main.
     @MainActor func testScriptBudgetBoundsATick() throws {
-        let url = try XCTUnwrap(try AIMPCorpusLoadTests.installedSkins().first, "no installed AIMP skin to run scripts against")
-        let skin = try AIMPSkinLoader.load(contentsOf: url)
+        // An in-memory skin: the budget is the engine's, whatever skin is installed.
+        let skin = try AIMPSkinScriptTests.skin()
         let loop = try Self.node("""
         <program><procedure><name text="Execute"/><compoundstmt>
           <whilestmt><expr><number text="1"/></expr><compoundstmt/></whilestmt>

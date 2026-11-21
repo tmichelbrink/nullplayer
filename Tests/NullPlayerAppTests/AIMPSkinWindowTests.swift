@@ -157,6 +157,7 @@ final class AIMPSkinWindowTests: XCTestCase {
         wait(for: [landed], timeout: 5)
         RunLoop.main.run(until: Date().addingTimeInterval(0.2))
         XCTAssertEqual(outputs.count, 2, "the two requests made while drawing drew once")
+        guard outputs.count == 2 else { return }
         XCTAssertNil(outputs[0].measured)
         XCTAssertEqual(outputs[1].generation.content, 2, "the latest")
         XCTAssertNotNil(outputs[1].measured, "measured, as one of the requests it stands for asked")

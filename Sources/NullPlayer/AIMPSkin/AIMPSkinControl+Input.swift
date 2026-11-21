@@ -98,7 +98,8 @@ extension AIMPSkinControl {
 
         /// N in a lamp's `Value = N`.
         static func selectedPosition(_ expression: String) -> Int? {
-            let parts = expression.replacingOccurrences(of: " ", with: "").lowercased().split(separator: "=")
+            // `Value == N` is no lamp: the display parser rejects it too.
+            let parts = expression.replacingOccurrences(of: " ", with: "").lowercased().split(separator: "=", omittingEmptySubsequences: false)
             guard parts.count == 2, parts[0] == "value" else { return nil }
             return Int(parts[1])
         }
@@ -114,8 +115,10 @@ extension AIMPSkinControl {
         static func press(_ bindings: AIMPSkinBindings, props: [String: AIMPNode], index: AIMPSkinIndex) -> AIMPSkinTarget.Kind? {
             if let link = bindings["Action"], let source = link.source {
                 if let action = AIMPAction(source) { return .action(action) }
-                // AIMP providers count 0–100.
-                if let provider = AIMPSkinProvider(player: source), let fixed = link.expression.flatMap(Double.init) {
+                // AIMP providers count 0–100. A counter the skin declares under a `prv` name is its own,
+                // stepped below.
+                if index.providers[source]?.kind.isCounter != true,
+                   let provider = AIMPSkinProvider(player: source), let fixed = link.expression.flatMap(Double.init) {
                     return .setValue(provider: provider, value: fixed / 100)
                 }
                 // No `Expression`: a press turns to the next page, wrapping, as a counter's steps
@@ -156,7 +159,10 @@ extension AIMPSkinControl {
         private static func rightClick(_ bindings: AIMPSkinBindings, index: AIMPSkinIndex) -> AIMPSkinTarget.Kind? {
             guard let link = bindings["ContextMenu"], let source = link.source else { return nil }
             if let fixed = link.expression.flatMap(Double.init) {
-                if index.counterModule(source) != nil { return .counter(name: source, step: AIMPSkinStep(String(Int(fixed)))) }
+                // A reset no `Int` holds (`1e300`, `inf`) is none.
+                if index.counterModule(source) != nil, let whole = Int(exactly: fixed.rounded(.towardZero)) {
+                    return .counter(name: source, step: AIMPSkinStep(String(whole)))
+                }
                 if let provider = AIMPSkinProvider(player: source) { return .setValue(provider: provider, value: fixed / 100) }
             }
             if let action = AIMPAction(source), link.pin == "Action" { return .action(action) }

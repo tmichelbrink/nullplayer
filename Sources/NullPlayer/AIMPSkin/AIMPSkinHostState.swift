@@ -176,7 +176,8 @@ struct AIMPSkinPlayerSnapshot: Equatable, Sendable {
     func eqBand(aimp n: Int, aimp5: Bool) -> Int? {
         guard eqGains.count > 1 else { return nil }
         let (first, count) = aimp5 ? (0, 20) : (1, 18)
-        let fraction = Double(min(max(n - first, 0), count - 1)) / Double(count - 1)
+        // Held to the scale before `first` comes off: a script may ask for any band (`Int.min`).
+        let fraction = Double(min(max(n, first), first + count - 1) - first) / Double(count - 1)
         return Int((fraction * Double(eqGains.count - 1)).rounded())
     }
 

@@ -77,6 +77,8 @@ struct AIMPSkinCanvas {
         let margins: [Int]
         let width: Int
         let height: Int
+        /// The device pixels a skin pixel: one raster at 1× and at 2× has corners of two sizes.
+        let scale: CGFloat
     }
 
     /// A made slicing, holding its source so no other picture takes its identity while it is kept.
@@ -90,7 +92,7 @@ struct AIMPSkinCanvas {
     /// `source` nine-sliced by `margins` into `width`×`height` device pixels, `scale` of them a skin pixel.
     private static func sliced(_ source: CGImage, margins m: AIMPSkinImage.Margins, width: Int, height: Int, scale: CGFloat) -> CGImage? {
         guard width > 0, height > 0, width * height <= 16_000_000 else { return nil }
-        let key = Sliced(source: ObjectIdentifier(source), margins: [m.left, m.top, m.right, m.bottom], width: width, height: height)
+        let key = Sliced(source: ObjectIdentifier(source), margins: [m.left, m.top, m.right, m.bottom], width: width, height: height, scale: scale)
         return slicings.value(key) {
             guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
                                           space: CGColorSpace(name: CGColorSpace.sRGB)!,

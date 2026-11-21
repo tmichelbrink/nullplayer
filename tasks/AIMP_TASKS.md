@@ -18,7 +18,7 @@ is decided here.
    browser, which has its own tabs, search and row menus. These skin controls are left inert:
    - `pmMLGroupingPresets` (AIMP's grouping presets) and `pmMLDelete` (remove from library), and the
      tree's and table's own right-click menus (`pmMLGroupingTree`, `pmMLTable`): a key naming one
-     opens the player menu;
+     is dimmed, shows the "Not available in NullPlayer" tooltip, and opens nothing;
    - a skin search box bound to `MLTable` or `MLGroupingTree`: drawn empty, takes no click;
    - read-outs of `MLTable` `Count`/`Duration`/`Size` and of `GroupingPresets`: read nothing, so
      a library window's status line shows `0 / 0:00:00 / 0.00 MB` and its grouping caption is

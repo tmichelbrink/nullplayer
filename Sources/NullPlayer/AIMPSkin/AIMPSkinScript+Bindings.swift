@@ -109,11 +109,17 @@ extension AIMPSkinScript.Run {
         if let action = AIMPAction(source) {
             engine.ask(.action(action))
         } else if pin == "ActivePage", skin.index.groups[source] != nil {
-            engine.state.script[source].activePage = Int(flow.value(of: link))
+            engine.state.script[source].activePage = AIMPSkinScript.integer(flow.value(of: link))
+            // A mirrored page's group turns with it, as on a click (`AIMPSkinRuntime.turnPage`).
+            let index = skin.index, page = flow.activePage(source)
+            if let pages = index.groups[source], pages.indices.contains(page), let mirror = index.mirrors[pages[page]],
+               let other = index.tabOf[mirror] {
+                engine.state.script[other.group].activePage = other.index
+            }
         } else if pin == "Visible" || pin == "Visibility" {
             engine.state.script[source].visible = flow.value(source, pin) == 0
         } else if pin == "Position", skin.index.providers[source]?.kind.isCounter == true {
-            engine.setCounter(source, to: flow.wrapped(Int(flow.value(of: link)), counter: source))
+            engine.setCounter(source, to: flow.wrapped(AIMPSkinScript.integer(flow.value(of: link)), counter: source))
         }
     }
 

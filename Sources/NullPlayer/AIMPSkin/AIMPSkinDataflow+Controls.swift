@@ -90,7 +90,7 @@ extension AIMPSkinDataflow {
                 continue
             }
             let number = value(of: input, depth: depth)
-            variables[target] = number == number.rounded() ? String(Int(number)) : String(number)
+            variables[target] = Int(exactly: number).map { String($0) } ?? String(number)
             variables["Text" + target] = input.pin == "FileInfo"
                 ? AIMPSkinTemplate.format(input.textFormat ?? "%T", host: host)
                 : Self.text(of: number, read: input.read)
@@ -117,17 +117,17 @@ extension AIMPSkinDataflow {
     static func text(of value: Double, read: AIMPSkinSource) -> String {
         switch read {
         case .player(.timeOfDay):
-            return String(format: "%02d:%02d", Int(value) / 3_600 % 24, Int(value) / 60 % 60)
+            return String(format: "%02d:%02d", AIMPSkinScript.integer(value) / 3_600 % 24, AIMPSkinScript.integer(value) / 60 % 60)
         case .player(.elapsed), .player(.duration), .player(.remaining), .player(.sleepTimer):
-            return String(format: "%d:%02d", Int(value) / 60, Int(value) % 60)
+            return String(format: "%d:%02d", AIMPSkinScript.integer(value) / 60, AIMPSkinScript.integer(value) % 60)
         case .player(.playlistDuration), .table(.duration):
-            let seconds = Int(value)
+            let seconds = AIMPSkinScript.integer(value)
             return String(format: "%d:%02d:%02d", seconds / 3_600, seconds / 60 % 60, seconds % 60)
         case .player(.playlistSize), .table(.size): return String(format: "%.2f MB", value / 1_048_576)
         case .text(let text): return text
         case .page, .pointerOver, .animatorFrame, .item, .docked, .value, .player, .playlistScrolls, .table(.count),
              .libraryScanning, .commutator, .concatenator, .counter:
-            return String(Int(value.rounded()))
+            return String(AIMPSkinScript.integer(value.rounded()))
         }
     }
 
@@ -139,7 +139,7 @@ extension AIMPSkinDataflow {
         let link = control.bindings["AnimationFrameIndex"]
         // On a counter's position: the counter holds its steps too (`AIMPSkinScript.Engine.stepAnimators`).
         if let link, link.expression == nil, let source = link.source, skin.index.counterModule(source) != nil {
-            return min(max(Int(value(source, "Position")), 0), frames - 1)
+            return min(max(AIMPSkinScript.integer(value(source, "Position")), 0), frames - 1)
         }
         if own, let name = control.name, let frame = state.animation[name].frame { return min(max(frame, 0), frames - 1) }
         // Another animator's frame (Technics SL-1200's blurred disc turns with its hidden plain one).
@@ -147,9 +147,9 @@ extension AIMPSkinDataflow {
            let leader = skin.index.animators[source], depth < 4 {
             let leaderFrames = max(1, image(leader.picture)?.frameCount ?? 1)
             let frame = Double(animatorFrame(leader, own: false, frames: leaderFrames, depth: depth + 1))
-            return min(max(Int(link.shaped(frame)), 0), frames - 1)
+            return min(max(AIMPSkinScript.integer(link.shaped(frame)), 0), frames - 1)
         }
-        if let index = boundValue(control, "AnimationFrameIndex") { return min(max(Int(index), 0), frames - 1) }
+        if let index = boundValue(control, "AnimationFrameIndex") { return min(max(AIMPSkinScript.integer(index), 0), frames - 1) }
         let running = boundValue(control, "Accessibility").map { $0 != 0 } ?? (host.player.playState == .playing)
         // No interval is AIMP's default of none: the animator holds its first frame (RealPlayer 11's
         // VU meter glare, whose second frame is a white sheet).

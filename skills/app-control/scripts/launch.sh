@@ -44,7 +44,10 @@ case "$SKIN" in
             [ -f "$FILE/index.json" ] || { echo "LAUNCH FAIL: no installed Audion face '$NAME' (no $FILE/index.json)"; exit 1; } ;;
   aimp:*)   FAMILY=aimp; NAME="${SKIN#aimp:}"
             FILE=$(find "$SUPPORT/AIMPSkins" -maxdepth 1 -type f -iname "$NAME.acs*" 2>/dev/null | grep -i -E '\.acs[345]?$' | head -1)
-            [ -n "$FILE" ] || { echo "LAUNCH FAIL: no installed AIMP skin '$NAME' (no $SUPPORT/AIMPSkins/$NAME.acs|acs3|4|5)"; exit 1; } ;;
+            [ -n "$FILE" ] || { echo "LAUNCH FAIL: no installed AIMP skin '$NAME' (no $SUPPORT/AIMPSkins/$NAME.acs|acs3|4|5)"; exit 1; }
+            # The installed spelling, which the app matches exactly: the lookup ignores case, so
+            # `aimp:soot` finds Soot.acs5 and must select `Soot`.
+            NAME=$(basename "${FILE%.*}") ;;
   sonique:*) FAMILY=sonique; NAME="${SKIN#sonique:}"; FILE="$SUPPORT/SoniqueSkins/$NAME.sgf"
             [ -f "$FILE" ] || { echo "LAUNCH FAIL: no installed Sonique skin '$NAME' (no $FILE)"; exit 1; } ;;
   /*)       FILE="$SKIN" ;;

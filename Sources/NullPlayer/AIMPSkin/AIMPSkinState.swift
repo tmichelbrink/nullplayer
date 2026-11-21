@@ -153,15 +153,21 @@ struct AIMPSkinState: Equatable, Sendable {
         }
 
         /// A click on playlist row `row` (nil: none): it alone is selected; `extending` selects from
-        /// the anchor to it; `toggling` adds or takes it out. As NullPlayer's other playlists select.
-        mutating func select(_ row: Int?, extending: Bool = false, toggling: Bool = false) {
+        /// the anchor to it, along `shown` (the rows a quick search leaves, in their order) when
+        /// given, so a hidden row is not taken; `toggling` adds or takes it out. As NullPlayer's
+        /// other playlists select.
+        mutating func select(_ row: Int?, extending: Bool = false, toggling: Bool = false, shown: [Int]? = nil) {
             guard let row else {
                 playlistSelection = []
                 playlistAnchor = nil
                 return
             }
             if extending, let anchor = playlistAnchor {
-                playlistSelection = Set(min(anchor, row)...max(anchor, row))
+                if let shown, let from = shown.firstIndex(of: anchor), let to = shown.firstIndex(of: row) {
+                    playlistSelection = Set(shown[min(from, to)...max(from, to)])
+                } else {
+                    playlistSelection = Set(min(anchor, row)...max(anchor, row))
+                }
                 return
             }
             if toggling {

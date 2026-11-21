@@ -260,7 +260,7 @@ struct AIMPSkinImage: Sendable {
             height = try pixels.u32(at: 8)
         }
         let bytes = try pixelBytes(width, height, name: name)
-        if let raw = chunks["bits"], chunks["bitz"] == nil, raw.end < 12 + bytes {
+        if let raw = chunks["bits"], chunks["bitz"] == nil, raw.end - 12 < bytes {
             throw AIMPSkinFinding(.entryUnreadable, "\(name) has \(raw.end - 12) bytes for \(width)×\(height).")
         }
         var layout = Layout()
@@ -302,7 +302,9 @@ struct AIMPSkinImage: Sendable {
         if try header.u8(at: 44) == 1 { layout.columns = try columns(header, at: 45) }
         // A 0×0 picture: AIMP 3.0 keeps one for every object, drawn or not.
         guard width > 0 || height > 0 else { return Header(width: 0, height: 0, layout: layout, pixels: nil) }
-        guard width > 0, height > 0, data.count >= 70 + (try pixelBytes(width, height, name: name)) else {
+        // The header is 70 bytes (checked above), so the pixels are what follows it: added to 70, a
+        // lying size near `Int.max` would overflow.
+        guard width > 0, height > 0, data.count - 70 >= (try pixelBytes(width, height, name: name)) else {
             throw AIMPSkinFinding(.entryUnreadable, "\(name) has \(data.count - 70) bytes for \(width)×\(height).")
         }
         return Header(width: width, height: height, layout: layout, pixels: { $0.dropFirst(70) })

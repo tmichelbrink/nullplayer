@@ -44,7 +44,13 @@ final class AIMPSkinHoverTip {
         label.sizeToFit()
         let size = NSSize(width: label.frame.width + 12, height: label.frame.height + 6)
         label.setFrameOrigin(NSPoint(x: 6, y: 3))
-        panel.setFrame(NSRect(x: point.x + 4, y: point.y - size.height - 20, width: size.width, height: size.height), display: true)
+        // Under the pointer, else above it where the screen ends below; never past its sides.
+        var frame = NSRect(x: point.x + 4, y: point.y - size.height - 20, width: size.width, height: size.height)
+        if let screen = (NSScreen.screens.first { NSMouseInRect(point, $0.frame, false) } ?? NSScreen.main)?.visibleFrame {
+            if frame.minY < screen.minY { frame.origin.y = point.y + 4 }
+            frame.origin.x = max(screen.minX, min(frame.origin.x, screen.maxX - frame.width))
+        }
+        panel.setFrame(frame, display: true)
         panel.orderFrontRegardless()
     }
 }

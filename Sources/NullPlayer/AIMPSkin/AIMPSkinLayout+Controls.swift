@@ -131,7 +131,7 @@ extension AIMPSkinLayout {
         // The track's rating, five stars across; without a picture, a key's.
         case .rating(let key):
             guard image != nil else { return self.key(control, key, image: image, name: name, in: rect) }
-            return (.rating(Int(flow.boundValue(control, "DisplayValue") ?? 0)), [])
+            return (.rating(AIMPSkinScript.integer(flow.boundValue(control, "DisplayValue") ?? 0)), [])
         // The standard playlist a skin places in its own frame: rows from the top, the first the quick
         // search and scrolling leave.
         case .playlist(let style):
@@ -173,7 +173,7 @@ extension AIMPSkinLayout {
         case .gauge:
             let value = host.feedback.gaugeLevels[control.id] ?? flow.boundValue(control, "DisplayValue") ?? 0
             let index = (value / 100 * Double(frames - 1)).rounded()
-            return (.frame(Int(min(max(index, 0), Double(frames - 1)))), [])
+            return (.frame(AIMPSkinScript.integer(min(max(index, 0), Double(frames - 1)))), [])
         case .animator:
             // A free-running animator's flat last frame is its mask, not a picture (RealPlayer 11's
             // cover-column glows: a picture and a solid block, which cycled as a white flash).
@@ -184,10 +184,10 @@ extension AIMPSkinLayout {
             // The frame its `State` names: a script's (`Counter1.Set('State', …)`), else its binding's,
             // `State` or `DisplayValue` (Technics RS-1700 4K's drums and tape bands, on counters).
             let state = state.animation[name].frame
-                ?? Int(flow.boundValue(control, "State") ?? flow.boundValue(control, "DisplayValue") ?? 0)
+                ?? AIMPSkinScript.integer(flow.boundValue(control, "State") ?? flow.boundValue(control, "DisplayValue") ?? 0)
             return (.frame(min(max(state, 0), frames - 1)), [])
         case .time(let digits):
-            let seconds = max(0, Int(flow.boundValue(control, "DisplayValue") ?? Double(host.player.elapsedSeconds)))
+            let seconds = max(0, AIMPSkinScript.integer(flow.boundValue(control, "DisplayValue") ?? Double(host.player.elapsedSeconds)))
             return (.time(seconds: seconds, digits), [])
         case .digits(let digits):
             return self.digits(control, digits, image: image, name: name, in: rect)
@@ -307,7 +307,7 @@ extension AIMPSkinLayout {
         // SELECTOR): its position picks the frame. A few positions step by click; a knob's many
         // (the GX-F90's and Teac's bass and treble, 121 quarter-dB steps) turn by dragging.
         if let counter = source, let module = skin.index.counterModule(counter) {
-            let position = min(max(Int(flow.value(counter, "Position")), 0), module - 1)
+            let position = min(max(AIMPSkinScript.integer(flow.value(counter, "Position")), 0), module - 1)
             // One with its own press handlers runs them on a click, the wheel stepping the counter
             // (`Input.wheel`: Soot's play/pause).
             let stepped: AIMPSkinTarget.Kind = module > 12 ? .knob(provider: .named(counter)) : .counter(name: counter, step: AIMPSkinStep("Value + 1"))
@@ -319,7 +319,7 @@ extension AIMPSkinLayout {
         // (Mayak-120's knobs: 101 positions and a mask).
         let provider = flow.provider(control)
         let positions = max(1, frames - 1)
-        let frame = Int((flow.host.player.value(for: provider) * Double(positions - 1)).rounded())
+        let frame = AIMPSkinScript.integer((flow.host.player.value(for: provider) * Double(positions - 1)).rounded())
         // A sound effect NullPlayer lacks (Pioneer CT-F1000's FLANGER and CHORUS) is drawn, not turned.
         // So is a strip whose last frame is no mask grey by angle (in colour, or flat): a level icon,
         // every frame a picture (WMP12 SB's speaker over its volume, laid over its mute switch,
@@ -362,7 +362,10 @@ extension AIMPSkinLayout {
         // slide switches over a counter), shows the run of frames for its `State`: its binding,
         // else its action's.
         let isButton = key.role == .button
-        var perStateFrames = key.framesPerState ?? (key.role == .switch ? 3 : 0)
+        // `FramesPerState` of none or fewer is not a run: read as undeclared (0 trapped the mask's
+        // remainder below), and no run is longer than a picture may have frames.
+        let declaredPerState = key.framesPerState.flatMap { (1...AIMPSkinPolicy.imageSide).contains($0) ? $0 : nil }
+        var perStateFrames = declaredPerState ?? (key.role == .switch ? 3 : 0)
         var state = flow.boundValue(control, "State")
         // A key bound to a `State` with a switch's seven frames (three off, three on, the mask)
         // is a switch: Aiwa AD-M700's PLAYLIST lever stays at SHOW while the playlist is.
@@ -379,13 +382,14 @@ extension AIMPSkinLayout {
         // is a state (AIMPshield's material overlays, a texture a position).
         let count = image?.frameCount ?? 0
         let onPage = control.bindings["State"]?.pin == "ActivePage"
-        if isButton || key.role == .switch, state != nil, key.framesPerState == nil,
+        if isButton || key.role == .switch, state != nil, declaredPerState == nil,
            count == 8 || (onPage && count > 8 && count % 4 == 0 && count % 3 != 0) { perStateFrames = 4 }
         // Six: three (normal, hot, pressed) off, then on (Bento's shuffle and repeat, their glyphs
         // lit blue).
         if perStateFrames == 0, isButton, state != nil, image?.frameCount == 6 { perStateFrames = 3 }
         if state == nil, case .action(let action) = press { state = flow.host.pin(action.name, "State") }
-        let stateIndex = max(0, Int(state ?? 0))
+        // A script's `State` may be any number: held to a million, so the run it names cannot overflow.
+        let stateIndex = min(max(0, AIMPSkinScript.integer(state ?? 0)), 1_000_000)
         // The first frame of the run its `State` shows (0 where it shows none).
         let stateFrame = perStateFrames > 0 && stateIndex > 0
             && (key.role == .switch || (image?.frameCount ?? 0) >= (stateIndex + 1) * perStateFrames) ? stateIndex * perStateFrames : 0
@@ -393,7 +397,7 @@ extension AIMPSkinLayout {
         // A frame left over after whole runs of state frames is the hit mask: `FramesPerState`
         // per state (4 by default: normal, hot, pressed, disabled), plus one. Pioneer CT-F1000's
         // REW and FF share one rect, each opaque only on its half of the mask.
-        let perState = key.framesPerState ?? 4
+        let perState = declaredPerState ?? 4
         var mask: Int? = count > perState && (count - 1) % perState == 0 ? count - 1 : nil
         // Four frames are a key's whole set: the last is its disabled glyph, not a mask (W10's
         // toolbar keys hit only on their 54-px glyphs). So are whole runs of them, off then on: Bliss

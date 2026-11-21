@@ -9,7 +9,8 @@ extension AIMPSkinControl {
         /// A `RunningLine` with nothing bound to it scrolls the playing track, by its `Template`;
         /// nil when a `DisplayValue` binding says what it shows.
         let running: String?
-        /// `Alignment`, else `TextAlign`; whether `Alignment` is there at all, and says `taLeftJustify`.
+        /// `Alignment`, else `TextAlign`; whether `Alignment` (or a `TextAlign` not left) is there at
+        /// all, and whether `Alignment` says `taLeftJustify`.
         let alignment: AIMPSkinTextAlign?
         let declaresAlignment: Bool
         let isLeftJustified: Bool
@@ -57,9 +58,11 @@ extension AIMPSkinControl {
             } else {
                 display = template.map { .template(expanded($0)) } ?? .none
             }
-            running = bindings["DisplayValue"] == nil ? template ?? "%IF(%R,%R - ,)%T" : nil
+            running = bindings["DisplayValue"] == nil ? template.map(expanded) ?? "%IF(%R,%R - ,)%T" : nil
             alignment = AIMPSkinTextAlign(props["Alignment"]?.reference ?? props["TextAlign"]?.reference)
-            declaresAlignment = props["Alignment"] != nil
+            // `.acs3`'s `TextAlign` other than left counts too: such a label is not the left-aligned
+            // one AIMP sized to its text (`AIMPSkinLayout.autoSized`).
+            declaresAlignment = props["Alignment"] != nil || AIMPSkinTextAlign(props["TextAlign"]?.reference).map { $0 != .left } == true
             isLeftJustified = AIMPSkinTextAlign(props["Alignment"]?.reference) == .left
             wraps = props["WordWrap"]?.reference == "True" || props["Layout"]?.reference == "MultiLine"
             sizesHeight = props["AutoSize"]?.reference == "csHeight"
@@ -221,7 +224,7 @@ extension AIMPSkinFont {
     /// (bit 0 bold).
     init?(flat value: String?) {
         let parts = (value ?? "").split(separator: ",", omittingEmptySubsequences: false).map(String.init)
-        guard parts.count == 4, let colour = Int64(parts[1]), let height = Int(parts[2]), let style = Int(parts[3]) else { return nil }
+        guard parts.count == 4, let colour = Int64(parts[1]), let height = Int(parts[2]), height != .min, let style = Int(parts[3]) else { return nil }
         self.init(name: parts[0], height: abs(height), bold: style & 1 != 0, color: AIMPSkinColor.argb(delphi: colour))
         emHeight = height < 0
     }
@@ -263,7 +266,8 @@ extension AIMPSkinFont {
         self = base
         let declared = node.named.mapValues { $0["value"] ?? "" }
         if let name = declared["Name"], !name.isEmpty { self.name = name }
-        if let height = declared["Height"].flatMap(Int.init) {
+        // `Int.min` has no magnitude `abs` can give.
+        if let height = declared["Height"].flatMap(Int.init), height != .min {
             self.height = abs(height)
             emHeight = height < 0
         }

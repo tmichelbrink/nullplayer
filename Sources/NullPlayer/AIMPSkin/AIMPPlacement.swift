@@ -12,12 +12,12 @@ enum AIMPPlacement {
             switch (low != 0, high != 0) {
             // Delphi keeps no negative size: margins wider than the parent leave nothing (Bento's
             // track lines, 300 px in and 168 px from the right, on its 346-px basic view).
-            case (true, true): return (CGFloat(mLow), max(0, total - CGFloat(mLow + mHigh)))
+            case (true, true): return (CGFloat(mLow), max(0, total - (CGFloat(mLow) + CGFloat(mHigh))))
             case (true, false): return (CGFloat(mLow), size)
             case (false, true): return (total - CGFloat(mHigh) - size, size)
             case (false, false):
-                let span = mLow + mHigh
-                return (span == 0 ? ((total - size) / 2).rounded() : (CGFloat(mLow) * (total - size) / CGFloat(span)).rounded(), size)
+                let span = CGFloat(mLow) + CGFloat(mHigh)
+                return (span == 0 ? ((total - size) / 2).rounded() : (CGFloat(mLow) * (total - size) / span).rounded(), size)
             }
         }
         let (x, w) = axis(anchors[0], anchors[2], margins[0], margins[2], size.width, parent.width)

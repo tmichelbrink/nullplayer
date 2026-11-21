@@ -81,8 +81,9 @@ final class AIMPSkinRuntime {
         mode.save(skin: skin.name)
     }
 
-    /// What the player shows now. A changed playlist (a new build of it) chooses no row; a new
-    /// track scrolls the skin's own playlist to it (`placePlayingRow`).
+    /// What the player shows now. A changed playlist (a new build of it) chooses no row, unless
+    /// only its file sizes filled in; a new track scrolls the skin's own playlist to it
+    /// (`placePlayingRow`).
     func update(player new: AIMPSkinPlayerSnapshot) {
         let old = player
         guard new != old else { return }
@@ -90,12 +91,22 @@ final class AIMPSkinRuntime {
         let playlistMoved = new.playlist != old.playlist
         if playlistMoved { matchPlaylist() }
         var state = self.state
-        if playlistMoved { state.lists.select(nil) }
+        if playlistMoved, !Self.onlySizesMoved(new.playlist.rows, old.playlist.rows) { state.lists.select(nil) }
         if new.playlistIndex != old.playlistIndex { followsPlayingRow = true }
         placePlayingRow(in: &state)
         self.state = state
         scheduleTick()
         updateClock()
+    }
+
+    /// Whether a new build of the playlist only filled in file sizes (read off the main thread after
+    /// a rebuild, for the totals): the same tracks in the same rows, so a row chosen meanwhile stays
+    /// chosen. A build whose rows are all the same moved its tracks (`AIMPSkinAudioEngineHost`
+    /// builds anew only for a change), so it is not one.
+    private static func onlySizesMoved(_ new: [AIMPSkinPlayerSnapshot.Playlist.Row],
+                                       _ old: [AIMPSkinPlayerSnapshot.Playlist.Row]) -> Bool {
+        guard new.count == old.count, new != old else { return false }
+        return zip(new, old).allSatisfy { $0.title == $1.title && $0.seconds == $1.seconds }
     }
 
     /// How many rows the skin's playlist showed in its last frame; nil before one.
@@ -177,6 +188,9 @@ final class AIMPSkinRuntime {
     func stop() {
         scripts.cancel()
         tickScheduled = false
+        // Paused, a skin timer's wake may be due: it would run a frame for a skin that is gone.
+        timerWake?.invalidate()
+        timerWake = nil
         guard let clock else { return }
         clock.invalidate()
         self.clock = nil
@@ -245,6 +259,7 @@ final class AIMPSkinRuntime {
         let deck = views.first { $0.formName == nil }
         let now = clock ?? deck?.scheduler.probeClock ?? CACurrentMediaTime()
         let drawn = deck.map { host(drawnBy: $0, clock: now) } ?? host(feedback: .init(clock: now))
+        let asked = CACurrentMediaTime()
         scripts.run([.frame], host: drawn, coalesces: true) { [weak self] outcomes in
             guard let self, let outcome = outcomes.first else { return }
             self.ticking = true
@@ -256,18 +271,19 @@ final class AIMPSkinRuntime {
                 for view in self.views where view.isOnScreen || view.contentDirty { view.render(clock: now) }
             }
             self.send(outcome)
-            self.wakeForTimers(after: now)
+            self.wakeForTimers(after: now, late: CACurrentMediaTime() - asked)
         }
     }
 
     /// While the clock is stopped (nothing playing), the skin's timers still run, as AIMP's do: a
     /// tick when the next one is due, at most ten a second. Soot's volume ring shows on a volume
-    /// change and its 2.1-s timer hides it; stopped, it stayed.
-    private func wakeForTimers(after now: Double) {
+    /// change and its 2.1-s timer hides it; stopped, it stayed. `late`: how long the frame's scripts
+    /// took to land after `now` was read, taken off the wait so the timer fires when it is due.
+    private func wakeForTimers(after now: Double, late: Double) {
         timerWake?.invalidate()
         timerWake = nil
         guard clock == nil, let due = nextTimerDue(), views.contains(where: { $0.isOnScreen }) else { return }
-        let delay = max(0.1, due - now)
+        let delay = max(0.1, due - now - max(0, late))
         let wake = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, self.clock == nil else { return }
@@ -379,8 +395,9 @@ final class AIMPSkinRuntime {
         let count = flow.skin.index.groups[group]?.count ?? 0
         guard count > 0 else { return }
         let current = Double(flow.activePage(group))
-        let next = step.next(from: current) ?? current
-        let page = ((Int(next) % count) + count) % count
+        // A skin's step expression may evaluate to anything (`AIMPSkinStep.next` holds it to an `Int`).
+        let next = AIMPSkinScript.integer(step.next(from: current) ?? current)
+        let page = ((next % count) + count) % count
         state.script[group].activePage = page
         // A mirrored page's group turns with it (`AIMPSkinIndex.mirrors`).
         let index = flow.skin.index

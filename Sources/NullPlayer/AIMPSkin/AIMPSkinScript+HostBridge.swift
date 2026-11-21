@@ -203,7 +203,7 @@ extension AIMPSkinScript.Run {
         case (.visualData, .spectrum):
             let spectrum = flow.host.feedback.spectrum
             guard !spectrum.isEmpty else { return .number(0) }
-            let band = Int(Double(max(0, min(255, Int(args.last?.number ?? 0)))) / 256 * Double(spectrum.count))
+            let band = Int(Double(max(0, min(255, AIMPSkinScript.integer(args.last?.number ?? 0)))) / 256 * Double(spectrum.count))
             return .number(spectrum[min(band, spectrum.count - 1)] * 100)
         default:
             throw Unsupported(what: "method \(member)(\(args.map(\.string).joined(separator: ","))) on \(target.described)")
@@ -216,7 +216,7 @@ extension AIMPSkinScript.Run {
         let name = object.name
         switch (object.kind, AIMPSkinScript.Property(path)) {
         case (_, .activePage):
-            engine.state.script[name].activePage = Int(value.number)
+            engine.state.script[name].activePage = AIMPSkinScript.integer(value.number)
         case (.player(let provider), .position):
             setPlayer(provider, value.number)
         // Effects NullPlayer lacks only move their knobs.
@@ -235,13 +235,23 @@ extension AIMPSkinScript.Run {
         case (_, .position):
             // A scripted counter runs its script when it moves (Red Bias 2.0's layout switch sets
             // `ThemeSettingLayout`, whose script docks and undocks the library).
-            let position = Int(value.number)
-            let moved = Int(flow.value(name, "Position")) != position
-            engine.state.script[name].counter = position
-            if moved, object.provider?.kind == .counter(scripted: true) { engine.setCounter(name, to: position) }
+            // `setCounter` writes the position itself, after keeping the old one: out of budget, the
+            // counter stays where it was, so its script runs on its next move.
+            let position = AIMPSkinScript.integer(value.number)
+            let moved = AIMPSkinScript.integer(flow.value(name, "Position")) != position
+            if moved, object.provider?.kind == .counter(scripted: true) {
+                engine.setCounter(name, to: position)
+            } else {
+                engine.state.script[name].counter = position
+            }
         case (_, .state) where object.element?.node["class"] == "StateDisplay":
-            engine.state.animation[name].frame = Int(value.number)
+            engine.state.animation[name].frame = AIMPSkinScript.integer(value.number)
         case (_, .visible):
+            // Taking the control over afresh, the script's value holds until its `Visibility`
+            // bindings next change from where they stand now (`Engine.pushVisibility`), not from the
+            // value last seen under an earlier override: Vega MP-120 swaps its stop key on every
+            // stop, and a gate value stale from the first swap would undo the second at once.
+            if engine.state.script[name].visible == nil { engine.state.script[name].visibleGate = nil }
             engine.state.script[name].visible = value.number != 0
         case (_, .enabled):
             engine.state.script[name].timerEnabled = value.number != 0
@@ -254,8 +264,11 @@ extension AIMPSkinScript.Run {
         case (_, .opacity):
             engine.state.animation[name].opacity = min(255, max(0, value.number))
         case (_, .frameIndex):
-            engine.state.animation[name].frame = Int(value.number)
-            engine.state.animation[name].stepped = flow.host.feedback.clock
+            engine.state.animation[name].frame = AIMPSkinScript.integer(value.number)
+            // Outside a frame (a click's handler) there is no clock: the next frame starts the
+            // interval (`Engine.stepAnimators`), so the frame set shows for its full delay.
+            let clock = flow.host.feedback.clock
+            engine.state.animation[name].stepped = clock > 0 ? clock : .infinity
         case (_, .parent):
             if case .object(let parent) = value { engine.state.script[name].parent = parent.name }
         default:
@@ -272,7 +285,7 @@ extension AIMPSkinScript.Run {
             if case .number(let number) = value {
                 let colour = path.hasSuffix("Color") || path.contains("Color.") || path.contains("Colors.")
                 text = colour && !path.hasSuffix(".ID") && number >= 0 && number <= 0xFF_FFFF
-                    ? String(AIMPSkinColor.argb(delphi: Int64(number))) : String(Int64(number))
+                    ? String(AIMPSkinColor.argb(delphi: Int64(number))) : String(AIMPSkinScript.integer(number))
             } else {
                 text = value.string
             }
@@ -302,6 +315,11 @@ extension AIMPSkinScript.Run {
         switch (object.kind, AIMPSkinScript.Property(path)) {
         case (.player(.balance), .position):
             return .number(AIMPSkinProvider.balance.script(value: flow.host.player.balance))
+        // Speed (and tempo) as a multiplier, pitch about 0: what `Set` takes (`setPlayer`).
+        case (.player(.speed), .position):
+            return .number(AIMPSkinProvider.speed.script(value: flow.host.player.speed))
+        case (.player(.pitch), .position):
+            return .number(AIMPSkinProvider.pitch.script(value: flow.host.player.pitch))
         case (.equalizer, .preamp):
             return .number(AIMPSkinProvider.preamp.script(value: flow.host.player.preamp))
         case (.equalizer, .band(let aimp)):
@@ -329,7 +347,15 @@ extension AIMPSkinScript.Run {
         case (_, .activePage):
             return .number(Double(flow.activePage(name)))
         case (_, .visible):
-            return .number(engine.state.script[name].visible.map { $0 ? 1 : 0 } ?? 1)
+            // Without a script's say, whether it shows as drawn (its `Visibility` bindings, its
+            // `InitialVisible`): a toggle that flips what it reads starts from what is seen.
+            if let set = engine.state.script[name].visible { return .number(set ? 1 : 0) }
+            switch object.element {
+            case .control(let control)?: return .number(flow.isShown(control) ? 1 : 0)
+            // An item as the engine reads it: its page, its dock site and AutoHide too.
+            case .item?: return .number(flow.value(name, "Visibility"))
+            case nil: return .number(1)
+            }
         // A control's text as it shows: Soot reads its hidden language labels so (`dbLocalOffOn`'s
         // "Off|On") to build its settings' switch captions; read as a number, they said 0.
         case (_, .displayText):

@@ -274,7 +274,14 @@ struct AIMPSkinFont: Equatable, Sendable {
         let line = sample.found ? Self.windowsLine(sample.font) ?? (CTFontGetAscent(sample.font) + CTFontGetDescent(sample.font)) / 100 : 1.25
         let size = max(8, (emHeight || line <= 0 ? CGFloat(height) : CGFloat(height) / line).rounded())
         let face = Self.face(name, size: size, bold: bold).font
-        Self.faces.withLockUnchecked { $0[key] = face }
+        Self.faces.withLockUnchecked { faces in
+            // Every load of a skin with fonts makes a new shelf, and a face made from one holds its
+            // font data: past `faceLimit` the faces are let go and made again as drawn.
+            // Other shelves' faces go first (skins since reloaded); only then the rest.
+            if faces.count >= Self.faceLimit { faces = faces.filter { $0.key.shelf == key.shelf } }
+            if faces.count >= Self.faceLimit { faces.removeAll(keepingCapacity: true) }
+            faces[key] = face
+        }
         return face
     }
 
@@ -329,9 +336,15 @@ struct AIMPSkinFont: Equatable, Sendable {
 
     /// The faces made, shared by every skin (CTFont is immutable and safe across threads).
     private static let faces = OSAllocatedUnfairLock<[Face: CTFont]>(uncheckedState: [:])
+    /// More faces than a few skins' text sets (M5 sets a few dozen), so a skin drawn keeps its own.
+    private static let faceLimit = 512
 }
 
 enum AIMPSkinLoader {
+    /// The font files one skin's shelf holds together: M5's three families are a few MB, so a skin
+    /// whose fonts sum past this is a bomb, not a type specimen.
+    static let fontBytes = 256 * 1_024 * 1_024
+
     /// The production entry point: leaves the caller's executor before the file is touched, for a
     /// thread with the stack a skin's layout needs (`AIMPSkinWorker`).
     static func load(file: URL) async throws -> AIMPSkin {
@@ -372,10 +385,16 @@ enum AIMPSkinLoader {
         let strings = AIMPSkinLanguage.strings(in: documents, preferred: languages)
 
         // The fonts it ships (M5's Segoe Fluent Icons, Poppins and Segoe UI), for the faces it names,
-        // in name order: which file names a family is the same every load.
+        // in name order: which file names a family is the same every load. The shelf holds every
+        // file it is given, so they are held to `fontBytes` together; the ones past it are left out.
+        var fontBytes = 0
         let fontShelf = SkinFonts.shelf(archive.entries.sorted { $0.key < $1.key }
             .filter { $0.key.hasSuffix(".ttf") || $0.key.hasSuffix(".otf") }
-            .compactMap { try? archive.payload($0.value) })
+            .compactMap { entry -> Data? in
+                guard fontBytes < Self.fontBytes, let data = try? archive.payload(entry.value) else { return nil }
+                fontBytes += data.count
+                return fontBytes <= Self.fontBytes ? data : nil
+            })
 
         // Pictures are read from their headers here and decode when first drawn, within one
         // budget of resident pixels (`AIMPSkinPixelBudget`). DPI variants end in -120, -144, -168,
@@ -477,9 +496,10 @@ enum AIMPSkinLoader {
         skin.fontShelf = fontShelf
         // Each window's natural size, measured with trial frames here, off the main thread, rather
         // than when the window shows the skin.
-        skin.naturalSizes = Dictionary(uniqueKeysWithValues: ([nil] + companions.map(\.name)).compactMap { form in
+        // A schema listing one form twice must not trap here: the first measure is kept.
+        skin.naturalSizes = Dictionary(([nil] + companions.map(\.name)).compactMap { form in
             AIMPSkinRenderer.naturalSize(skin, form: form).map { (form ?? "", $0) }
-        })
+        }, uniquingKeysWith: { first, _ in first })
         return skin
     }
 }

@@ -76,8 +76,11 @@ final class AIMPSkinFrameScheduler {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard let self else { return }
-                    self.drawing = false
+                    // Still drawing while the frame is shown: a frame its showing asks for (a form's
+                    // first measured content refitting it) waits as the latest, in place of an older
+                    // one waiting, rather than drawing ahead of it and being covered by it.
                     show(output)
+                    self.drawing = false
                     guard let next = self.pending else { return }
                     self.pending = nil
                     self.draw(next.input, show: next.show)
@@ -95,7 +98,8 @@ final class AIMPSkinFrameScheduler {
             var revealed = input.host
             revealed.feedback.pointer = .anywhere
             let full = input.host.feedback.hoverRects.isEmpty ? frame
-                : AIMPSkinRenderer.frame(input.skin, size: input.size, form: input.form, host: revealed, state: input.state) ?? frame
+                : AIMPSkinRenderer.frame(input.skin, size: input.size, form: input.form, host: revealed, state: input.state,
+                                         interaction: input.interaction, scale: input.scale) ?? frame
             measured = (full.drawnBounds, input.size)
         }
         return RenderOutput(generation: input.generation, frame: frame, measured: measured)

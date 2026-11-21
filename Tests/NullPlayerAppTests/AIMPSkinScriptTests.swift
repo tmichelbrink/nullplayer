@@ -317,7 +317,10 @@ final class AIMPSkinScriptTests: XCTestCase {
             Data([UInt8(text.utf16.count & 0xFF), UInt8(text.utf16.count >> 8)]) + (text.data(using: .utf16LittleEndian) ?? Data())
         }
         func encode(_ node: AIMPNode) -> Data {
-            let attributes = node.attributes.sorted { $0.key < $1.key }.map { "\($0.key)=\"\($0.value)\"" }.joined(separator: " ")
+            // Escaped, so the decoder's entity pass gives each value back as it was (`&` and `"` included).
+            let attributes = node.attributes.sorted { $0.key < $1.key }.map { key, value in
+                "\(key)=\"\(value.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "\"", with: "&quot;"))\""
+            }.joined(separator: " ")
             return node.children.reduce(wide(node.tag) + wide(attributes) + withUnsafeBytes(of: UInt32(node.children.count).littleEndian) { Data($0) }) {
                 $0 + encode($1)
             }

@@ -206,7 +206,7 @@ extension AIMPSkinScript {
                 assign(name, try evaluate(value))
             case .assignElement(let name, let index, let value):
                 let value = try evaluate(value)
-                let index = Int(try evaluate(index).number)
+                let index = AIMPSkinScript.integer(try evaluate(index).number)
                 // An array declared through a type alias starts as a plain variable.
                 var elements: [Int: Value] = [:]
                 if case .array(let existing) = lookup(name) ?? .none { elements = existing }
@@ -232,7 +232,7 @@ extension AIMPSkinScript {
                     try execute(otherwise)
                 }
             case .loop(let name, let from, let to, let down, let body):
-                let from = Int(try evaluate(from).number), to = Int(try evaluate(to).number)
+                let from = AIMPSkinScript.integer(try evaluate(from).number), to = AIMPSkinScript.integer(try evaluate(to).number)
                 guard down ? from >= to : from <= to else { return }
                 for i in stride(from: from, through: to, by: down ? -1 : 1) {
                     assign(name, .number(Double(i)))
@@ -267,7 +267,14 @@ extension AIMPSkinScript {
         private func attempt(_ body: [Statement], except handler: [Statement]?, finally cleanup: [Statement]?) throws {
             var failure: Error?
             do { try execute(body) } catch { failure = error }
-            if let cleanup { try execute(cleanup) }
+            if let cleanup {
+                // A cleanup that raises does not hide a spent budget or an interpreter gap: the run
+                // still stops on it, and the engine undoes what it set.
+                do { try execute(cleanup) } catch {
+                    if let failure, failure is Budget.Spent || failure is Unsupported { throw failure }
+                    throw error
+                }
+            }
             guard let failure else { return }
             guard let handler, !(failure is ExitSignal || failure is Budget.Spent || failure is Unsupported) else { throw failure }
             try execute(handler)
@@ -292,7 +299,18 @@ extension AIMPSkinScript {
 
         // MARK: Expressions
 
+        /// How deep the expression being worked out is, and how deep one may go. FastScript writes an
+        /// expression flat, so `A + B + C …` is a tree as deep as it is long (`AIMPSkinScript+Syntax.swift`),
+        /// and evaluating it recurses that deep, routine calls inside it included: a skin's own
+        /// expressions sit far below the limit, and a crafted chain of a million operands would run
+        /// out of stack. Past the limit the run stops (`Unsupported`), as on any other gap.
+        private var expressionDepth = 0
+        static let expressionDepthLimit = 256
+
         func evaluate(_ expression: Expression) throws -> Value {
+            guard expressionDepth < Self.expressionDepthLimit else { throw Unsupported(what: "expression depth") }
+            expressionDepth += 1
+            defer { expressionDepth -= 1 }
             switch expression {
             case .number(let number): return .number(number)
             case .string(let text): return .string(text)
@@ -304,8 +322,9 @@ extension AIMPSkinScript {
                     case .value(let value): return [try evaluate(value)]
                     case .range(let low, let high):
                         let (low, high) = (try evaluate(low), try evaluate(high))
-                        guard let from = Int(exactly: low.number), let to = Int(exactly: high.number),
-                              from <= to, to - from < 256 else { return [low, high] }
+                        guard let from = Int(exactly: low.number), let to = Int(exactly: high.number), from <= to,
+                              !to.subtractingReportingOverflow(from).overflow, to - from < 256
+                        else { return [low, high] }
                         return (from...to).map { .number(Double($0)) }
                     }
                 }
@@ -330,8 +349,8 @@ extension AIMPSkinScript {
         /// `in` tests a set, and a comparison compares text unless a number meets a number (`'1.0' =
         /// 1` holds, `'10' < '9'` too, as Delphi's variants compare).
         private func apply(_ op: BinaryOperator, _ left: Value, _ right: Value) throws -> Value {
-            if op == .add, case .string = left { return .string(left.string + right.string) }
-            if op == .add, case .string = right { return .string(left.string + right.string) }
+            if op == .add, case .string = left { return try Self.joined(left.string, right.string) }
+            if op == .add, case .string = right { return try Self.joined(left.string, right.string) }
             func truth(_ condition: Bool) -> Value { .number(condition ? 1 : 0) }
             guard let numeric = op.numeric else {
                 guard case .array(let members) = right else { return .number(0) }
@@ -350,6 +369,17 @@ extension AIMPSkinScript {
             }
             guard let result = numeric.apply(left.number, right.number) else { throw Raised(what: "\(left.string) \(numeric.rawValue) \(right.string)") }
             return .number(result)
+        }
+
+        /// The most text one `+` may make. A caption or a path is a few hundred characters; a skin
+        /// that doubles a string in a loop would reach gigabytes long before its step budget ran out.
+        static let textLimit = 1 << 20
+
+        /// `left` and `right` joined, unless that passes `textLimit`: the run stops as if out of
+        /// budget, and a skin's `except` does not catch it.
+        private static func joined(_ left: String, _ right: String) throws -> Value {
+            guard left.utf8.count + right.utf8.count <= textLimit else { throw Budget.Spent(what: "text length") }
+            return .string(left + right)
         }
 
         /// Whether a comparison is numeric: a number against a number, or against text that reads as one.
@@ -371,7 +401,7 @@ extension AIMPSkinScript {
             for selector in designator.selectors {
                 switch selector {
                 case .index(let index):
-                    value = element(of: value, Int(try evaluate(index).number))
+                    value = element(of: value, AIMPSkinScript.integer(try evaluate(index).number))
                 case .member(let member, let arguments, let subscripts):
                     let arguments = try arguments.map(evaluate)
                     guard let subscripts else {
@@ -382,7 +412,7 @@ extension AIMPSkinScript {
                         value = try method(value, member, arguments + subscripts.map(evaluate))
                     } else {
                         value = try method(value, member, arguments)
-                        if let first = subscripts.first { value = element(of: value, Int(try evaluate(first).number)) }
+                        if let first = subscripts.first { value = element(of: value, AIMPSkinScript.integer(try evaluate(first).number)) }
                     }
                 }
             }

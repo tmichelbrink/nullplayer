@@ -73,7 +73,8 @@ indirect enum AIMPSkinSource: Sendable, Equatable {
             // script mutes when its speakers go off unless already muted, and read as never muted it
             // took every mute straight back.
             case (_, "Checked"): self.init(source, "State")
-            case ("prvVolume", "Position"): self = .volumeFraction
+            // AIMP reads pin names without regard to case, and the two volume pins differ in unit.
+            case ("prvVolume", let pin) where pin.lowercased() == "position": self = .volumeFraction
             case ("prvVolume", _): self = .volume
             case ("prvBalance", _): self = .balance
             case ("prvPlayerState", "State"): self = .playState
@@ -135,8 +136,9 @@ indirect enum AIMPSkinSource: Sendable, Equatable {
 
     private static func rest(_ source: String, _ pin: String, names: AIMPSkinIndex.Names) -> AIMPSkinSource {
         // A form's window is not maximized (Sony Media Tower Reborn's restore glyph showed). A list's
-        // totals are the list's, though the skin names an item after it (Dark Blocks' `Playlist`).
-        let listTotal = AIMPSkinList(rawValue: source) != nil && ["Count", "Duration", "Size"].contains(pin)
+        // totals are the list's, though the skin names an item after it (Dark Blocks' `Playlist`), as
+        // is whether its rows scroll.
+        let listTotal = AIMPSkinList(rawValue: source) != nil && ["Count", "Duration", "Size", "Scrolling"].contains(pin)
         if names.items.contains(source), !listTotal {
             switch pin {
             case "Maximize": return .value(0)

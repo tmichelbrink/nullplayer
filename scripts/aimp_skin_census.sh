@@ -39,6 +39,9 @@ fi
 mkdir -p "$out"
 out="$(cd "$out" && pwd)"
 source scripts/lib/swiftpm.sh
+# A census left by an earlier run is not this one's: a run that fails before writing must not
+# report it.
+rm -f "$out/census.tsv"
 
 env ${corpus:+AIMP_CORPUS_PATH="$corpus"} AIMP_CENSUS_OUT="$out/census.tsv" \
     swift test ${SWIFTPM_ARGS[@]+"${SWIFTPM_ARGS[@]}"} \

@@ -118,14 +118,16 @@ struct AIMPSkinTarget: Equatable, Sendable {
     }
 
     /// Of `targets` (topmost last), the one a click at `point` reaches: the topmost hit, unless its
-    /// picture is clear there and another is under it.
+    /// picture is clear there and another is under it; past each clear one to the first drawn
+    /// there, else the one just under.
     static func topmost(_ targets: [AIMPSkinTarget], at point: CGPoint) -> AIMPSkinTarget? {
         let hits = targets.filter { $0.hit(point) }
         guard let top = hits.last else { return nil }
+        guard top.isClear(at: point) else { return top }
         // Never to a scroll view's own area, which takes the wheel but no clicks: M5's switches
         // and dots are clear in their middles.
-        if top.isClear(at: point), let under = hits.dropLast().last(where: { !$0.isScrollArea }) { return under }
-        return top
+        let under = hits.dropLast().filter { !$0.isScrollArea }
+        return under.last(where: { !$0.isClear(at: point) }) ?? under.last ?? top
     }
 
     /// A scroll view's whole area (its wheel), not its bar.
@@ -170,14 +172,16 @@ struct AIMPSkinStep: Equatable, Sendable {
     }
 
     /// The fixed position the expression names (`3`): what a right-click's `ContextMenu` sets.
-    var position: Int? { expression?.constant.flatMap { $0 == $0.rounded() ? Int($0) : nil } }
+    var position: Int? { expression?.constant.flatMap { Int(exactly: $0) } }
 
     /// Where a click, or `notches` of the wheel, takes `current`; nil where the expression gives
-    /// nothing (none, or one that does not evaluate), and the position stays.
+    /// nothing (none, one that does not evaluate, or a number no `Int` position holds), and the
+    /// position stays.
     func next(from current: Double, notches: Int = 1) -> Double? {
         var variables = ["value": current]
         if wheel == .scrollDelta { variables["scrolldelta"] = Double(notches) }
-        return expression?.evaluate(variables: variables)
+        guard let next = expression?.evaluate(variables: variables), Int(exactly: next.rounded(.towardZero)) != nil else { return nil }
+        return next
     }
 }
 

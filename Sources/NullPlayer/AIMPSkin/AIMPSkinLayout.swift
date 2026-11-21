@@ -499,17 +499,27 @@ extension AIMPSkinLayout {
             placed.controls.forEach { read($0) }
             placed.items.forEach { read($0, isItem: true) }
             guard let visible else { return }
-            targets[first...].indices.reversed().forEach { index in
-                let shown = targets[index].rect.intersection(visible)
-                if shown.isNull || shown.isEmpty { targets.remove(at: index) } else if shown != targets[index].rect {
-                    targets[index].visibleRect = shown
-                }
+            // Within a scroll view inside another, a target keeps the inner one's clip as well.
+            targets.replaceSubrange(first..., with: Self.clipped(Array(targets[first...]), to: visible))
+        }
+
+        /// `targets` taking clicks only within `clip` too, over any clip each has; those it hides
+        /// wholly go. A target's `rect` stays, for its mask and its local coordinates.
+        private static func clipped(_ targets: [AIMPSkinTarget], to clip: CGRect) -> [AIMPSkinTarget] {
+            targets.compactMap { target in
+                let shown = (target.visibleRect ?? target.rect).intersection(clip)
+                guard !shown.isNull, !shown.isEmpty else { return nil }
+                var target = target
+                if shown != target.rect { target.visibleRect = shown }
+                return target
             }
         }
 
         private mutating func read(_ placed: Control) {
             let control = placed.control, input = control.input
-            targets += placed.targets
+            // A control held in another takes clicks only where it draws, within what holds it
+            // (`place`'s `cut`), as AIMP's child windows do.
+            targets += placed.cut.map { Self.clipped(placed.targets, to: $0) } ?? placed.targets
             gauges.merge(placed.gauges) { $1 }
             if case .search(_, let font) = placed.look { searchFont = font }
             if let name = control.name {

@@ -13,6 +13,9 @@ import Foundation
 enum SkinFonts {
     private static let lock = NSLock()
     private static var registered = Set<String>()
+    /// The families `register` added faces of, lowercased: another face of one (a WMP skin's bold
+    /// beside its regular) is the skin's too, not the system's. Under `lock`.
+    private static var registeredFamilies = Set<String>()
 
     /// Registers the font in `data` unless the system has its family or it is registered already;
     /// true when it was registered now.
@@ -22,9 +25,10 @@ enum SkinFonts {
               let name = font.postScriptName as String? else { return false }
         lock.lock(); defer { lock.unlock() }
         let family = familyName(font)
-        guard !registered.contains(name), !isInstalled(family) else { return false }
+        guard !registered.contains(name), !isInstalled(family) || registeredFamilies.contains(family.lowercased()) else { return false }
         guard CTFontManagerRegisterGraphicsFont(font, nil) else { return false }
         registered.insert(name)
+        registeredFamilies.insert(family.lowercased())
         installed?.insert(family.lowercased())
         return true
     }

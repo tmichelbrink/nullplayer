@@ -4,11 +4,21 @@ import Foundation
 
 /// Text as AIMP sets it, for the painter that draws it and the layout that sizes displays by it.
 enum AIMPSkinText {
-    /// `text` broken into lines no wider than `width` (and at its own line breaks), as a display
-    /// with `WordWrap` or a `MultiLine` layout shows it.
+    /// `text` broken into lines no wider than `width` (and at its own line breaks, a Windows `\r\n`
+    /// one), as a display with `WordWrap` or a `MultiLine` layout shows it. Markup is read over the
+    /// whole text first: a `[U]` runs on past a line break to its `[/U]`.
     static func lines(_ text: String, font: AIMPSkinFont, width: CGFloat) -> [CTLine] {
-        text.components(separatedBy: .newlines).flatMap { paragraph -> [CTLine] in
-            let styled = Self.styled(paragraph, font: font)
+        let whole = Self.styled(text.replacingOccurrences(of: "\r\n", with: "\n"), font: font)
+        let string = whole.string as NSString
+        var paragraphs: [NSAttributedString] = [], from = 0
+        while true {
+            let rest = NSRange(location: from, length: string.length - from)
+            let stop = string.rangeOfCharacter(from: .newlines, options: [], range: rest)
+            guard stop.location != NSNotFound else { paragraphs.append(whole.attributedSubstring(from: rest)); break }
+            paragraphs.append(whole.attributedSubstring(from: NSRange(location: from, length: stop.location - from)))
+            from = stop.location + stop.length
+        }
+        return paragraphs.flatMap { styled -> [CTLine] in
             guard styled.length > 0 else { return [CTLineCreateWithAttributedString(styled)] }
             let typesetter = CTTypesetterCreateWithAttributedString(styled)
             var lines: [CTLine] = [], start = 0

@@ -15,9 +15,13 @@ final class AIMPSkinPress {
     private var holdTimer: Timer?
     /// Set once a hold has acted: letting go then does not click.
     private(set) var holdFired = false
+    /// Which press this is, counted from the first: an answer that lands after its press ended (a
+    /// key's handler, off the main thread) is not taken for the next press of the same key.
+    private(set) var serial = 0
 
     /// `under`: the knob or slider under the key, and where the press went down (window points).
     func begin(_ target: AIMPSkinTarget, under: (target: AIMPSkinTarget, start: NSPoint)?) {
+        serial += 1
         self.target = target
         self.under = under
         holdFired = false
@@ -41,9 +45,11 @@ final class AIMPSkinPress {
                 self.holdFired = true
                 fire()
                 guard repeats else { return }
-                self.holdTimer = Self.whileHeld(0.1, repeats: true) { [weak self] _ in
+                // A repeat whose press is gone (its view closed mid-hold) stops itself: the run loop
+                // keeps a repeating timer until it is invalidated.
+                self.holdTimer = Self.whileHeld(0.1, repeats: true) { [weak self] timer in
                     MainActor.assumeIsolated {
-                        guard let self, self.target?.control == held else { return }
+                        guard let self, self.target?.control == held else { return timer.invalidate() }
                         fire()
                     }
                 }

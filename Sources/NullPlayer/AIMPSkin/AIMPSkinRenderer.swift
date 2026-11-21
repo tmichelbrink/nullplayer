@@ -48,6 +48,8 @@ enum AIMPSkinRenderer {
                             state: AIMPSkinState = .init()) -> CGSize? {
         skin.withFonts {
             guard let form = skin.index.form(formName) else { return nil }
+            // An item the form does not have has no size, as `frame` draws none for it.
+            if let rootName, form.item(named: rootName) == nil { return nil }
             let root = rootName.flatMap(form.item(named:)) ?? form
             let pages = AIMPSkinDataflow(skin: skin, host: .init(), state: state)
             let measure = NaturalSize(skin: skin, page: { pages.activePage($0) })
@@ -219,11 +221,15 @@ enum AIMPSkinRenderer {
             // and display; GX-77's playlist window: a button bar left of the list).
             // Only at the top, or where a part has no picture and only its minimum: elsewhere docked
             // pictures stack (Denon's pages, the speakers' cabinets and cones).
+            // Each child's search there, with no inset or floor: reused below where none is inherited,
+            // so a tree of side-by-side parts is not searched twice at every level.
+            var sideBySide: [Found] = []
             if children.count > 1, children.allSatisfy({ $0.layout.dock?.isSide == true || $0.layout.dock == .client }) {
                 var bare = false
                 var sizes: [CGSize] = []
                 for child in children {
                     let part = search(child, revealing: revealing)
+                    sideBySide.append(part)
                     found.meet(part)
                     if let size = part.size {
                         sizes.append(size)
@@ -237,8 +243,9 @@ enum AIMPSkinRenderer {
                     return found
                 }
             }
-            for child in children {
-                let part = search(child, revealing: revealing, inset: inset, floor: floor)
+            for (i, child) in children.enumerated() {
+                let part = i < sideBySide.count && inset == .zero && floor == .zero ? sideBySide[i]
+                    : search(child, revealing: revealing, inset: inset, floor: floor)
                 found.meet(part)
                 if let size = part.size {
                     found.size = size

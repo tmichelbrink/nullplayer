@@ -94,7 +94,7 @@ extension AIMPSkinScript {
                         actions.append(.action(action))
                         continue
                     }
-                    setCounter(source, to: flow.wrapped(Int(flow.value(of: link)), counter: source))
+                    setCounter(source, to: flow.wrapped(AIMPSkinScript.integer(flow.value(of: link)), counter: source))
                 }
             }
         }
@@ -143,7 +143,10 @@ extension AIMPSkinScript {
                         changed = true
                         guard let program = program(script) else { continue }
                         let asked = (actions, eqWrites)
-                        try? runCounter(name, program, at: position)
+                        // Out of budget, it has not run: it runs on a later tick, as a bound one does.
+                        if (try? runCounter(name, program, at: position)) == nil, budget.isSpent {
+                            state.animation[name].scriptInputs = nil
+                        }
                         (actions, eqWrites) = asked
                         continue
                     }
@@ -230,7 +233,7 @@ extension AIMPSkinScript {
             runningCounters.insert(name)
             defer { runningCounters.remove(name) }
             let after = try atomically { try run(program, statePosition: position) }
-            state.script[name].counter = Int(after)
+            state.script[name].counter = AIMPSkinScript.integer(after)
         }
 
         /// `program` once: its block, then `Execute` with the event's parameters (`State` at
@@ -290,8 +293,11 @@ extension AIMPSkinScript {
                 // (Technics SL-1200's tonearm: `Frames_Counter` drops it in, then a script sets it).
                 let counter = bindings.all("AnimationFrameIndex").first { $0.expression == nil }
                     .flatMap(\.source).flatMap { skin.index.counterModule($0) != nil ? $0 : nil }
-                let frame = counter.map { Int(flow.value($0, "Position")) } ?? state.animation[name].frame ?? 0
+                let frame = counter.map { AIMPSkinScript.integer(flow.value($0, "Position")) } ?? state.animation[name].frame ?? 0
                 state.animation[name].frame = frame
+                // A frame a script set outside a frame (a click's handler, which has no clock) waits
+                // its interval from this frame (`HostBridge`'s `FrameIndex`), not from clock 0.
+                if state.animation[name].stepped == .infinity { state.animation[name].stepped = host.feedback.clock }
                 // A gate on its own frame reads the frame it is on now.
                 if let gate = bindings["Accessibility"] {
                     let open = gate.source == name ? gate.shaped(Double(frame)) : flow.value(of: gate)

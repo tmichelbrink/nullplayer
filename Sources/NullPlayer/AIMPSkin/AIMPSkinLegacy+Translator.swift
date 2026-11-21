@@ -14,6 +14,13 @@ extension AIMPSkinLegacy {
         /// Each item's objects, back to front, by the item's name.
         let objects: [String: [Object]]
         var unnamed = 0
+        /// The dock sites' frame documents being read into the tree (lowercased), and how many have
+        /// been: a frame that docks itself, or frames that dock each other, would recurse until the
+        /// stack ran out, and frames each docking two others would double at every level.
+        private var framesReading: Set<String> = []
+        private var framesRead = 0
+        /// More frames than any AIMP 3.0 skin docks (`PlaylistFrame` and `EqFrame`).
+        private static let mostFrames = 64
 
         init(documents: AIMPSkinDocuments, images: [String: AIMPSkinImage], objects: [Object], settings: Settings,
              equalizerWindow: String? = nil) {
@@ -75,9 +82,13 @@ extension AIMPSkinLegacy {
             if source["Class"] == "TAIMPLayoutDockSiteItem" {
                 // A dock site holds a frame of its own layout (`PlaylistFrame`; the equalizer's is
                 // `EqFrame`); one that does not read is a finding, and the site is left as if it had none.
-                if let layout = documents.node(name == "EqualizerFrame" ? "EqFrame.xml" : name + ".xml") {
+                let file = name == "EqualizerFrame" ? "EqFrame.xml" : name + ".xml"
+                if !framesReading.contains(file.lowercased()), framesRead < Self.mostFrames, let layout = documents.node(file) {
+                    framesRead += 1
+                    framesReading.insert(file.lowercased())
                     items = []
                     for child in layout.children("item") { items.append(item(child)) }
+                    framesReading.remove(file.lowercased())
                 } else if name == "TabCtrl" {
                     controls += tabs()
                     // With no bar of its own, the row is as tall as its tab (AIMP 2's Old Systems).

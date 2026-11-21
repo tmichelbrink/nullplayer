@@ -27,7 +27,7 @@ final class AIMPSkinAudioEngineHost {
 
     /// The track playing, nil while stopped, as last seen, and how many tracks have started and
     /// finished since the session began.
-    private var lastTrack: URL?
+    private var lastTrack: PlayedTrack?
     private var tracksStarted = 0
     private var tracksFinished = 0
     /// What only the library knows of the playing track, by its id.
@@ -37,6 +37,9 @@ final class AIMPSkinAudioEngineHost {
     /// The playlist's rows, and which build of them they are; `playlistDirty` until rebuilt after a change.
     private var playlistDirty = true
     private var playlistRows = AIMPSkinPlayerSnapshot.Playlist()
+    /// The tracks behind `playlistRows`, in order: two tracks whose rows read the same (one file
+    /// queued twice) swapping places is a new build, so a row chosen by index is not kept.
+    private var playlistIDs: [Track.ID] = []
     private var playlistTextCache: [PlaylistKey: (title: String, seconds: Int)] = [:]
     private var fileSizes: [URL: Int64] = [:]
     /// Files whose size the background queue is reading now.
@@ -58,8 +61,13 @@ final class AIMPSkinAudioEngineHost {
         self.engine = engine
         self.onBackgroundUpdate = onBackgroundUpdate
         scanObserver = NotificationCenter.default.addObserver(forName: MediaLibrary.scanProgressNotification, object: nil,
-                                                              queue: .main) { _ in
-            MainActor.assumeIsolated { onBackgroundUpdate() }
+                                                              queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                // A finished scan may have added the playing track: a lookup that found nothing is
+                // tried again, once per scan rather than per frame.
+                if !MediaLibrary.shared.isScanning { self?.retryMissingDetails() }
+                onBackgroundUpdate()
+            }
         }
         appearanceObserver = NSApp.observe(\.effectiveAppearance) { [weak self] _, _ in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.onBackgroundUpdate() } }
@@ -96,8 +104,10 @@ final class AIMPSkinAudioEngineHost {
         player.year = details?.year ?? 0
         player.fileSize = details?.size ?? 0
         player.rating = details?.rating
+        // A volume moved anywhere else ends the mute for good: back at 0 later is not still muted.
+        if engine.volume != 0 { mutedVolume = nil }
         // Muted, the slider stays at the level the mute keeps, as AIMP's does.
-        player.volume = Double(mutedVolume ?? engine.volume)
+        player.volume = Double(heldMute ?? engine.volume)
         player.balance = (Double(engine.balance) + 1) / 2
         let duration = engine.duration
         // Stopped is at the start in AIMP, whatever the engine last played to (Pioneer's tape
@@ -111,7 +121,7 @@ final class AIMPSkinAudioEngineHost {
         player.shuffle = engine.shuffleEnabled
         player.repeatAll = engine.repeatEnabled
         player.stayOnTop = WindowManager.shared.isAlwaysOnTop
-        player.muted = mutedVolume != nil
+        player.muted = heldMute != nil
         player.eqEnabled = engine.isEQEnabled()
         player.playlistVisible = WindowManager.shared.isPlaylistVisible
         player.libraryVisible = WindowManager.shared.isMediaLibraryVisible
@@ -137,7 +147,7 @@ final class AIMPSkinAudioEngineHost {
     /// stops. A new track's library details are looked up.
     func playbackDidChange() {
         let track = engine.currentTrack
-        let current = engine.state != .stopped ? track?.url : nil
+        let current = engine.state != .stopped ? track.map(PlayedTrack.init) : nil
         if current != lastTrack {
             if lastTrack != nil { tracksFinished += 1 }
             if current != nil { tracksStarted += 1 }
@@ -163,6 +173,29 @@ final class AIMPSkinAudioEngineHost {
         }
     }
 
+    /// A library lookup for the playing track that found nothing is made again (`playbackDidChange`).
+    private func retryMissingDetails() {
+        guard details == nil, detailsTrack != nil else { return }
+        detailsTrack = nil
+        playbackDidChange()
+    }
+
+    /// What tells one playback from the next: the file, and for a cue sheet's track where it starts
+    /// in it, as crossing a cue boundary plays on in the same file.
+    private struct PlayedTrack: Equatable {
+        let url: URL
+        let cueStart: TimeInterval?
+
+        init(_ track: Track) {
+            url = track.url
+            cueStart = track.cueStartOffset
+        }
+    }
+
+    /// The level the AIMP mute keeps, while it holds: the engine still at the 0 the mute set. A
+    /// volume moved anywhere else (the arrow keys, `MainWindowKeys.stepVolume`) ends it.
+    private var heldMute: Float? { engine.volume == 0 ? mutedVolume : nil }
+
     /// The playlist, a track's tags, or Show Artist / Show Album changed: the rows are rebuilt at
     /// the next `refreshPlaylist`, once for a burst of changes.
     func playlistChanged() { playlistDirty = true }
@@ -187,7 +220,11 @@ final class AIMPSkinAudioEngineHost {
         }
         playlistTextCache = texts
         // A rebuild that changes nothing (a track change re-reads every row) is the same playlist.
-        if rows != playlistRows.rows { playlistRows = .init(rows: rows, generation: playlistRows.generation + 1) }
+        let ids = engine.playlist.map(\.id)
+        if rows != playlistRows.rows || ids != playlistIDs {
+            playlistRows = .init(rows: rows, generation: playlistRows.generation + 1)
+            playlistIDs = ids
+        }
         guard !unsized.isEmpty else { return }
         let pending = unsized.filter { sizing.insert($0).inserted }
         guard !pending.isEmpty else { return }
@@ -293,14 +330,18 @@ final class AIMPSkinAudioEngineHost {
         case .playableFileShowFileInfoAtCursor, .playlistFocusedItemShowQTE, .playableFileShowQTE:
             showFileInfo?(window)
         // The playing file: its tags (when the library has it), its folder, it or its tags copied.
+        // Not in the library, the File Info sheet of the track playing when asked, not of whatever
+        // is selected or playing once the lookup answers.
         case .sendToTagEditor, .utilsTagEditor:
-            guard let url = engine.currentTrack?.url else { break }
-            Self.background.async { [weak self, weak window] in
+            guard let playing = engine.currentTrack else { break }
+            let url = playing.url
+            Self.background.async { [weak window] in
                 let track = MediaLibrary.shared.findTrack(byURL: url)
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated {
                         if let track { return EditTagsPanel(track: track).show() }
-                        self?.showFileInfo?(window)
+                        guard let window else { return }
+                        PlaylistMenuBuilder.fileInfoAlert(for: playing).beginSheetModal(for: window)
                     }
                 }
             }
@@ -327,7 +368,7 @@ final class AIMPSkinAudioEngineHost {
         // is on only while this mute holds, and moving the volume ends it (Denon Classic Style's
         // speakers script reads it before muting).
         case .playerVolumeMute:
-            if let restore = mutedVolume {
+            if let restore = heldMute {
                 engine.volume = restore
                 mutedVolume = nil
             } else {

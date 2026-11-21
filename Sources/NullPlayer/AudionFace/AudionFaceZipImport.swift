@@ -49,7 +49,7 @@ enum AudionFaceZipImport {
         case let .compressionRatio(path, ratio, limit):
             return AudionFaceFinding(.zipOverLimit, "'\(path)' expands \(ratio):1, past \(limit):1.")
         case let .inflatesPastDeclaredSize(path):
-            return AudionFaceFinding(.zipOverLimit, "'\(path)' inflates past its declared size.")
+            return AudionFaceFinding(.unreadableZip, "'\(path)' inflates past its declared size.")
         case let .failsCRCOrSize(path):
             return AudionFaceFinding(.unreadableZip, "'\(path)' fails its CRC or size check.")
         case let .unpackFailed(path, underlying):

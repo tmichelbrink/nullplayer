@@ -35,6 +35,10 @@ struct AIMPSkinSizing {
         minimum = skin?.naturalSize(form: formName) ?? AIMPSkinMainView.unskinnedSize
         edge = skin?.index.sizing[formName ?? ""]?.edge
         shownWidth = nil
+        // The last skin's maximize and drag are not this one's: restoring from them gave it the
+        // last skin's size, and kept it as its own.
+        unmaximized = nil
+        drag = nil
         fixedWidth = skin.flatMap { AIMPSkinRenderer.fixedWidth($0, form: formName, state: AIMPSkinState()) }
         let initial = skin.flatMap { AIMPSkinRenderer.initialSize($0, form: formName, natural: minimum) }
         let saved = skin.flatMap { Self.savedSize(skin: $0, form: formName) }
@@ -66,11 +70,13 @@ struct AIMPSkinSizing {
         // A panel shown or hidden down the window (Kantaris-Teyp's track-info and wave bars) moves
         // its least height: the window grows by it, or gives it back.
         let grown = natural.height - minimum.height
-        guard shown.width != before || fixed != fixedWidth || grown != 0 else { return false }
+        let widthMoved = shown.width != before || fixed != fixedWidth
+        guard widthMoved || grown != 0 else { return false }
         if shown.width > 0 { natural.width = shown.width }
         minimum = natural
         fixedWidth = fixed
-        canvas = clamped(CGSize(width: natural.width, height: max(canvas.height + grown, natural.height)))
+        // A turn that moves only the least height keeps the width the user gave it.
+        canvas = clamped(CGSize(width: widthMoved ? natural.width : canvas.width, height: max(canvas.height + grown, natural.height)))
         unmaximized = nil
         return true
     }

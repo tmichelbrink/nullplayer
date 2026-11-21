@@ -60,8 +60,9 @@ extension AIMPSkinMainView {
         if case .hold(let down, _) = target.kind {
             let point = canvasPoint(event)
             let arguments = ["X": Double(point.x - target.rect.minX), "Y": Double(point.y - target.rect.minY)]
+            let serial = press.serial
             runtime?.runHandler(down, sender: target.name, arguments: arguments) { [weak self] didSomething in
-                guard let self, !didSomething, self.press.target?.control == target.control else { return }
+                guard let self, !didSomething, self.press.serial == serial, self.press.target?.control == target.control else { return }
                 _ = self.press.end()
                 self.interaction.pressed = nil
                 self.drag.begin(event)
@@ -80,7 +81,8 @@ extension AIMPSkinMainView {
             // second click plays it.
             guard let index = playlistIndex(target, at: canvasPoint(event)) else { break }
             skinState.lists.select(index, extending: event.modifierFlags.contains(.shift),
-                                   toggling: event.modifierFlags.contains(.command))
+                                   toggling: event.modifierFlags.contains(.command),
+                                   shown: host.playlistIndices(matching: skinState.lists.playlistSearch))
             if event.clickCount >= 2 { runtime?.onAction?(.playRow(index)) }
         case .playlistScroll: scrollPlaylist(target, to: canvasPoint(event))
         case .viewScroll: scrollView(target, to: canvasPoint(event))
@@ -120,18 +122,31 @@ extension AIMPSkinMainView {
         let target = drawnFrame?.targets.last(where: { $0.rect.contains(canvasPoint(event)) })
         let lists = skinState.lists
         let rows = event.hasPreciseScrollingDeltas ? -event.scrollingDeltaY / 12 : -event.scrollingDeltaY * 3
+        /// The whole rows the wheel moves: a trackpad's fractions of a row add up across its events
+        /// (each of a slow swipe is less than one); a notched wheel's three rows a notch as they come.
+        func wholeRows() -> Int {
+            guard event.hasPreciseScrollingDeltas else { return Int(rows.rounded()) }
+            if event.phase == .began { playlistWheelRemainder = 0 }
+            playlistWheelRemainder += rows
+            let whole = Int(playlistWheelRemainder)
+            playlistWheelRemainder -= CGFloat(whole)
+            return whole
+        }
         /// No further than the last row at the foot of the list, as the renderer stops there.
-        func scrolled(_ top: Int, count: Int, visible: Int) -> Int {
-            min(max(0, min(top, max(0, count - visible)) + Int(rows.rounded())), max(0, count - visible))
+        func scrolled(_ top: Int, by step: Int, count: Int, visible: Int) -> Int {
+            min(max(0, min(top, max(0, count - visible)) + step), max(0, count - visible))
         }
         switch target?.kind {
         case .playlist(_, let rowHeight):
-            guard abs(rows) >= 1, let target else { return }
-            skinState.lists.playlistTop = scrolled(lists.playlistTop, count: host.playlistIndices(matching: lists.playlistSearch).count,
+            guard let target else { return }
+            let step = wholeRows()
+            guard step != 0 else { return }
+            skinState.lists.playlistTop = scrolled(lists.playlistTop, by: step, count: host.playlistIndices(matching: lists.playlistSearch).count,
                                                    visible: max(1, Int(target.rect.height / rowHeight)))
         case .playlistScroll(let maxTop, _):
-            guard abs(rows) >= 1 else { return }
-            skinState.lists.playlistTop = min(max(0, min(lists.playlistTop, maxTop) + Int(rows.rounded())), maxTop)
+            let step = wholeRows()
+            guard step != 0 else { return }
+            skinState.lists.playlistTop = min(max(0, min(lists.playlistTop, maxTop) + step), maxTop)
         default:
             // Over a scroll view, even over a key in it, the wheel scrolls the view: 40 px a notch, or
             // the trackpad's own distance.
@@ -241,6 +256,8 @@ extension AIMPSkinMainView {
     /// A slider bound to a skin counter (Sony TC-MR2's volume drives `Volume_Counter`, whose script
     /// sets the volume) moves the counter across its `Module`; any other moves the player.
     func slide(_ target: AIMPSkinTarget, to fraction: Double) {
+        // A drag past either end stops there: a counter takes only its own positions.
+        let fraction = min(1, max(0, fraction))
         switch target.kind {
         case .slider(let provider, _), .knob(let provider):
             if let counter = counter(of: provider) {

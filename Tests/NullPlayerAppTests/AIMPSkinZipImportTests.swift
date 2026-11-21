@@ -22,13 +22,15 @@ final class AIMPSkinZipImportTests: XCTestCase {
         let entries = [WMPTestArchiveEntry("One.acs4", data: Data(count: 100)), WMPTestArchiveEntry("Two.acs4", data: Data(count: 100))]
         var few = SkinZipLimits.aimpSkins
         few.entries = 1
-        XCTAssertEqual(try failure(entries, limits: few), .zipRejected)
         var small = SkinZipLimits.aimpSkins
         small.entryBytes = 99
-        XCTAssertEqual(try failure(entries, limits: small), .fileTooLarge)
         var tight = SkinZipLimits.aimpSkins
         tight.totalBytes = 150
-        XCTAssertEqual(try failure(entries, limits: tight), .zipRejected)
+        for (limits, code) in [(few, AIMPSkinDiagnosticCode.zipRejected), (small, .fileTooLarge), (tight, .zipRejected)] {
+            let directory = try WMPSkinTestSupport.temporaryDirectory()
+            XCTAssertEqual(try failure(entries, limits: limits, into: directory), code)
+            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), [], "a rejected zip writes nothing")
+        }
     }
 
     /// Skins are compressed already: past the 1 MiB floor, a skin that squashes past 200:1 is a bomb.
@@ -56,13 +58,15 @@ final class AIMPSkinZipImportTests: XCTestCase {
     }
 
     /// The finding's code; an error that is not a finding is rethrown, never read as success.
-    private func failure(_ entries: [WMPTestArchiveEntry], limits: SkinZipLimits = .aimpSkins) throws -> AIMPSkinDiagnosticCode? {
-        try failure(try WMPSkinTestSupport.makeArchive(entries, filename: "skins.zip"), limits: limits)
+    /// `directory`: where the skins are written, a fresh folder when nil.
+    private func failure(_ entries: [WMPTestArchiveEntry], limits: SkinZipLimits = .aimpSkins,
+                         into directory: URL? = nil) throws -> AIMPSkinDiagnosticCode? {
+        try failure(try WMPSkinTestSupport.makeArchive(entries, filename: "skins.zip"), limits: limits, into: directory)
     }
 
-    private func failure(_ url: URL, limits: SkinZipLimits) throws -> AIMPSkinDiagnosticCode? {
+    private func failure(_ url: URL, limits: SkinZipLimits, into directory: URL? = nil) throws -> AIMPSkinDiagnosticCode? {
         do {
-            _ = try AIMPSkinImporter.unzipSkins(url, into: try WMPSkinTestSupport.temporaryDirectory(), limits: limits)
+            _ = try AIMPSkinImporter.unzipSkins(url, into: try directory ?? WMPSkinTestSupport.temporaryDirectory(), limits: limits)
             return nil
         } catch let finding as AIMPSkinFinding {
             return finding.code

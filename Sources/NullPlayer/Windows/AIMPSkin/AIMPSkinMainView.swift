@@ -29,7 +29,11 @@ final class AIMPSkinMainView: NSView {
     }
     func skinDidChange() {
         generation.skin += 1
+        // A key held across the switch: its hold timer would send the old skin's action to the new one.
+        _ = press.end()
         interaction = .init()
+        // The new runtime hears its playlist's rows from the first frame, even as many as before.
+        playlistRowsShown = nil
         hasContent = false
         search.end()
         sizing.load(runtime?.skin, form: formName)
@@ -132,6 +136,8 @@ final class AIMPSkinMainView: NSView {
     private var shadowFrameSize: CGSize?
     private var shadowPulled = -Double.infinity
     var wheelStepper = ScrollWheelStepper()
+    /// A trackpad's scroll over the skin's playlist not yet a whole row (`scrollWheel`).
+    var playlistWheelRemainder: CGFloat = 0
 
     override var isFlipped: Bool { true }
     override var mouseDownCanMoveWindow: Bool { false }
@@ -244,6 +250,9 @@ final class AIMPSkinMainView: NSView {
             if rect != contentRect {
                 contentRect = rect
                 onDisplaySizeChange?()
+                // The library browser follows the crop: a crop moved at the same size refits nothing
+                // (`setFrameSize`), and `noteLibraryArea` above reported against the old one.
+                if libraryArea != nil { reportLibraryArea() }
             }
         }
         needsDisplay = true

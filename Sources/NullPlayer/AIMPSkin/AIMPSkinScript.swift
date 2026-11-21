@@ -91,6 +91,18 @@ enum AIMPSkinScript {
         }
     }
 
+    /// A script's number as a whole one, toward zero as Delphi's `Trunc` takes it: an index, a loop
+    /// bound, a position, a character code. A number no `Int` holds (`1e300`, or a text such as
+    /// `'inf'` or `'nan'` read as a number) stops at the nearest end, and NaN reads 0, where a bare
+    /// `Int(_:)` would bring the app down on a skin's arithmetic.
+    static func integer(_ number: Double) -> Int {
+        guard !number.isNaN else { return 0 }
+        let whole = number.rounded(.towardZero)
+        if whole >= Double(Int.max) { return .max }
+        if whole <= Double(Int.min) { return .min }
+        return Int(whole)
+    }
+
     /// A timer's or animator's interval in seconds as AIMP keeps it: both run on Windows timers, which
     /// fire on 15.6 ms ticks, so an interval waits for the next tick at or after it (Revox's 18 ms
     /// reels turn every 31 ms), and skins are tuned so. An animator asks for at least a millisecond.

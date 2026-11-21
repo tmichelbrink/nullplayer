@@ -2,8 +2,8 @@ import Foundation
 
 /// AIMP's text templates, as `TextDisplay` `Template` and binding `TextFormat` write them:
 /// `%IF(%R,%R - ,)%T`, `%Up(%R)`, `%Replace(%T,;, / )`, `%Char(44)`, `%StrLeft(%T,3)`. Fields are `%T`/`%Title`,
-/// `%R`/`%Artist`, `%A`/`%Album`; a function's arguments split on top-level commas. Unknown functions and
-/// fields read empty.
+/// `%R`/`%Artist`, `%A`/`%Album`; a function's arguments split on top-level commas. Unknown fields read
+/// empty; an unknown function reads as its first argument (empty with none).
 enum AIMPSkinTemplate {
     /// `variables` are a text provider's inputs (`%Value1`, `%TextValue1`); `value` is the number a
     /// display is bound to, for `%time(MS;:;)`.
@@ -20,6 +20,8 @@ enum AIMPSkinTemplate {
         let variables: [String: String]
         let value: Double?
         var at = 0
+        /// Calls open around the one being read (`field`).
+        var depth = 0
 
         /// Text up to (not past) one of `stops` at this nesting level, or the end.
         mutating func text(until stops: Set<Character>) -> String {
@@ -35,6 +37,11 @@ enum AIMPSkinTemplate {
             var name = ""
             while at < chars.count, chars[at].isLetter || chars[at].isNumber { name.append(chars[at]); at += 1 }
             guard at < chars.count, chars[at] == "(" else { return value(of: name) }
+            // Calls nested past 64 are no skin's, and each one is a frame of the stack: the rest of
+            // the template reads empty.
+            guard depth < 64 else { at = chars.count; return "" }
+            depth += 1
+            defer { depth -= 1 }
             at += 1
             var args: [String] = []
             while true {
@@ -75,7 +82,7 @@ enum AIMPSkinTemplate {
 
         /// Argument `i` as a whole number, 0 when absent or not one.
         func number(_ args: [String], _ i: Int) -> Int {
-            i < args.count ? Int(Double(args[i].trimmingCharacters(in: .whitespaces)) ?? 0) : 0
+            i < args.count ? AIMPSkinScript.integer(Double(args[i].trimmingCharacters(in: .whitespaces)) ?? 0) : 0
         }
 
         func call(_ name: String, _ args: [String]) -> String {
@@ -85,6 +92,10 @@ enum AIMPSkinTemplate {
             case "low": return (args.first ?? "").lowercased()
             case "replace":
                 guard args.count >= 3, !args[1].isEmpty else { return args.first ?? "" }
+                // One that could grow the text past 64K characters is left undone: nested, each would
+                // multiply the last.
+                guard args[2].count <= args[1].count || Double(args[0].count / args[1].count) * Double(args[2].count) <= 65_536
+                else { return args[0] }
                 return args[0].replacingOccurrences(of: args[1], with: args[2])
             case "char": return (args.first.flatMap { Int($0) }.flatMap { UnicodeScalar($0) }).map { String(Character($0)) } ?? ""
             // Text and arithmetic, 1-based as AIMP counts (Soot splits its "Off|On" language string:
@@ -98,10 +109,11 @@ enum AIMPSkinTemplate {
             case "copy":
                 let text = Array(args.first ?? ""), from = max(1, number(args, 1)), count = max(0, number(args, 2))
                 guard from <= text.count else { return "" }
-                return String(text[(from - 1)..<min(text.count, from - 1 + count)])
+                return String(text[(from - 1)..<(from - 1 + min(count, text.count - (from - 1)))])
             case "trim": return (args.first ?? "").trimmingCharacters(in: .whitespaces)
-            case "inc": return String(number(args, 0) + (args.count > 1 ? number(args, 1) : 1))
-            case "dec": return String(number(args, 0) - (args.count > 1 ? number(args, 1) : 1))
+            // Wrapping, as Delphi's unchecked integers do, rather than trapping.
+            case "inc": return String(number(args, 0) &+ (args.count > 1 ? number(args, 1) : 1))
+            case "dec": return String(number(args, 0) &- (args.count > 1 ? number(args, 1) : 1))
             // `%IFEqual(a,b,then,else)` and kin compare numbers when both are, else text.
             case "ifequal", "ifgreater", "ifgreaterorequal", "ifless", "iflessorequal":
                 guard args.count >= 3 else { return "" }
@@ -122,7 +134,7 @@ enum AIMPSkinTemplate {
             // `%time(HMS;:;)`: the bound number of seconds as h:mm:ss (or m:ss for `MS`); `Z` leaves
             // out the hours while there are none (M5's 50-px wave-bar times: 2:39, not 0:02:39).
             case "time":
-                let seconds = Int(value ?? 0)
+                let seconds = AIMPSkinScript.integer(value ?? 0)
                 let spec = (args.first ?? "").split(separator: ";", omittingEmptySubsequences: false).map(String.init)
                 let separator = spec.count > 1 && !spec[1].isEmpty ? spec[1] : ":"
                 let skipsZero = spec.count > 2 && spec[2].uppercased().contains("Z")

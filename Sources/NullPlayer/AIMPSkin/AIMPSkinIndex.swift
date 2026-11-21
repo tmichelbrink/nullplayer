@@ -192,7 +192,8 @@ struct AIMPSkinIndex: Sendable {
             if !layout.savedShown { hiddenItems.insert(name) }
             // The forms shown first: a name an unopened form repeats is theirs.
             guard layout.isTabbedGroup, groups[name] == nil else { continue }
-            let pages = node.child("items")?.children("item") ?? []
+            // Only named pages are tabs: an unnamed one counts in neither `tabOf` nor the first shown.
+            let pages = (node.child("items")?.children("item") ?? []).filter { $0["name"] != nil }
             let tabs = pages.compactMap { $0["name"] }
             groups[name] = tabs
             for (i, tab) in tabs.enumerated() where tabOf[tab] == nil { tabOf[tab] = (name, i) }

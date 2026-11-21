@@ -15,7 +15,7 @@ struct AIMPSkinDataflow {
     let state: AIMPSkinState
 
     /// Whether a form or item is shown: its `Visible` pin.
-    func isVisible(_ name: String) -> Bool { value(name, "Visible") != 0 }
+    func isVisible(_ name: String, depth: Int = 0) -> Bool { value(name, "Visible", depth: depth) != 0 }
 
     /// Whether `form` is in its dock site now; a form no site holds never is.
     func isDocked(_ form: String) -> Bool {
@@ -32,7 +32,8 @@ struct AIMPSkinDataflow {
     /// holds it at 0, as AIMP does; `AIMPSkinIndex.counterModule`, the positions a control can show, has none then.
     func wrapped(_ value: Int, counter name: String) -> Int {
         guard let module = skin.index.providers[name]?.module, module > 0 else { return value }
-        return ((value % module) + module) % module
+        let remainder = value % module
+        return remainder < 0 ? remainder + module : remainder
     }
 
     /// The page a group shows: what its `ActivePage` binding reads, else what a key or script
@@ -47,7 +48,8 @@ struct AIMPSkinDataflow {
             if case .page(let other) = link.read, case .page(group)? = skin.index.pageLinks[other]?.read { return nil }
             return link
         }
-        let bound = link.map { Int(value(of: $0, depth: depth + 1).rounded()) }
+        // A reading no `Int` holds (an expression's infinity) binds nothing.
+        let bound = link.flatMap { Int(exactly: value(of: $0, depth: depth + 1).rounded()) }
         return count == 0 ? 0 : min(max(bound ?? state.script[group].activePage ?? shownPage(group, depth: depth) ?? skin.index.initialPages[group] ?? 0, 0), count - 1)
     }
 
@@ -65,7 +67,7 @@ struct AIMPSkinDataflow {
         // A dock site shows only while it holds its form, docked and shown, as the layout draws
         // it: Telos's `DockingState` counter watches its sites' `Visibility` to re-arrange its
         // columns when the playlist opens or closes.
-        if let site = skin.index.sites[name], !(isDocked(site.form) && isVisible(site.form)) { return 0 }
+        if let site = skin.index.sites[name], !(isDocked(site.form) && isVisible(site.form, depth: depth + 1)) { return 0 }
         if let set = state.script[name].visible { return set ? 1 : 0 }
         // An item's own `Visibility` bindings, as the painter shows it (Unsquareable's tab column
         // shows while `TabControl_Small`, shown with the hidden compact player, is hidden).
@@ -95,10 +97,17 @@ struct AIMPSkinDataflow {
     }
 
     /// What `link` reads, as a trigger watches it: a concatenator's inputs, and theirs (its text
-    /// changes when any of them does), else its value.
+    /// changes when any of them does), else its value. A `FileInfo` input's text moves while its
+    /// number stays (a new title under `%T`), so the playing track's tags count too, by their hash
+    /// (not the formatted text: this is read every settle pass of every frame).
     func inputs(of link: AIMPSkinLink, depth: Int = 0) -> [Double] {
         guard case .concatenator(let name) = link.read, depth < 8 else { return [value(of: link)] }
-        return (skin.index.providers[name]?.bindings.links ?? []).flatMap { inputs(of: $0, depth: depth + 1) }
+        return (skin.index.providers[name]?.bindings.links ?? []).flatMap { input -> [Double] in
+            let numbers = inputs(of: input, depth: depth + 1)
+            guard input.pin == "FileInfo" else { return numbers }
+            let track = host.player
+            return numbers + [Double([track.title, track.artist, track.album].hashValue)]
+        }
     }
 
     /// `source`'s `pin`, named at run time (a script's `BindingsGetDataAsInteger`, a counter's

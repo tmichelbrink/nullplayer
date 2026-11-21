@@ -77,7 +77,8 @@ final class AIMPSkinSearchField: NSObject, NSTextFieldDelegate {
         if selector == #selector(NSResponder.insertNewline(_:)) {
             let search = view.skinState.lists.search(list)
             let host = view.host
-            if !search.isEmpty, list == .playlist, let first = host.playlistIndices(matching: search).first {
+            // A search of spaces alone filters nothing (`playlistIndices`), so plays nothing either.
+            if !search.split(separator: " ").isEmpty, list == .playlist, let first = host.playlistIndices(matching: search).first {
                 view.runtime?.onAction?(.playRow(first))
             }
             end()

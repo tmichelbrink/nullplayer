@@ -34,7 +34,8 @@ enum AIMPSkinDockSites {
         var sites: [String: Site] = [:]
         var placed: Set<String> = []
         for item in main.descendants() {
-            guard let site = item["name"], let named = form(ofSite: item), !placed.contains(named.name),
+            // A name an earlier site took keeps that site; checked before `reading` registers the form.
+            guard let site = item["name"], sites[site] == nil, let named = form(ofSite: item), !placed.contains(named.name),
                   let form = reading(named.name) else { continue }
             placed.insert(named.name)
             sites[site] = Site(form: named.name, holder: holder(named.name, of: form, extends: AIMPNode.numbers(item.properties["ContentExtends"]?["value"])),

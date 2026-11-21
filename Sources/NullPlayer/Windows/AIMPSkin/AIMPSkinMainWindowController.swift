@@ -213,8 +213,9 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
     /// Returns the surfaces in `open` the skin draws none of and NullPlayer's window does not show
     /// yet, to open once the skin is up. NullPlayer's windows beside the skin's own are closed after
     /// (`dismissFallbackSurfacesTheSkinProvides`).
+    /// With no skin (one that failed to load), every surface open is NullPlayer's to open.
     private func carry(_ open: [SkinSurface]) -> [SkinSurface] {
-        guard var state = runtime?.state else { return [] }
+        var state = runtime?.state
         var nativeOpens: [SkinSurface] = []
         for surface in Self.lists {
             let own = ownForms(surface)
@@ -222,9 +223,9 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
                 if open.contains(surface), !Self.isOpen(surface) { nativeOpens.append(surface) }
                 continue
             }
-            for form in own { state.script[form.name].visible = open.contains(surface) }
+            for form in own { state?.script[form.name].visible = open.contains(surface) }
         }
-        runtime?.state = state
+        if let state { runtime?.state = state }
         return nativeOpens
     }
 

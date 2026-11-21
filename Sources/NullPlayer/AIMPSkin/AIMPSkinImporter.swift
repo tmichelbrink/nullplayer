@@ -50,7 +50,7 @@ struct AIMPSkinImporter: SkinFileCatalogue {
     }
 
     private static func install(_ file: URL, into folder: SkinInstallFolder) async throws -> InstalledSkinFile {
-        try await install(file, into: folder) { url in _ = try AIMPSkinWorker.runWaiting { try AIMPSkinLoader.load(contentsOf: url) } }
+        try await install(file, into: folder) { url in _ = try await AIMPSkinLoader.load(file: url) }
     }
 
     /// The skins of a zip, flattened into `directory` by file name, through `SkinZipExtraction` with

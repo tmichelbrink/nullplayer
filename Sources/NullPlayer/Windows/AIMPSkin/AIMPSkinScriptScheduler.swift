@@ -83,9 +83,8 @@ final class AIMPSkinScriptScheduler {
                     guard let self else { return }
                     // Still running while the outcomes land: a request one of them asks for waits
                     // until they all have, and starts from the state they leave.
-                    if sent == self.generation {
-                        for (request, outcome) in zip(requests, outcomes) { request.done(outcome) }
-                    }
+                    // Checked before each: a completion that cancels drops the rest of the batch.
+                    for (request, outcome) in zip(requests, outcomes) where sent == self.generation { request.done(outcome) }
                     self.running = false
                     self.send()
                 }

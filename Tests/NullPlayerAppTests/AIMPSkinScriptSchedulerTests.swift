@@ -107,8 +107,12 @@ final class AIMPSkinScriptSchedulerTests: XCTestCase {
         AIMPSkinFrameScheduler.queue.suspend()
         scheduler.run([.handle("Bump", sender: "Key", arguments: [:])], host: host) { _ in landed.append("cancelled") }
         scheduler.cancel()
+        // A marker behind the cancelled request on the AIMP queue, then behind its outcome on the
+        // main queue: once it lands, the outcome has had its chance to.
+        let drained = expectation(description: "the cancelled request's outcome had its chance to land")
+        AIMPSkinFrameScheduler.queue.async { DispatchQueue.main.async { drained.fulfill() } }
         AIMPSkinFrameScheduler.queue.resume()
-        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        wait(for: [drained], timeout: 5)
         XCTAssertEqual(landed.count, 3, "a cancelled request's outcome is dropped")
     }
 

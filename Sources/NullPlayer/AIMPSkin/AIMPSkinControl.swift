@@ -126,7 +126,12 @@ extension AIMPPlacement {
         /// Where it sits in `parent`, with the margins a script `moved` (0 left … 3 bottom).
         func rect(in parent: CGRect, moved: [Int: Double] = [:]) -> CGRect {
             var margins = margins
-            for (side, value) in moved where margins.indices.contains(side) { margins[side] = Int(value.rounded()) }
+            for (side, value) in moved where margins.indices.contains(side) {
+                // One no layout holds (NaN, infinity, past a million, as `AIMPNode.numbers` has it)
+                // leaves the margin the skin gave.
+                guard let whole = Int(exactly: value.rounded()), (-1_000_000...1_000_000).contains(whole) else { continue }
+                margins[side] = whole
+            }
             guard let size else { return .zero }
             return AIMPPlacement.rect(anchors: anchors, margins: margins, size: size, in: parent) ?? .zero
         }

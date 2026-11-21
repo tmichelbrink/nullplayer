@@ -1853,6 +1853,9 @@ class WindowManager {
                                   (SkinSurface.library, plexBrowserWindowController?.window)] {
             guard router.drawsSurface(surface), let window, window.isVisible else { continue }
             window.orderOut(nil)
+            // Ordering the library out posts no occlusion change, so its Cava backdrop would keep
+            // analysing for a hidden window (as `togglePlexBrowser` reconciles it).
+            if surface == .library { plexBrowserWindowController?.refreshLibraryBackdrop() }
             closed = true
         }
         guard closed else { return }
