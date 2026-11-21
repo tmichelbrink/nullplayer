@@ -95,11 +95,12 @@ protocol SkinSizedMainWindow: MainWindowProviding {
 extension WinampModernMainWindowController: SkinSizedMainWindow {}
 extension WMPMainWindowController: SkinSizedMainWindow {}
 
-/// A main window that is one skin canvas and nothing else (`PlayerUIControllerFamily.isSingleCanvas`):
-/// it loads the selected skin itself, and the skin decides its size, so a restored frame places only
-/// its top-left. The family supplies its selection, its loader and what to show; choosing, reloading
-/// and resetting the skin are shared.
-protocol SingleCanvasMainWindow: NSWindowController, SkinSizedMainWindow {
+/// A main window that shows one skin file it loads itself (Audion's faces and Sonique's skins, both
+/// `PlayerUIControllerFamily.isSingleCanvas`): the skin decides its size, so a restored frame places
+/// only its top-left. The family supplies its selection, its loader and what to show; choosing,
+/// reloading and resetting the skin are shared. Nothing here assumes the skin is the family's only
+/// window.
+protocol SkinFileMainWindow: NSWindowController, SkinSizedMainWindow {
     associatedtype Skin
     var skinLoad: SkinLoadTask { get }
     var skinSelection: SkinSelection { get }
@@ -116,7 +117,7 @@ protocol SingleCanvasMainWindow: NSWindowController, SkinSizedMainWindow {
     func present(_ shown: (skin: Skin, url: URL)?, error: Error?)
 }
 
-extension SingleCanvasMainWindow {
+extension SkinFileMainWindow {
     func restoreFrame(_ frame: NSRect) {
         guard frame != .zero, let window else { return }
         window.setFrameTopLeftPoint(NSPoint(x: frame.minX, y: frame.maxY))
@@ -153,16 +154,40 @@ extension SingleCanvasMainWindow {
     }
 }
 
-extension AudionFaceMainWindowController: SingleCanvasMainWindow {}
-extension SoniqueSkinMainWindowController: SingleCanvasMainWindow {}
+extension AudionFaceMainWindowController: SkinFileMainWindow {}
+extension SoniqueSkinMainWindowController: SkinFileMainWindow {}
 
-/// A main window that draws the equaliser itself in every skin, so `WindowManager` routes every
-/// Equalizer show and toggle to it and NullPlayer's EQ window never opens in its family.
-protocol SkinDrawnEqualizer: MainWindowProviding {
-    var isEqualizerShowing: Bool { get }
-    /// `toggle` is an explicit toggle, which may switch the window's mode to reach the equaliser;
-    /// false is a show on the restore path, which must not.
-    func revealEqualizer(toggle: Bool)
+/// A window of NullPlayer's that a loaded skin may draw its own copy of. These are the surfaces every
+/// family is asked about through one route; the video and visualization windows stay on their
+/// families' own routes.
+enum SkinSurface: CaseIterable {
+    case playlist
+    case library
+    case equalizer
 }
 
-extension SoniqueSkinMainWindowController: SkinDrawnEqualizer {}
+/// Answers show, toggle and visibility for the surfaces the loaded skin draws itself, so the View
+/// menu, a restored session and the skin's own button reach the same thing. NullPlayer's window is
+/// the fallback for every surface `drawsSurface` answers false for.
+///
+/// One conformer per family, none of them a whole controller a cast could pick up in the wrong mode:
+/// `.wal`'s `WinampModernSurfaceCoordinator`, `.wmz`'s `WMPSkinSurfaceRouter`, Sonique's controller
+/// (its navigator drawer is its equaliser) and AIMP's (the skin's own playlist and library forms).
+/// `WindowManager.skinSurfaceRouter` keeps each family's guard.
+protocol SkinSurfaceRouter {
+    /// Whether the skin draws this surface itself, so NullPlayer must not open its own window for it.
+    func drawsSurface(_ surface: SkinSurface) -> Bool
+    /// Whether the skin's copy of a surface it draws is on screen.
+    func isShowingSurface(_ surface: SkinSurface) -> Bool
+    /// Shows a surface the skin draws. `toggle` false is a show (a menu restore, the launch restore,
+    /// a mode rebuild); `restoredFrame` is the saved frame for a skin-owned *window*, and a router
+    /// whose surface has no window of its own ignores it.
+    func revealSurface(_ surface: SkinSurface, toggle: Bool, restoredFrame: NSRect?)
+    /// Holds the opening of NullPlayer's window for `surface` until the skin has said whether it draws
+    /// that surface itself; false when there is nothing to wait for and the caller opens now.
+    func deferUntilSkinLoads(_ surface: SkinSurface, _ open: @escaping () -> Void) -> Bool
+}
+
+extension SkinSurfaceRouter {
+    func deferUntilSkinLoads(_ surface: SkinSurface, _ open: @escaping () -> Void) -> Bool { false }
+}

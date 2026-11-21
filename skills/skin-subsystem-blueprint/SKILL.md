@@ -60,7 +60,7 @@ family may quietly inherit Classic's or Original's behaviour.
 - **Never add a new boolean** of the form `isRunningXUI` used at more than one call site. Add the
   case to `PlayerUIControllerFamily` and switch on it.
 - **A capability whose absence is right for every other family is asked with `as?`, not a switch.**
-  `SkinDrawnEqualizer` (Sonique's drawer is its equaliser), and `WindowManager.frameLender` (a `.wmz`
+  `WindowManager.frameLender` (a `.wmz`
   lends NullPlayer's windows frame artwork; Sonique S22 deleted eight switches for it): a family that
   never hears of it lends nothing and is always settled, which is correct. With one family behind a
   capability, cast to its controller; a protocol whose requirement is that family's own type is
@@ -102,9 +102,17 @@ is validated as the bytes committed, the one same-directory move or replace, and
 delete. The family keeps its file test, loader call and naming. WMP, `.wal`, Audion and Sonique all
 go through it (Sonique S13, 2026-10-18). Beside it, **`SkinSelection(key:)`** is the saved choice
 (WMP, Audion and Sonique; WMP keeps its view id itself, `.wal` its bundled fallback). A
-single-canvas window (`SingleCanvasMainWindow`, Audion and Sonique) supplies its selection, URL lookup,
+main window that loads one skin file itself (`SkinFileMainWindow`, Audion and Sonique) supplies its
+selection, URL lookup,
 loader, `loadedSkinURL` and `present(_:error:)`, and gets `reloadSelectedSkin`, `selectSkin(named:)` and
-`resetToUnskinned` over one `SkinLoadTask` (`App/Skinning/`, Sonique S18).
+`resetToUnskinned` over one `SkinLoadTask` (`App/Skinning/`, Sonique S18); its Skins-menu actions
+(switch, choose, load from file, open folder, remove) are one `SkinFileFamilyActions` value
+(`App/`), which the family's `@objc` entry points call. A family whose skin is one
+file conforms to **`SkinFileCatalogue`** (`App/Skinning/`; Sonique): it names its folder, selection,
+family and extensions, and gets the listing by name (one name is one skin across its extensions), the
+selection lookup, removal and the install commit; it keeps its own loader check. A family that imports
+`.zip`s unpacks them through **`SkinZipExtraction`** (`App/Skinning/`; Audion) with its own
+`SkinZipLimits` and its own choice of entries, mapping the shared rejections to its findings.
 
 One seam the compiler will not list: **the window drop shadow.** A family's windows never set
 `hasShadow`; they set `window.hasSkinShadow = true`, or attach `SkinWindowShadow` to the outline the
@@ -140,11 +148,25 @@ exist because `.wal` paid for them:
 **And ask what the skin provides before opening a window of your own.** This is the half `.wmz`
 missed on the first pass: 171 of its 180 corpus skins declare a playlist and 164 an equaliser, so an
 unconditional NullPlayer playlist put a second, foreign-looking one over nearly every skin in the
-corpus. `routeWinampModernSurface` and `routeWMPSkinSurface` are the same idea in both families —
-the skin's own surface takes the toggle first, and NullPlayer's window is the fallback for the skins
-that declare none. Answer all three shapes: declared in the view on screen (nothing to open, and the
-menu item should say so), declared in another view (open that view the way the skin's own button
-does), declared nowhere (your window).
+corpus. The playlist, the library and the equaliser go through one route for every family:
+`SkinSurfaceRouter` (`App/MainWindowProviding.swift`), asked by `WindowManager.routeSkinSurface`,
+`skinSurfaceVisibility` and `deferUntilSkinLoads` from each `show*`, `toggle*` and `is*Visible`. The
+skin's own surface takes the toggle first, and NullPlayer's window is the fallback for the skins
+that declare none. A family joins by vending a router from `WindowManager.skinSurfaceRouter` behind
+its own guard: `.wal`'s `WinampModernSurfaceCoordinator`, `.wmz`'s `WMPSkinSurfaceRouter`, Sonique's
+controller (its drawer is its equaliser). A family whose skin can change under an open fallback
+calls `dismissFallbackSurfacesTheSkinProvides()` on each presentation. Answer all three shapes:
+declared in the view on screen (nothing to open, and the menu item should say so), declared in
+another view (open that view the way the skin's own button does), declared nowhere (your window).
+The video and visualization windows still take their families' own routes
+(`routeWMPSkinSurface`, `routeWinampModernSurface`).
+
+**A skin that draws the library draws a frame around NullPlayer's browser, never a second browser.**
+Host `EmbeddedLibraryBrowserSurface` (`Windows/ClassicLibraryBrowser/`) in the skin's list area: it
+is the real `ClassicLibraryBrowserView` in its embedded mode, so servers, tabs, search and history
+work as in the classic window. Give it the skin's colours with `applyStyle`, its scale with
+`applyContentScale`, unmount it when the holder goes and tear it down once with the skin. `.wal`'s
+`WinampModernLibrarySurfaceView` subclasses it.
 
 ### The skin's *own* extra windows are a second, separate decision
 
@@ -186,9 +208,15 @@ canvas needs (`Halo 2`'s panels are 406x209 against a 327x294 player). The recip
 - **Place once, on first show, and never again** — a window the user moved must never be yanked back
   — with `rescuedOrigin` as the never-`nil` fallback. The failure mode is an *invisible* window, not
   a wrong-looking one, so give the family a placement trace flag on day one
-  (`WINAMP_MODERN_PLACE_TRACE`, `WMP_PLACE_TRACE`).
+  (`WINAMP_MODERN_PLACE_TRACE`, `WMP_PLACE_TRACE`). Persist the origin the user left, which windows
+  were open and, where the format has a default visibility, shown or hidden, per skin, in
+  `SkinWindowStore` (`App/Skinning/`) under your family's key prefix; `.wmz` keeps its there.
 - **Join docking through your own gated branch of `managedWindowRecords`**, as a snap target and
   **not** a centre-stack member: a skin-authored canvas has no column to join.
+- **A window that resizes itself in place carries what is docked under it.** Call
+  `WindowManager.carryWindowsDockedBelow(_:from:)` with the frame before the resize; it moves every
+  snap target docked below (`windowsDocked(below:among:threshold:)`, the walk the classic stack's
+  slide-up uses) by the bottom edge's change, as a programmatic move. Do not write a second walk.
 - **Per-window state has to actually be per window.** Whatever the controller holds that is really
   the presented view's — scene, overrides, timers, animation clock, interaction state, pending host
   events — moves onto one reference type per window (`WMPViewPresentation`), and the *script runtime*

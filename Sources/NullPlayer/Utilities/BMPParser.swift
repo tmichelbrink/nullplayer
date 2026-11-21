@@ -8,35 +8,12 @@ class BMPParser {
     /// - Parameter data: Raw BMP file data
     /// - Returns: Parsed NSImage or nil if parsing fails
     static func parse(data: Data) -> NSImage? {
-        guard data.count >= 54 else { return nil }
-        
-        // Check BMP signature ("BM")
-        guard data[0] == 0x42 && data[1] == 0x4D else { return nil }
-        
-        // Read header information
-        let pixelDataOffset = readUInt32(data, offset: 10)
-        let headerSize = readUInt32(data, offset: 14)
-        
-        var width: Int
-        var height: Int
-        var bitsPerPixel: Int
-        var compression: UInt32 = 0
-        var topDown = false
-        
-        if headerSize == 12 {
-            // OS/2 1.x BITMAPCOREHEADER
-            width = Int(readUInt16(data, offset: 18))
-            height = Int(readUInt16(data, offset: 20))
-            bitsPerPixel = Int(readUInt16(data, offset: 24))
-        } else {
-            // Windows BITMAPINFOHEADER or later
-            width = Int(readInt32(data, offset: 18))
-            let rawHeight = readInt32(data, offset: 22)
-            height = abs(Int(rawHeight))
-            topDown = rawHeight < 0
-            bitsPerPixel = Int(readUInt16(data, offset: 28))
-            compression = readUInt32(data, offset: 30)
-        }
+        guard data.count >= 54, let header = Header(data) else { return nil }
+        let width = header.width
+        let height = abs(header.height)
+        let topDown = header.height < 0
+        let bitsPerPixel = header.bitsPerPixel
+        let compression = header.compression
         
         guard width > 0 && height > 0 else { return nil }
         
@@ -56,9 +33,9 @@ class BMPParser {
         // Read color palette if needed
         var palette: [[UInt8]] = []
         if bitsPerPixel <= 8 {
-            let paletteOffset = 14 + Int(headerSize)
+            let paletteOffset = 14 + header.infoSize
             let colorCount = 1 << bitsPerPixel
-            let colorSize = headerSize == 12 ? 3 : 4  // OS/2 uses 3, Windows uses 4
+            let colorSize = header.isCore ? 3 : 4  // OS/2 uses 3, Windows uses 4
             
             for i in 0..<colorCount {
                 let offset = paletteOffset + i * colorSize
@@ -72,7 +49,7 @@ class BMPParser {
         }
         
         // Parse pixel data
-        let pixelOffset = Int(pixelDataOffset)
+        let pixelOffset = header.pixelOffset
         
         switch bitsPerPixel {
         case 1:
@@ -96,7 +73,7 @@ class BMPParser {
             }
         case 24, 32:
             parseDirectColor(data: data, offset: pixelOffset, width: width, height: height,
-                             rowSize: rowSize, bytesPerPixel: Int(bitsPerPixel) / 8,
+                             rowSize: rowSize, bytesPerPixel: bitsPerPixel / 8,
                              pixels: &pixels, topDown: topDown)
         default:
             print("Unsupported BMP bit depth: \(bitsPerPixel)")
@@ -110,6 +87,44 @@ class BMPParser {
         return createImage(from: pixels, width: width, height: height)
     }
     
+    /// A bitmap's file and info headers, the fields as stored: what every reader of a Windows bitmap
+    /// reads before its pixels. Nil unless the data starts with `BM` and holds the header its size
+    /// names (26 bytes for the 12-byte OS/2 `BITMAPCOREHEADER`, 54 for any other).
+    struct Header {
+        /// `bfOffBits`: where the file says its pixels start.
+        let pixelOffset: Int
+        /// The info header's size: 12 for a core header, 40 or more otherwise.
+        let infoSize: Int
+        let width: Int
+        /// Negative when rows run top-down.
+        let height: Int
+        let bitsPerPixel: Int
+        /// `biCompression`; 0 for a core header.
+        let compression: Int
+        /// `biClrUsed`, 0 meaning a full palette; 0 for a core header.
+        let colorsUsed: Int
+
+        var isCore: Bool { infoSize == 12 }
+
+        init?(_ data: Data) {
+            guard data.count >= 26, data[data.startIndex] == 0x42, data[data.startIndex + 1] == 0x4D else { return nil }
+            func u16(_ offset: Int) -> Int { Int(BMPParser.readUInt16(data, offset: data.startIndex + offset)) }
+            func u32(_ offset: Int) -> UInt32 { BMPParser.readUInt32(data, offset: data.startIndex + offset) }
+            pixelOffset = Int(u32(10))
+            infoSize = Int(u32(14))
+            if infoSize == 12 {
+                (width, height, bitsPerPixel, compression, colorsUsed) = (u16(18), u16(20), u16(24), 0, 0)
+            } else {
+                guard data.count >= 54 else { return nil }
+                width = Int(Int32(bitPattern: u32(18)))
+                height = Int(Int32(bitPattern: u32(22)))
+                bitsPerPixel = u16(28)
+                compression = Int(u32(30))
+                colorsUsed = Int(u32(46))
+            }
+        }
+    }
+
     // MARK: - Private Parsing Methods
     
     private static func parse1Bit(data: Data, offset: Int, width: Int, height: Int,

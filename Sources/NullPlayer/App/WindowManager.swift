@@ -434,6 +434,7 @@ class WindowManager {
         case is WMPMainWindowController: return .wmp
         case is AudionFaceMainWindowController: return .audion
         case is SoniqueSkinMainWindowController: return .sonique
+        case is AIMPSkinMainWindowController: return .aimp
         case is ModernMainWindowController: return .nullPlayerModern
         case is MainWindowController: return .classic
         default: return uiMode.controllerFamily
@@ -449,7 +450,7 @@ class WindowManager {
         case .nullPlayerModern: return .nullPlayerModern
         case .wmp: return .wmp
         // The shared controllers, as `.wmp`; their chrome comes from `hostedSurfaceStyle`.
-        case .audion, .sonique: return .wmp
+        case .audion, .sonique, .aimp: return .wmp
         }
     }
 
@@ -779,6 +780,16 @@ class WindowManager {
             }
         }
 
+        if uiMode.controllerFamily == .aimp,
+           let controller = mainWindowController as? AIMPSkinMainWindowController {
+            // AIMP-only, gated as the `.wmz` branch above is: a skin form's window (speakers, an
+            // amplifier, the skin's playlist) docks and snaps beside the deck as a snap target only.
+            // Like a `.wmz` view it is an arbitrary authored canvas with no column to join.
+            for window in controller.materializedAuxiliaryWindows {
+                add(window, snapTarget: true)
+            }
+        }
+
         if let controller = winampModernHostedController {
             // `.wal`-only: this whole branch is gated on the Winamp Modern controller existing, so no
             // other UI mode reaches it. A `newDynamicContainer` copy (B110) is still managed — levels,
@@ -1034,8 +1045,8 @@ class WindowManager {
             return (mainWindowController as? WinampModernMainWindowController)?.loadedSkinURL?.path
         case .wmp:
             return (mainWindowController as? WMPMainWindowController)?.loadedSkinURL?.path
-        case .audion, .sonique:
-            return (mainWindowController as? any SingleCanvasMainWindow)?.loadedSkinURL?.path
+        case .audion, .sonique, .aimp:
+            return (mainWindowController as? any SkinFileMainWindow)?.loadedSkinURL?.path
         }
     }
 
@@ -1148,6 +1159,7 @@ class WindowManager {
         case .wmp: return WMPMainWindowController()
         case .audion: return AudionFaceMainWindowController()
         case .sonique: return SoniqueSkinMainWindowController()
+        case .aimp: return AIMPSkinMainWindowController()
         }
     }
     
@@ -1175,6 +1187,47 @@ class WindowManager {
     private var winampModernSurfaces: WinampModernSurfaceCoordinator? {
         guard uiMode.controllerFamily == .winampModern else { return nil }
         return (mainWindowController as? WinampModernMainWindowController)?.surfaceCoordinator
+    }
+
+    // MARK: - Skin surface routing
+
+    /// The router for the playlist, library and equalizer the loaded skin may draw itself, or nil
+    /// when this mode or skin has no opinion and NullPlayer's windows are the only ones.
+    ///
+    /// Each family keeps the guard it had before the route was shared: `.wal` through
+    /// `winampModernSurfaces`, `.wmz` only in its own mode, and a main window that routes for itself
+    /// (Sonique) by what it is. Only one of those controllers exists at a time, so the order is not
+    /// observable; do not fold the guards into one cast, since `uiMode` and the controller can
+    /// disagree mid-switch.
+    private var skinSurfaceRouter: SkinSurfaceRouter? {
+        if let coordinator = winampModernSurfaces { return coordinator }
+        if uiMode.controllerFamily == .wmp, let controller = mainWindowController as? WMPMainWindowController {
+            return WMPSkinSurfaceRouter(controller: controller)
+        }
+        return mainWindowController as? SkinSurfaceRouter
+    }
+
+    /// Gives the skin's own copy of `surface` the show or toggle; false when the skin does not draw
+    /// it and NullPlayer's window should answer.
+    @discardableResult
+    private func routeSkinSurface(_ surface: SkinSurface, toggle: Bool, restoredFrame: NSRect? = nil) -> Bool {
+        guard let router = skinSurfaceRouter, router.drawsSurface(surface) else { return false }
+        router.revealSurface(surface, toggle: toggle, restoredFrame: restoredFrame)
+        notifyMainWindowVisibilityChanged()
+        postLayoutChangeNotification()
+        return true
+    }
+
+    /// Holds the opening of NullPlayer's window until the skin has said whether it draws `surface`
+    /// (a `.wmz` at launch flashed ours beside the held player). Asked after a failed route.
+    private func deferUntilSkinLoads(_ surface: SkinSurface, _ open: @escaping () -> Void) -> Bool {
+        skinSurfaceRouter?.deferUntilSkinLoads(surface, open) ?? false
+    }
+
+    /// Whether the skin's copy of `surface` is on screen, or nil when the skin does not draw it.
+    private func skinSurfaceVisibility(_ surface: SkinSurface) -> Bool? {
+        guard let router = skinSurfaceRouter, router.drawsSurface(surface) else { return nil }
+        return router.isShowingSurface(surface)
     }
 
     /// Whether the placement and ordering corrections this branch introduced for `.wal` window
@@ -1238,8 +1291,8 @@ class WindowManager {
         return palette.surfaceStyle
     }
 
-    /// A single-canvas family's colours: its window's, or its unskinned ones before there is one.
-    private func singleCanvasSurfaceStyle<Window: SingleCanvasMainWindow>(_: Window.Type) -> SkinnedSurfaceStyle {
+    /// A skin-file family's colours: its window's, or its unskinned ones before there is one.
+    private func skinFileSurfaceStyle<Window: SkinFileMainWindow>(_: Window.Type) -> SkinnedSurfaceStyle {
         (mainWindowController as? Window)?.surfaceStyle ?? Window.unskinnedSurfaceStyle
     }
 
@@ -1254,8 +1307,9 @@ class WindowManager {
         case .classic, .nullPlayerModern: return nil
         case .winampModern: return winampModernSurfaceStyle
         case .wmp: return wmpSurfaceStyle
-        case .audion: return singleCanvasSurfaceStyle(AudionFaceMainWindowController.self)
-        case .sonique: return singleCanvasSurfaceStyle(SoniqueSkinMainWindowController.self)
+        case .audion: return skinFileSurfaceStyle(AudionFaceMainWindowController.self)
+        case .sonique: return skinFileSurfaceStyle(SoniqueSkinMainWindowController.self)
+        case .aimp: return skinFileSurfaceStyle(AIMPSkinMainWindowController.self)
         }
     }
 
@@ -1454,6 +1508,7 @@ class WindowManager {
         case .winampModern: return "wal"
         case .audion: return "audion"
         case .sonique: return "sonique"
+        case .aimp: return "aimp"
         case .wmp:
             guard let controller = mainWindowController as? WMPMainWindowController else { return nil }
             return MainActor.assumeIsolated { controller.hostedInteriorScope }
@@ -1742,23 +1797,14 @@ class WindowManager {
     private func routeWinampModernSurface(_ kind: WinampModernComponentKind, toggle: Bool,
                                           restoredFrame: NSRect? = nil) -> Bool {
         guard let coordinator = winampModernSurfaces, coordinator.handles(kind) else { return false }
-        if toggle { coordinator.toggleSurface(kind) } else { coordinator.showSurface(kind) }
-        // A skin-owned *container* window keeps its saved geometry; an embedded surface has no window
-        // of its own and is never fed a frame.
-        if let restoredFrame, restoredFrame != .zero, let window = coordinator.nativeWindow(for: kind) {
-            window.setFrame(restoredFrame, display: true)
-        }
+        coordinator.reveal(kind, toggle: toggle, restoredFrame: restoredFrame)
         notifyMainWindowVisibilityChanged()
         postLayoutChangeNotification()
         return true
     }
 
-    /// Give a `.wmz` skin's own playlist or equaliser the toggle before NullPlayer opens one.
-    ///
-    /// The `.wmz` counterpart of `routeWinampModernSurface`, and it matters more here than there:
-    /// **171 of the 180 corpus skins declare a playlist and 164 an equaliser** (`WMPSkinSurfaces`),
-    /// so opening ours unconditionally would put a second, differently-styled playlist over nearly
-    /// every skin. Ours is the fallback for the handful that declare none.
+    /// Give a `.wmz` skin's own video window the toggle before NullPlayer opens one. The playlist and
+    /// the equaliser take the shared route (`routeSkinSurface`, through `WMPSkinSurfaceRouter`).
     ///
     /// A surface in a view of its own is opened beside the player, the way the skin's own button
     /// does — for a toggle, the launch restore and a mode-switch rebuild alike, since each means
@@ -1775,15 +1821,6 @@ class WindowManager {
         return true
     }
 
-    /// At launch a `.wmz` has not said yet which surfaces it draws, so opening NullPlayer's fallback
-    /// then flashed it beside the held player; the open is replayed once the skin has loaded. See
-    /// `WMPMainWindowController.launchHoldTimeout`.
-    private func deferWMPFallbackUntilSkinLoads(_ open: @escaping () -> Void) -> Bool {
-        guard uiMode.controllerFamily == .wmp,
-              let controller = mainWindowController as? WMPMainWindowController else { return false }
-        return controller.deferUntilLaunchSettles(open)
-    }
-
     /// Whether the skin's own copy of this surface is on screen in **any** open WMP window — the
     /// case where there is nothing for a menu item to open, because the skin is already showing it.
     ///
@@ -1796,41 +1833,31 @@ class WindowManager {
         return controller.windowShowing(surface) != nil
     }
 
-    /// Put away NullPlayer's own playlist or equalizer when the `.wmz` now on screen draws that
-    /// surface itself.
+    /// Put away NullPlayer's own playlist, equalizer or library when the skin now on screen draws
+    /// that surface itself.
     ///
-    /// Ours is a *fallback* — `routeWMPSkinSurface` gives the skin's own copy the toggle first, and
-    /// only the handful of archives declaring neither ever open one of these windows. But the
+    /// Ours is a *fallback* — `routeSkinSurface` gives the skin's own copy the toggle first. But the
     /// fallback is decided at the moment a window is opened, and the skin can change underneath it:
     /// loading a `.wmz` with no equaliser of its own opens ours, and switching from there to one
     /// that has an equaliser (164 of the 180 corpus archives do) left our window standing beside the
     /// skin's. Reported on `xsn_sports` as two equalizer windows.
     ///
-    /// Called on every skin presentation, so it is the skin *currently* loaded that decides, and it
-    /// closes rather than destroys: the window keeps its frame for the next skin that needs it.
-    func dismissWMPFallbackSurfacesTheSkinProvides() {
-        guard uiMode.controllerFamily == .wmp else { return }
+    /// A family calls it on every skin presentation (`.wmz` today), so it is the skin *currently*
+    /// loaded that decides, and it closes rather than destroys: the window keeps its frame for the
+    /// next skin that needs it.
+    func dismissFallbackSurfacesTheSkinProvides() {
+        guard let router = skinSurfaceRouter else { return }
         var closed = false
-        for (surface, window) in [(WMPSkinSurface.playlist, playlistWindowController?.window),
-                                  (WMPSkinSurface.equalizer, equalizerWindowController?.window)] {
-            guard wmpSkinProvides(surface), let window, window.isVisible else { continue }
+        for (surface, window) in [(SkinSurface.playlist, playlistWindowController?.window),
+                                  (SkinSurface.equalizer, equalizerWindowController?.window),
+                                  (SkinSurface.library, plexBrowserWindowController?.window)] {
+            guard router.drawsSurface(surface), let window, window.isVisible else { continue }
             window.orderOut(nil)
             closed = true
         }
         guard closed else { return }
         notifyMainWindowVisibilityChanged()
         postLayoutChangeNotification()
-    }
-
-    /// A main window whose skin draws the equaliser itself in every skin (a Sonique navigator's
-    /// drawer) answers every Equalizer show and toggle, so NullPlayer's EQ window never opens beside
-    /// it — `routeWMPSkinSurface`'s rule, without the fallback.
-    private func routeSkinDrawnEqualizer(toggle: Bool) -> Bool {
-        guard let controller = mainWindowController as? SkinDrawnEqualizer else { return false }
-        controller.revealEqualizer(toggle: toggle)
-        notifyMainWindowVisibilityChanged()
-        postLayoutChangeNotification()
-        return true
     }
 
     /// Whether the active `.wmz` skin owns this surface. Answers false in every other mode, so the
@@ -2190,9 +2217,8 @@ class WindowManager {
     }
 
     func showPlaylist(at restoredFrame: NSRect? = nil) {
-        if routeWinampModernSurface(.playlist, toggle: false, restoredFrame: restoredFrame) { return }
-        if routeWMPSkinSurface(.playlist) { return }
-        if deferWMPFallbackUntilSkinLoads({ [weak self] in self?.showPlaylist(at: restoredFrame) }) { return }
+        if routeSkinSurface(.playlist, toggle: false, restoredFrame: restoredFrame) { return }
+        if deferUntilSkinLoads(.playlist, { [weak self] in self?.showPlaylist(at: restoredFrame) }) { return }
         let isNewWindow = playlistWindowController == nil
         if isNewWindow {
             switch auxiliaryControllerStyle {
@@ -2233,18 +2259,12 @@ class WindowManager {
     }
 
     var isPlaylistVisible: Bool {
-        if let coordinator = winampModernSurfaces, coordinator.handles(.playlist) {
-            return coordinator.isSurfaceVisible(.playlist)
-        }
-        // A `.wmz` that declares its own playlist is showing it whenever that view is the one on
-        // screen, and NullPlayer never opened a window to ask about.
-        if wmpSkinProvides(.playlist) { return wmpSkinShowsInActiveView(.playlist) }
+        if let shown = skinSurfaceVisibility(.playlist) { return shown }
         return playlistWindowController?.window?.isVisible == true
     }
 
     func togglePlaylist() {
-        if routeWinampModernSurface(.playlist, toggle: true) { return }
-        if routeWMPSkinSurface(.playlist) { return }
+        if routeSkinSurface(.playlist, toggle: true) { return }
         classicTogglePlaylist()
     }
 
@@ -2265,10 +2285,8 @@ class WindowManager {
     }
     
     func showEqualizer(at restoredFrame: NSRect? = nil) {
-        if routeSkinDrawnEqualizer(toggle: false) { return }
-        if routeWinampModernSurface(.equalizer, toggle: false, restoredFrame: restoredFrame) { return }
-        if routeWMPSkinSurface(.equalizer) { return }
-        if deferWMPFallbackUntilSkinLoads({ [weak self] in self?.showEqualizer(at: restoredFrame) }) { return }
+        if routeSkinSurface(.equalizer, toggle: false, restoredFrame: restoredFrame) { return }
+        if deferUntilSkinLoads(.equalizer, { [weak self] in self?.showEqualizer(at: restoredFrame) }) { return }
         // The skin owns no equalizer, so NullPlayer's goes inside the skin's own frame when one
         // qualifies (B55) and into the standalone window below when none does.
         if routeWinampModernHostedWindow(.equalizer, toggle: false, restoredFrame: restoredFrame) { return }
@@ -2304,14 +2322,10 @@ class WindowManager {
     }
 
     var isEqualizerVisible: Bool {
-        if let controller = mainWindowController as? SkinDrawnEqualizer { return controller.isEqualizerShowing }
-        if let coordinator = winampModernSurfaces, coordinator.handles(.equalizer) {
-            return coordinator.isSurfaceVisible(.equalizer)
-        }
+        if let shown = skinSurfaceVisibility(.equalizer) { return shown }
         if winampModernHostedController?.handlesHostedWindow(.equalizer) == true {
             return winampModernHostedController?.isHostedWindowVisible(.equalizer) == true
         }
-        if wmpSkinProvides(.equalizer) { return wmpSkinShowsInActiveView(.equalizer) }
         return equalizerWindowController?.window?.isVisible == true
     }
 
@@ -2331,9 +2345,7 @@ class WindowManager {
     }
 
     func toggleEqualizer() {
-        if routeSkinDrawnEqualizer(toggle: true) { return }
-        if routeWinampModernSurface(.equalizer, toggle: true) { return }
-        if routeWMPSkinSurface(.equalizer) { return }
+        if routeSkinSurface(.equalizer, toggle: true) { return }
         if routeWinampModernHostedWindow(.equalizer, toggle: true) { return }
         classicToggleEqualizer()
     }
@@ -2508,6 +2520,7 @@ class WindowManager {
                 case .wmp: "WMP_PLACE_TRACE"
                 case .audion: "AUDION_PLACE_TRACE"
                 case .sonique: "SONIQUE_PLACE_TRACE"
+                case .aimp: "AIMP_PLACE_TRACE"
                 case .winampModern, .classic, .nullPlayerModern: "WINAMP_MODERN_PLACE_TRACE"
                 }
                 if ProcessInfo.processInfo.environment[traceKey] == "1" {
@@ -2572,28 +2585,7 @@ class WindowManager {
     /// were docked below it (directly or transitively). Only windows within
     /// `dockThreshold` of the closing window's bottom edge are moved.
     private func slideUpWindowsBelow(closingFrame: NSRect) {
-        let subWindows = managedWindowRecords.compactMap {
-            $0.centerStack && $0.window !== mainWindowController?.window ? $0.window : nil
-        }
-
-        // BFS: find windows directly docked below closingFrame, then those below them
-        var toMove: [NSWindow] = []
-        var frontier: [NSRect] = [closingFrame]
-
-        while !frontier.isEmpty {
-            let referenceFrame = frontier.removeFirst()
-            for win in subWindows {
-                guard win.isVisible, !toMove.contains(win) else { continue }
-                // win's top (maxY) should be near referenceFrame's bottom (minY)
-                let vertGap = abs(win.frame.maxY - referenceFrame.minY)
-                let horizOverlap = win.frame.minX < referenceFrame.maxX && win.frame.maxX > referenceFrame.minX
-                if vertGap <= dockThreshold && horizOverlap {
-                    toMove.append(win)
-                    frontier.append(win.frame)
-                }
-            }
-        }
-
+        let toMove = Self.windowsDocked(below: closingFrame, among: centerStackSubWindows, threshold: dockThreshold)
         guard !toMove.isEmpty else { return }
 
         isSnappingWindow = true
@@ -2651,7 +2643,8 @@ class WindowManager {
     // MARK: - Plex Browser Window
     
     func showPlexBrowser(at restoredFrame: NSRect? = nil) {
-        if routeWinampModernSurface(.library, toggle: false, restoredFrame: restoredFrame) { return }
+        if routeSkinSurface(.library, toggle: false, restoredFrame: restoredFrame) { return }
+        if deferUntilSkinLoads(.library, { [weak self] in self?.showPlexBrowser(at: restoredFrame) }) { return }
         let isNewWindow = plexBrowserWindowController == nil
         if isNewWindow {
             createPlexBrowserWindowController()
@@ -2708,9 +2701,7 @@ class WindowManager {
     }
 
     var isPlexBrowserVisible: Bool {
-        if let coordinator = winampModernSurfaces, coordinator.handles(.library) {
-            return coordinator.isSurfaceVisible(.library)
-        }
+        if let shown = skinSurfaceVisibility(.library) { return shown }
         return plexBrowserWindowController?.window?.isVisible == true
     }
     
@@ -2803,7 +2794,7 @@ class WindowManager {
     }
 
     func togglePlexBrowser() {
-        if routeWinampModernSurface(.library, toggle: true) { return }
+        if routeSkinSurface(.library, toggle: true) { return }
         classicTogglePlexBrowser()
     }
 
@@ -5531,8 +5522,8 @@ class WindowManager {
         // raised the equalizer above the playlist, and the video window above the visualizer and the
         // library, in Classic. The feature windows keep the case order of `CenterStackWindowKind`.
         //
-        // A `.wmz` or `.wal` skin's own windows are not controllers, so they are not in this list;
-        // `raiseOrder` appends them in those two modes only.
+        // A `.wmz`, `.wal` or AIMP skin's own windows are not controllers, so they are not in this
+        // list; `raiseOrder` appends them in those modes only.
         let appWindows: [NSWindow?] = [
             mainWindowController?.window,
             equalizerWindowController?.window,
@@ -5544,17 +5535,19 @@ class WindowManager {
             equalizerStudioWindow
         ]
 
-        // `.wmz`/`.wal`-only: ordered front regardless of activation. A click from another app starts
-        // this raise while the activation is still settling, and a plain `orderFront` then left some
-        // of a skin's panels behind the other app's window (W273).
+        // `.wmz`/`.wal`/AIMP-only: ordered front regardless of activation. A click from another app
+        // starts this raise while the activation is still settling, and a plain `orderFront` then left
+        // some of a skin's panels behind the other app's window (W273).
         let family = uiMode.controllerFamily
-        let raisesSkinWindows = family == .wmp || family == .winampModern
+        let raisesSkinWindows = Self.familiesRaisingSkinWindows.contains(family)
         let windows = Self.raiseOrder(appWindows, family: family, skinWindows: {
             switch family {
             case .wmp:
                 return (self.mainWindowController as? WMPMainWindowController)?.materializedAuxiliaryWindows ?? []
             case .winampModern:
                 return (self.mainWindowController as? WinampModernMainWindowController)?.skinOwnedWindows ?? []
+            case .aimp:
+                return (self.mainWindowController as? AIMPSkinMainWindowController)?.materializedAuxiliaryWindows ?? []
             default:
                 return []
             }
@@ -5586,32 +5579,47 @@ class WindowManager {
         }
     }
     
+    /// The families whose skins open top-level windows of their own beside the player.
+    private static let familiesRaisingSkinWindows: Set<PlayerUIControllerFamily> = [.wmp, .winampModern, .aimp]
+
     /// The windows `bringAllWindowsToFront` orders front, bottom first. A `.wmz` skin's
-    /// `theme.openView` panels and a `.wal` skin's container and hosted windows are windows of their
-    /// own, so in those two modes they follow the app's windows; every other mode raises
-    /// `appWindows` unchanged.
+    /// `theme.openView` panels, a `.wal` skin's container and hosted windows and an AIMP skin's form
+    /// windows are windows of their own, so in those modes they follow the app's windows; every other
+    /// mode raises `appWindows` unchanged.
     static func raiseOrder(_ appWindows: [NSWindow?], family: PlayerUIControllerFamily,
                            skinWindows: () -> [NSWindow]) -> [NSWindow?] {
-        guard family == .wmp || family == .winampModern else { return appWindows }
+        guard familiesRaisingSkinWindows.contains(family) else { return appWindows }
         return appWindows + skinWindows().map { $0 }
     }
 
     /// Find visible center-stack windows that are docked below the main window
     /// (directly or transitively), using the current dock threshold.
     private func dockedCenterStackWindowsBelowMain(mainFrame: NSRect) -> [NSWindow] {
-        let subWindows = managedWindowRecords.compactMap {
+        Self.windowsDocked(below: mainFrame, among: centerStackSubWindows, threshold: dockThreshold)
+    }
+
+    /// The centre stack's windows other than the player.
+    private var centerStackSubWindows: [NSWindow] {
+        managedWindowRecords.compactMap {
             $0.centerStack && $0.window !== mainWindowController?.window ? $0.window : nil
         }
+    }
+
+    /// The visible windows among `windows` docked below `frame`, directly or through one another, in
+    /// the order a breadth-first walk reaches them: a window is docked below a frame when its top edge
+    /// is within `threshold` of that frame's bottom edge and the two overlap horizontally.
+    static func windowsDocked(below frame: NSRect, among windows: [NSWindow], threshold: CGFloat) -> [NSWindow] {
         var docked: [NSWindow] = []
-        var frontier: [NSRect] = [mainFrame]
+        var frontier: [NSRect] = [frame]
 
         while !frontier.isEmpty {
             let referenceFrame = frontier.removeFirst()
-            for win in subWindows {
+            for win in windows {
                 guard win.isVisible, !docked.contains(win) else { continue }
+                // win's top (maxY) should be near referenceFrame's bottom (minY)
                 let vertGap = abs(win.frame.maxY - referenceFrame.minY)
                 let horizOverlap = win.frame.minX < referenceFrame.maxX && win.frame.maxX > referenceFrame.minX
-                if vertGap <= dockThreshold && horizOverlap {
+                if vertGap <= threshold && horizOverlap {
                     docked.append(win)
                     frontier.append(win.frame)
                 }
@@ -5619,6 +5627,27 @@ class WindowManager {
         }
 
         return docked
+    }
+
+    /// Keeps what hangs under `window` attached after it changed size in place: every snap target
+    /// docked below `oldFrame` moves by however far the window's bottom edge moved. For a skin window
+    /// that grows or shrinks itself with its top-left held (a panel opening in the skin); a programmatic
+    /// move, so it runs under `isSnappingWindow` and never starts a group drag.
+    func carryWindowsDockedBelow(_ window: NSWindow, from oldFrame: NSRect) {
+        let deltaY = window.frame.minY - oldFrame.minY
+        guard deltaY != 0 else { return }
+        let others = snapTargetWindows().filter { $0 !== window }
+        let docked = Self.windowsDocked(below: oldFrame, among: others, threshold: dockThreshold)
+        guard !docked.isEmpty else { return }
+
+        isSnappingWindow = true
+        defer { isSnappingWindow = false }
+        for win in docked {
+            var frame = win.frame
+            frame.origin.y += deltaY
+            win.setFrame(frame, display: true, animate: false)
+        }
+        postLayoutChangeNotification()
     }
 
     /// Calculate the bounding box of the docked vertical center stack
@@ -6192,7 +6221,7 @@ class WindowManager {
     ///
     /// Left to fall through, the command reached the Classic stack routine, which measures against
     /// `screen.frame` rather than `visibleFrame`, builds its column from the per-feature controllers
-    /// — the very windows `dismissWMPFallbackSurfacesTheSkinProvides` has closed when the skin
+    /// — the very windows `dismissFallbackSurfacesTheSkinProvides` has closed when the skin
     /// provides those surfaces — and ends with no reachability pass. In `.wmz` that left a skin's own
     /// panel, which is borderless and carries no title bar to drag, with no route back onto the
     /// display at all. This is `snapWinampModernToDefaultPositions`' reasoning applied to the one
@@ -6399,6 +6428,13 @@ class WindowManager {
             snapWMPToDefaultPositions()
             return
         }
+        // An AIMP skin's form windows are borderless as well, floating free of any stack.
+        if uiMode.controllerFamily == .aimp {
+            if let controller = mainWindowController as? AIMPSkinMainWindowController, let playerWindow = controller.window {
+                snapHostedFamilyToDefaultPositions(playerWindow: playerWindow, skinWindows: controller.materializedAuxiliaryWindows)
+            }
+            return
+        }
         // A single canvas's window is borderless too, and has no stack to build.
         if uiMode.controllerFamily.isSingleCanvas {
             if let playerWindow = mainWindowController?.window {
@@ -6426,6 +6462,7 @@ class WindowManager {
         case .wmp: fallbackMainSize = WMPMainWindowController.unskinnedSize
         case .audion: fallbackMainSize = AudionFaceMainWindowController.unskinnedSize
         case .sonique: fallbackMainSize = SoniqueSkinMainWindowController.placeholderSize
+        case .aimp: fallbackMainSize = AIMPSkinMainWindowController.placeholderSize
         }
         let mainSize = mainWindowController?.window?.frame.size ?? fallbackMainSize
 

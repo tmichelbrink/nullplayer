@@ -86,7 +86,7 @@ struct WMPVisualizationSettingsStore {
         defaults.set(records, forKey: Self.defaultsKey)
     }
 
-    /// Length-prefixed like `WMPViewFrameStore`'s, so two skins whose names differ only by case or
+    /// Length-prefixed like `SkinWindowStore.skinKey`, so two skins whose names differ only by case or
     /// by a separator cannot collide.
     private func key(_ skin: String) -> String {
         "\(skin.utf8.count):\(skin.lowercased())"

@@ -39,7 +39,8 @@ PeppyMeter reuses the **existing stereo tap** — it does **not** add a new audi
   tap stays idle when no meter is open (removed on hide/close/teardown).
 - It observes `.audioStereoPCMDataUpdated` (userInfo `left`/`right` = 512 samples, `sampleRate`),
   computes per-channel level with `AudioAnalysisDSP.rmsDBFS`, and maps dBFS → PeppyMeter's 0…100
-  volume via `PeppyMeterLevels.volume(fromDBFS:floor:)` (default floor −42 dB).
+  volume via `PeppyMeterLevels.volume(fromDBFS:floor:)` (default floor −42 dB);
+  `PeppyMeterLevels.dbfs(fromVolume:floor:)` undoes it for a meter drawn on its own scale.
 - A **60 Hz timer** applies VU ballistics (fast attack / slow release) and drives redraws, so the
   needle keeps falling toward zero on silence (when no notifications arrive). Redraws are skipped once
   the needles settle, so an idle meter costs nothing.

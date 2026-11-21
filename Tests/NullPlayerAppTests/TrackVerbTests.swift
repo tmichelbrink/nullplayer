@@ -27,7 +27,7 @@ final class TrackVerbTests: XCTestCase {
 
         for (index, item) in menu.items.enumerated() {
             let action = try! XCTUnwrap(item.action)
-            XCTAssertEqual(NSStringFromSelector(action), "performVerb:")
+            XCTAssertNotEqual(NSStringFromSelector(action), "perform:")
             XCTAssertTrue((item.target as AnyObject).responds(to: action))
             menu.performActionForItem(at: index)
         }

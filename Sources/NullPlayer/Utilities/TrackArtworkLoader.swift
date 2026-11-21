@@ -1,8 +1,9 @@
 import AppKit
 
-/// Resolves the current track's artwork for WMP's two built-in album-art images. It is deliberately
-/// WMP-owned: a skin sees pixels under two fixed names, never a file path, server token, or track.
-enum WMPArtworkLoader {
+/// A track's cover as pixels, for a skin family that draws album art itself (WMP's two built-in
+/// album-art images): the file's own artwork (`LocalArtwork`), else its server's, else an http(s)
+/// `artworkThumb`. The skin sees the pixels, never a file path, server token or track.
+enum TrackArtworkLoader {
     static func loadArtwork(for track: Track) async -> CGImage? {
         if track.url.isFileURL {
             return await LocalArtwork.image(for: track.url).flatMap(cgImage)
