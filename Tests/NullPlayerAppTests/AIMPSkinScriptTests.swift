@@ -251,6 +251,19 @@ final class AIMPSkinScriptTests: XCTestCase {
         XCTAssertEqual(engine.actions, [.set(.equalizerBand(first), 0.75)], "6 dB")
     }
 
+    /// `Insert` is held to the text limit `+` is, so a loop doubling a string stops the run; a
+    /// `FormatFloat` pattern of thousands of zeros gives at most `formatWidthLimit` decimals.
+    func testInsertAndFormatFloatAreBounded() throws {
+        let half = String(repeating: "a", count: AIMPSkinScript.Run.textLimit / 2 + 1)
+        XCTAssertThrowsError(try AIMPSkinScript.Builtin.insert.call([.string(half), .string(half), .number(1)]))
+        let small = try AIMPSkinScript.Builtin.insert.call([.string("b"), .string("ac"), .number(2)])
+        XCTAssertEqual(small.outputs[1]?.string, "abc")
+        let pattern = "0." + String(repeating: "0", count: 100_000)
+        let formatted = try AIMPSkinScript.Builtin.formatFloat.call([.string(pattern), .number(1)])
+        XCTAssertLessThanOrEqual(formatted.value.string.count, 2 + AIMPSkinScript.formatWidthLimit)
+        XCTAssertTrue(formatted.value.string.hasPrefix("1.000"))
+    }
+
     /// A script docks and undocks forms and moves items: `form.Undock`, `form.Dock`,
     /// `FindObject(a).Parent := FindObject(b)`, and reads where one sits.
     func testDockingAndMovingItems() throws {

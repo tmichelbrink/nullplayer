@@ -307,8 +307,10 @@ extension AIMPSkinScript {
                 guard let asked = animator.animator?.interval,
                       host.feedback.clock - (state.animation[name].stepped ?? 0) >= tickedInterval(max(1, asked)) else { continue }
                 state.animation[name].stepped = host.feedback.clock
-                state.animation[name].frame = (frame + 1) % frames
-                if let counter { state.script[counter].counter = (frame + 1) % frames }
+                // Reduced first, so a script's `Int.max` or negative frame wraps rather than traps.
+                let next = ((frame % frames + frames) % frames + 1) % frames
+                state.animation[name].frame = next
+                if let counter { state.script[counter].counter = next }
             }
         }
     }

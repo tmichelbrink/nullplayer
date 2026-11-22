@@ -87,7 +87,7 @@ extension AIMPSkinScript {
 
         /// What the built-in gives for `args`, and what it writes to its `var` parameters, by
         /// argument position.
-        func call(_ args: [Value]) -> (value: Value, outputs: [Int: Value]) {
+        func call(_ args: [Value]) throws -> (value: Value, outputs: [Int: Value]) {
             func number(_ i: Int) -> Double { i < args.count ? args[i].number : 0 }
             func integer(_ i: Int) -> Int { AIMPSkinScript.integer(number(i)) }
             func text(_ i: Int) -> String { i < args.count ? args[i].string : "" }
@@ -115,6 +115,8 @@ extension AIMPSkinScript {
             case .chr: return value(.string(UInt32(exactly: Swift.max(0, integer(0))).flatMap { UnicodeScalar($0) }.map { String(Character($0)) } ?? ""))
             case .ord: return value(.number(Double(text(0).unicodeScalars.first?.value ?? 0)))
             case .insert:
+                // Held to `Run.textLimit` as `+` is: `Insert(S, S, 1)` in a loop doubles `S` each pass.
+                guard text(0).utf8.count + text(1).utf8.count <= Run.textLimit else { throw Budget.Spent(what: "text length") }
                 var target = Array(text(1))
                 target.insert(contentsOf: Array(text(0)), at: Swift.min(Swift.max(1, integer(2)) - 1, target.count))
                 return (.none, [1: .string(String(target))])
@@ -149,9 +151,10 @@ extension AIMPSkinScript {
             case .validInt: return value(.number(Int(text(0)) != nil ? 1 : 0))
             case .validFloat: return value(.number(Double(text(0)) != nil ? 1 : 0))
             case .formatFloat:
-                // `0.00`, `#,##0.0`: as many decimals as the pattern has after its point.
+                // `0.00`, `#,##0.0`: as many decimals as the pattern has after its point, held to
+                // `formatWidthLimit` as `Format`'s precision is.
                 let decimals = text(0).split(separator: ".").dropFirst().first.map { $0.filter { $0 == "0" || $0 == "#" }.count } ?? 0
-                return value(.string(String(format: "%.\(decimals)f", number(1))))
+                return value(.string(String(format: "%.\(Swift.min(decimals, AIMPSkinScript.formatWidthLimit))f", number(1))))
             case .null: return value(.none)
             case .hsvToColor: return value(.number(Self.argb(hue: number(0), saturation: number(1), value: number(2))))
             case .hsvToColorAlpha:
@@ -267,8 +270,11 @@ extension AIMPSkinScript {
 
     /// Delphi's `Format(pattern, [values])`: `%d`, `%s`, `%f`, `%x` with width and precision
     /// (`%.2d` zero-pads to two), and `%%`.
+    /// The widest `Format` pads and the most decimals `Format` and `FormatFloat` give:
+    /// `%999999999d` would otherwise pad to a gigabyte.
+    static let formatWidthLimit = 1_024
+
     static func format(_ pattern: String, _ values: Value) -> String {
-        let formatWidthLimit = 1_024
         var list: [Value] = []
         if case .array(let elements) = values { list = elements.keys.sorted().compactMap { elements[$0] } }
         else if case .none = values {} else { list = [values] }

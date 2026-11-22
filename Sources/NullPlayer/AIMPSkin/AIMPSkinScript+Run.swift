@@ -431,12 +431,12 @@ extension AIMPSkinScript {
             if case .builtin(let builtin) = call.target, builtin.readsVariable {
                 var args = [lookup(call.arguments[0].variable ?? "") ?? .none]
                 args += try call.arguments.dropFirst().map { try evaluate($0.value) }
-                return write(builtin.call(args), to: call.arguments)
+                return write(try builtin.call(args), to: call.arguments)
             }
             let args = try call.arguments.map { try evaluate($0.value) }
             switch call.target {
             case .routine(let index): return try run(index, arguments: args)
-            case .builtin(let builtin): return write(builtin.call(args), to: call.arguments)
+            case .builtin(let builtin): return write(try builtin.call(args), to: call.arguments)
             case .host(let host): return try self.host(host, args)
             case .unresolved:
                 if let target = withObjects.last { return try method(target, Member(call.name), args) }

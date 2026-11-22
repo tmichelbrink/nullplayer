@@ -392,6 +392,8 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
         libraryHost.teardown()
         levelModel.stop()
         skinLoad.cancel()
+        artworkTask?.cancel()
+        waveformTask?.cancel()
     }
 
     // MARK: - Window delegate

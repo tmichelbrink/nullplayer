@@ -21,6 +21,14 @@ struct AIMPSkinArchive: Sendable {
     struct Entry: Sendable {
         let name: String
         fileprivate let location: Location
+
+        /// The bytes `payload` gives: a packed entry's declared inflated size, else its stored size.
+        var declaredSize: Int {
+            switch location {
+            case .plain(let range): return range.count
+            case .scrambled(let range, let inflatedSize): return inflatedSize ?? range.count
+            }
+        }
     }
 
     /// Where an entry's bytes are in `storage`, as offsets from its first byte.

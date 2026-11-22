@@ -35,14 +35,18 @@ struct AIMPSkinCustomMenu: Sendable {
         items = Self.items(node, index: index)
     }
 
-    private static func items(_ node: AIMPNode, index: AIMPSkinIndex) -> [Item] {
-        (node.child("items")?.children("item") ?? []).map { item in
+    /// Submenus deeper than this are left empty: no skin nests past a few, and each level recurses.
+    static let mostDepth = 16
+
+    private static func items(_ node: AIMPNode, index: AIMPSkinIndex, depth: Int = 0) -> [Item] {
+        guard depth < mostDepth else { return [] }
+        return (node.child("items")?.children("item") ?? []).map { item in
             let props = item.properties
             let bindings = AIMPSkinBindings(item, names: index.names)
             return Item(caption: AIMPSkinLanguage.expanded(props["Caption"]?.reference ?? "", strings: index.strings),
                         press: AIMPSkinControl.Input.press(bindings, props: props, index: index),
                         state: bindings["State"],
-                        items: items(item, index: index))
+                        items: items(item, index: index, depth: depth + 1))
         }
     }
 }

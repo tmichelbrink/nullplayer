@@ -10,12 +10,12 @@ extension AIMPNode {
     }
 
     /// A list of integers as AIMP writes one, comma-separated (`Size` "300,120", `AlignmentMargins`
-    /// "0,4,0,4"); what does not read as a number is left out, as is one past a million either way:
-    /// no skin's geometry comes near, and the layout adds and negates these (`ContentExtends`),
-    /// which would trap on `Int.max` or `Int.min`.
+    /// "0,4,0,4"); what does not read as a number is left out, and one past a million either way is
+    /// held there, keeping its place: no skin's geometry comes near, and the layout adds and negates
+    /// these (`ContentExtends`), which would trap on `Int.max` or `Int.min`.
     static func numbers(_ text: String?) -> [Int] {
         (text ?? "").split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
-            .filter { (-1_000_000...1_000_000).contains($0) }
+            .map { min(max($0, -1_000_000), 1_000_000) }
     }
 }
 

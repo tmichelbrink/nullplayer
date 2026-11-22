@@ -160,8 +160,8 @@ extension AIMPSkinControl {
             guard let link = bindings["ContextMenu"], let source = link.source else { return nil }
             if let fixed = link.expression.flatMap(Double.init) {
                 // A reset no `Int` holds (`1e300`, `inf`) is none.
-                if index.counterModule(source) != nil, let whole = Int(exactly: fixed.rounded(.towardZero)) {
-                    return .counter(name: source, step: AIMPSkinStep(String(whole)))
+                if index.counterModule(source) != nil {
+                    return Int(exactly: fixed.rounded(.towardZero)).map { .counter(name: source, step: AIMPSkinStep(String($0))) }
                 }
                 if let provider = AIMPSkinProvider(player: source) { return .setValue(provider: provider, value: fixed / 100) }
             }

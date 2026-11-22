@@ -71,7 +71,8 @@ extension AIMPSkinPainter {
         let text = (digits.places ?? 0) >= 8
             ? String(format: "%02d:%02d:%02d", (seconds / 3600) % 100, (seconds / 60) % 60, seconds % 60)
             : String(format: "%02d:%02d", (seconds / 60) % 100, seconds % 60)
-        let glyphs = String(repeating: " ", count: max(0, min(digits.places ?? text.count, Self.mostPlaces) - text.count)) + text
+        let places = min(max(0, digits.places ?? text.count), Self.mostPlaces)
+        let glyphs = String(repeating: " ", count: max(0, places - text.count)) + text
         let size = image.frameSize, step = size.width + CGFloat(digits.indent)
         for (i, character) in glyphs.enumerated() {
             let frame = character.wholeNumberValue ?? (character == ":" ? 10 : character == "-" ? 11 : 12)

@@ -46,8 +46,9 @@ def main():
                 if not line or line.startswith("#"):
                     continue
                 fields = line.split("\t")
-                if len(fields) == 6:
-                    merged[fields[0]] = fields
+                if len(fields) != 6:
+                    sys.exit(f"{DEST}: malformed baseline record: {line!r}")
+                merged[fields[0]] = fields
     for row in rows:
         merged[row["sha256"]] = [row["sha256"], row["outcome"], row["codes"], row["scripts_ran"],
                                  row["scripts"], row["file"]]

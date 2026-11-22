@@ -391,7 +391,7 @@ enum AIMPSkinLoader {
         let fontShelf = SkinFonts.shelf(archive.entries.sorted { $0.key < $1.key }
             .filter { $0.key.hasSuffix(".ttf") || $0.key.hasSuffix(".otf") }
             .compactMap { entry -> Data? in
-                guard fontBytes < Self.fontBytes, let data = try? archive.payload(entry.value) else { return nil }
+                guard fontBytes + entry.value.declaredSize <= Self.fontBytes, let data = try? archive.payload(entry.value) else { return nil }
                 fontBytes += data.count
                 return fontBytes <= Self.fontBytes ? data : nil
             })

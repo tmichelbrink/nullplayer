@@ -132,7 +132,7 @@ enum AIMPControlClass: Sendable {
         }
         let digits = Digits(places: integer("Digits"), indent: integer("IndentBetweenDigits") ?? 0)
         // Past 4,096 columns no screen shows another bar, and each is drawn every frame.
-        let spectrum = Spectrum(columns: min(max(1, integer("ColumnsCount") ?? 16), 4_096), indent: CGFloat(integer("ColumnsIndent") ?? 1),
+        let spectrum = Spectrum(columns: min(max(1, integer("ColumnsCount") ?? 16), 4_096), indent: CGFloat(min(max(0, integer("ColumnsIndent") ?? 1), 4_096)),
                                 color: AIMPSkinColor(props["Color"]), peakColumns: props["PeakColumns"]?.reference,
                                 peakSegment: CGFloat(max(1, integer("PeakColumnsSegmentation") ?? 1)))
         // Read as `AIMPSkinControl.maskFrame` is: the `Skin`'s, else its resource's (Windows Media
