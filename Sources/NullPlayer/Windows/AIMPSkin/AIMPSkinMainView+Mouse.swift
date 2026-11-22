@@ -289,7 +289,7 @@ extension AIMPSkinMainView {
     /// and where it stands; nil for one that moves the player.
     func counter(of provider: AIMPSkinProvider?) -> (name: String, module: Int, position: Int)? {
         guard case .named(let name)? = provider, let flow = runtime?.flow, let module = flow.skin.index.counterModule(name) else { return nil }
-        let position = Int(flow.value(name, "Position"))
+        let position = AIMPSkinScript.integer(flow.value(name, "Position"))
         return (name, module, position)
     }
 

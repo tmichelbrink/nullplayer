@@ -144,7 +144,7 @@ extension AIMPSkinScript {
                         guard let program = program(script) else { continue }
                         let asked = (actions, eqWrites)
                         // Out of budget, it has not run: it runs on a later tick, as a bound one does.
-                        if (try? runCounter(name, program, at: position)) == nil, budget.isSpent {
+                        if stopsOnLimit({ try runCounter(name, program, at: position) }) {
                             state.animation[name].scriptInputs = nil
                         }
                         (actions, eqWrites) = asked
@@ -159,7 +159,7 @@ extension AIMPSkinScript {
                     changed = true
                     guard let program = program(script) else { continue }
                     let asked = (actions, eqWrites)
-                    if (try? runCounter(name, program, at: flow.value(of: link))) == nil, budget.isSpent {
+                    if stopsOnLimit({ try runCounter(name, program, at: flow.value(of: link)) }) {
                         state.animation[name].scriptInputs = previous
                     }
                     if previous == nil { (actions, eqWrites) = asked }
@@ -182,8 +182,7 @@ extension AIMPSkinScript {
                     if previous == nil, let event = link.pin, event.hasPrefix("On") || event == "Action",
                        event != "OnTrackStarted" || host.player.playState != .playing { continue }
                     let asked = (actions, eqWrites)
-                    handle(name, sender: name)
-                    if budget.isSpent { state.animation[name].scriptInputs = previous }
+                    if handle(name, sender: name) { state.animation[name].scriptInputs = previous }
                     if previous == nil { (actions, eqWrites) = asked }
                 }
                 if !changed { break }
@@ -207,21 +206,30 @@ extension AIMPSkinScript {
 
         /// Sets counter `name` to `value`. A `ScriptableOperatorCounter` runs its script with `State`
         /// the new value (Pioneer's play key sets `RemoteControllScript` to 1, and the script
-        /// plays), and `State` after the run is the counter's position. Out of budget, the counter
-        /// stays where it was, so its script runs on the next move.
+        /// plays), and `State` after the run is the counter's position. Stopped by a limit (the step
+        /// budget, the text length), the counter stays where it was, so its script runs on the next move.
         func setCounter(_ name: String, to value: Int) {
             let before = state
             state.script[name].counter = value
             guard let provider = skin.index.providers[name], provider.kind == .counter(scripted: true),
                   let script = provider.script, let program = program(script) else { return }
-            if (try? runCounter(name, program, at: Double(value))) == nil, budget.isSpent { state = before }
+            if stopsOnLimit({ try runCounter(name, program, at: Double(value)) }) { state = before }
         }
 
         /// Runs the event handler `handler` (a `ScriptableEventHandler` provider, or a script by
-        /// name) for `sender`, with a mouse event's `arguments`.
-        func handle(_ handler: String, sender: String, arguments: [String: Double] = [:]) {
-            guard let program = program(skin.index.providers[handler]?.script ?? handler) else { return }
-            try? atomically { _ = try run(program, sender: sender, arguments: arguments) }
+        /// name) for `sender`, with a mouse event's `arguments`. True when a limit stopped it (and
+        /// what it did was undone).
+        @discardableResult
+        func handle(_ handler: String, sender: String, arguments: [String: Double] = [:]) -> Bool {
+            guard let program = program(skin.index.providers[handler]?.script ?? handler) else { return false }
+            return stopsOnLimit { try atomically { _ = try run(program, sender: sender, arguments: arguments) } }
+        }
+
+        /// Whether `body` stopped on a limit: the step budget, the call depth or the text length,
+        /// each a `Budget.Spent`, whether or not the tick's step budget is spent. Any other failure
+        /// (a script error) is not retried.
+        private func stopsOnLimit(_ body: () throws -> Void) -> Bool {
+            do { try body(); return false } catch is Budget.Spent { return true } catch { return false }
         }
 
         // MARK: - Running

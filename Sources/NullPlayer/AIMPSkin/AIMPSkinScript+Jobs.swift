@@ -65,10 +65,13 @@ extension AIMPSkinScript.Engine {
             let flow = self.flow
             let current = flow.value(name, "Position")
             let next = step.next(from: current, notches: notches) ?? current
-            setCounter(name, to: flow.wrapped(Int(next), counter: name))
+            setCounter(name, to: flow.wrapped(AIMPSkinScript.integer(next), counter: name))
         case .moveCounter(let name, let steps):
             guard let module = skin.index.counterModule(name) else { return }
-            setCounter(name, to: min(max(Int(flow.value(name, "Position")) + steps, 0), module - 1))
+            // Saturating: a script can leave the counter anywhere, `Int.max` included.
+            let moved = AIMPSkinScript.integer(flow.value(name, "Position")).addingReportingOverflow(steps)
+            let position = moved.overflow ? (steps > 0 ? Int.max : Int.min) : moved.partialValue
+            setCounter(name, to: min(max(position, 0), module - 1))
         case .handle(let handler, let sender, let arguments):
             handle(handler, sender: sender, arguments: arguments)
         }

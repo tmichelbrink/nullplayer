@@ -264,6 +264,26 @@ final class AIMPSkinScriptTests: XCTestCase {
         XCTAssertTrue(formatted.value.string.hasPrefix("1.000"))
     }
 
+    /// A handler the text limit stops is undone as one the step budget stops is, though the tick's
+    /// step budget is not spent: what it set before the limit does not stay.
+    func testAHandlerStoppedByTheTextLimitIsUndone() throws {
+        let skin = try Self.skin(scripts: ["Grow": """
+        <program><procedure><name text="Execute"/><compoundstmt>
+          <assignstmt><dsgn><node text="Given"/></dsgn><expr><number text="1"/></expr></assignstmt>
+          <assignstmt><dsgn><node text="Where"/></dsgn><expr><string text="'ab'"/></expr></assignstmt>
+          <whilestmt><expr><number text="1"/></expr><compoundstmt>
+            <assignstmt><dsgn><node text="Where"/></dsgn>
+              <expr><dsgn><node text="Where"/></dsgn><op text="+"/><dsgn><node text="Where"/></dsgn></expr></assignstmt>
+          </compoundstmt></whilestmt>
+        </compoundstmt></procedure></program>
+        """])
+        let budget = AIMPSkinScript.Budget()
+        let engine = AIMPSkinScript.Engine(skin: skin, host: AIMPSkinHostState(player: .probe), state: AIMPSkinState(), budget: budget)
+        XCTAssertTrue(engine.handle("Grow", sender: "Grow"), "stopped on a limit")
+        XCTAssertFalse(budget.isSpent, "the text limit, not the step budget")
+        XCTAssertEqual(engine.state.script.variables["given"] ?? "0", "0")
+    }
+
     /// A script docks and undocks forms and moves items: `form.Undock`, `form.Dock`,
     /// `FindObject(a).Parent := FindObject(b)`, and reads where one sits.
     func testDockingAndMovingItems() throws {
