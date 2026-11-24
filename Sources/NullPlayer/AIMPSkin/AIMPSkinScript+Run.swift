@@ -130,10 +130,13 @@ extension AIMPSkinScript {
         }
 
         /// The program's own block, then `Execute`, its parameters being the globals of the same
-        /// name, so a `var State` writes back; returns `State` after the run. The counter's position
-        /// binds `State` first: a schema variable of the same name does not stand in for it.
+        /// name, so a `var State` writes back; returns `State` after the run. Where `Execute` takes a
+        /// `var` state parameter, the counter's position binds it first: a schema variable of the same
+        /// name does not stand in for it. Without one (Soot's main form script), a variable the script
+        /// names `State` is its own.
         func execute(statePosition: Double) throws -> Double {
-            scopes[0][program.stateName] = .number(statePosition)
+            let declaresState = program.main.map { program.routines[$0].parameters.first?.byReference == true } ?? false
+            if declaresState || lookup(program.stateName) == nil { scopes[0][program.stateName] = .number(statePosition) }
             scopes[0].merge(["true": .number(1), "false": .number(0), "nil": .none]) { _, constant in constant }
             // The objects the event's other parameters are, by name.
             for (name, object) in [("arguments", Value.arguments), ("eventdata", .eventData), ("data", .visualData)]

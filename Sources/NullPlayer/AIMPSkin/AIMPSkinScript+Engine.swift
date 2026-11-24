@@ -216,6 +216,7 @@ extension AIMPSkinScript {
         /// As `setCounter`, for a script that moves a counter: stopped by a limit, the counter is put
         /// back and the limit passed on, so the script that moved it is undone too and both run again
         /// on a later tick (rather than the outer one standing, its input seen, and the move lost).
+        /// Any other failure stays the counter script's.
         func movingCounter(_ name: String, to value: Int) throws {
             let before = state
             state.script[name].counter = value
@@ -226,6 +227,9 @@ extension AIMPSkinScript {
             } catch let spent as Budget.Spent {
                 state = before
                 throw spent
+            } catch {
+                // A script error in the counter's script ends that script where it was raised, as
+                // `setCounter` always has; it is not the moving script's to stop on.
             }
         }
 

@@ -78,13 +78,11 @@ struct AIMPSkinDataflow {
         if let set = state.script[name].visible { return set ? 1 : 0 }
         // An item's own `Visibility` bindings, as the painter shows it (Unsquareable's tab column
         // shows while `TabControl_Small`, shown with the hidden compact player, is hidden).
-        // Bindings that all read true show it, whatever it was saved as (`InitialVisible` False), as
-        // the painter draws it; with none, its saved visibility stands.
+        // An item saved hidden (`InitialVisible` False) stays so whatever its bindings read, as AIMP
+        // 5.40 opens Black & White, Metro Color and AIMPify: showing it (as a binding reading true
+        // would suggest) drew their hidden mini player and second tab strip.
         let gates = (skin.index.byName[name]?.gates ?? []).filter { !isMirror($0, of: name) }
-        if !gates.isEmpty {
-            guard gates.allSatisfy({ value(of: $0, depth: depth + 1) != 0 }) else { return 0 }
-            return isOnActivePage(name, depth: depth + 1) ? 1 : 0
-        }
+        if !gates.isEmpty, !gates.allSatisfy({ value(of: $0, depth: depth + 1) != 0 }) { return 0 }
         return (!skin.index.hiddenItems.contains(name) && isOnActivePage(name, depth: depth + 1)) ? 1 : 0
     }
 

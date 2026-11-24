@@ -105,10 +105,12 @@ extension AIMPSkinScript {
                 return (.none, [0: .string(String(chars))])
             case .toText: return value(.string(text(0)))
             case .toNumber: return value(.number(Double(text(0)) ?? number(1)))
-            // An integer, decimal or Delphi's `$FF` hex; anything else (`'1.5'`) is the fallback.
+            // An integer, decimal or hex as Delphi reads it (`$FF`, `0xFF`: Qodux builds its colours
+            // from `'0xFF' + R + G + B`); anything else (`'1.5'`) is the fallback.
             case .toInteger:
                 let digits = text(0).trimmingCharacters(in: .whitespaces)
-                let parsed = digits.hasPrefix("$") ? Int64(digits.dropFirst(), radix: 16) : Int64(digits)
+                let hex = digits.hasPrefix("$") ? digits.dropFirst() : digits.lowercased().hasPrefix("0x") ? digits.dropFirst(2) : nil
+                let parsed = hex.map { Int64($0, radix: 16) } ?? Int64(digits)
                 return value(.number(parsed.map(Double.init) ?? number(1)))
             case .copy:
                 let chars = Array(text(0)), start = Swift.max(1, integer(1)) - 1
