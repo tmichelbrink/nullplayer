@@ -255,8 +255,11 @@ final class AIMPSkinLayout {
     private func moved<Element: AIMPSkinElement>(_ own: [Element], holder name: String?,
                                                  as kind: (AIMPSkinIndex.Element) -> Element?) -> [Element] {
         let moved = flow.state.script.parents
-        guard let name, !moved.isEmpty else { return own }
+        guard !moved.isEmpty else { return own }
+        // An unnamed holder (a form's root) keeps none it lost either, so an item moved under its own
+        // descendant is not reached twice, round and round.
         let kept = own.filter { child in child.name.flatMap { moved[$0] }.map { $0 == name } ?? true }
+        guard let name else { return kept }
         return kept + moved.filter { $0.value == name && skin.index.parentOf[$0.key] != name }.keys.sorted()
             .compactMap { skin.index.byName[$0].flatMap(kind) }
     }

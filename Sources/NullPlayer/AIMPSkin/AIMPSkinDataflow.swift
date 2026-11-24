@@ -13,6 +13,13 @@ struct AIMPSkinDataflow {
     let skin: AIMPSkin
     let host: AIMPSkinHostState
     let state: AIMPSkinState
+    /// Each commutator's value, worked out once for this state: one that reads others through shared
+    /// inputs would otherwise be read again on every path to it, exponentially many in a crafted skin.
+    private let commutators = Memo()
+
+    private final class Memo {
+        var values: [String: Double] = [:]
+    }
 
     /// Whether a form or item is shown: its `Visible` pin.
     func isVisible(_ name: String, depth: Int = 0) -> Bool { value(name, "Visible", depth: depth) != 0 }
@@ -143,18 +150,10 @@ struct AIMPSkinDataflow {
         case .table, .text: return 0
         case .libraryScanning: return host.player.libraryScanning ? 1 : 0
         case .commutator(let name):
-            guard let provider = skin.index.providers[name] else { return 0 }
-            let links = provider.bindings.links
-            // No `Expression`: it passes its first value on (Office 2016's volume read-out; 28 corpus skins).
-            guard let expression = provider.expression else {
-                return links.first { $0.target?.lowercased() == "value1" }.map { value(of: $0, depth: depth + 1) } ?? 0
-            }
-            var variables: [String: Double] = [:]
-            for link in links {
-                guard let target = link.target?.lowercased() else { continue }
-                variables[target] = value(of: link, depth: depth + 1)
-            }
-            return skin.index.expression(expression)?.evaluate(variables: variables) ?? 0
+            if let known = commutators.values[name] { return known }
+            let result = commutatorValue(name, depth: depth)
+            commutators.values[name] = result
+            return result
         // Text joined from its values, read as the number it spells, else 0 (Antares' source digit:
         // `%IFEqual(…)` to 0 for a file, 2 for radio). A trigger watches its inputs (`inputs(of:)`).
         case .concatenator(let name):
@@ -166,4 +165,21 @@ struct AIMPSkinDataflow {
             return Double(provider.positionDefault)
         }
     }
+
+    /// A commutator's `Result`: its `Expression` over its values, or with none its first value.
+    private func commutatorValue(_ name: String, depth: Int) -> Double {
+        guard let provider = skin.index.providers[name] else { return 0 }
+        let links = provider.bindings.links
+        // No `Expression`: it passes its first value on (Office 2016's volume read-out; 28 corpus skins).
+        guard let expression = provider.expression else {
+            return links.first { $0.target?.lowercased() == "value1" }.map { value(of: $0, depth: depth + 1) } ?? 0
+        }
+        var variables: [String: Double] = [:]
+        for link in links {
+            guard let target = link.target?.lowercased() else { continue }
+            variables[target] = value(of: link, depth: depth + 1)
+        }
+        return skin.index.expression(expression)?.evaluate(variables: variables) ?? 0
+    }
 }
+

@@ -35,7 +35,10 @@ enum AIMPSkinDockSites {
         var placed: Set<String> = []
         for item in main.descendants() {
             // A name an earlier site took keeps that site; checked before `reading` registers the form.
+            // A site naming the main form itself would hold the form that holds it, without end.
             guard let site = item["name"], sites[site] == nil, let named = form(ofSite: item), !placed.contains(named.name),
+                  named.name.caseInsensitiveCompare(main["name"] ?? "AIMPMainForm") != .orderedSame,
+                  named.name.caseInsensitiveCompare("AIMPMainForm") != .orderedSame,
                   let form = reading(named.name) else { continue }
             placed.insert(named.name)
             sites[site] = Site(form: named.name, holder: holder(named.name, of: form, extends: AIMPNode.numbers(item.properties["ContentExtends"]?["value"])),

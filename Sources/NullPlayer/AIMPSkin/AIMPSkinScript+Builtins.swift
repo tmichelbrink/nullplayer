@@ -127,7 +127,7 @@ extension AIMPSkinScript {
             case .length: return value(.number(Double(args.first?.string.count ?? 0)))
             case .uppercase: return value(.string(text(0).uppercased()))
             case .lowercase: return value(.string(text(0).lowercased()))
-            case .format: return value(.string(AIMPSkinScript.format(text(0), args.count > 1 ? args[1] : .none)))
+            case .format: return value(.string(try AIMPSkinScript.format(text(0), args.count > 1 ? args[1] : .none)))
             case .round: return value(.number(number(0).rounded()))
             case .trunc: return value(.number(number(0).rounded(.towardZero)))
             case .frac: return value(.number(number(0) - number(0).rounded(.towardZero)))
@@ -274,7 +274,9 @@ extension AIMPSkinScript {
     /// `%999999999d` would otherwise pad to a gigabyte.
     static let formatWidthLimit = 1_024
 
-    static func format(_ pattern: String, _ values: Value) -> String {
+    /// Throws once the text would pass `Run.textLimit`, as `+` and `Insert` do: each field is held to
+    /// `formatWidthLimit`, but a long pattern of them is not.
+    static func format(_ pattern: String, _ values: Value) throws -> String {
         var list: [Value] = []
         if case .array(let elements) = values { list = elements.keys.sorted().compactMap { elements[$0] } }
         else if case .none = values {} else { list = [values] }
@@ -300,9 +302,11 @@ extension AIMPSkinScript {
                 if let precision, text.count < precision { text = String(repeating: "0", count: precision - text.count) + text }
             case "f", "n": text = String(format: "%.\(precision ?? 2)f", value.number)
             case "x": text = String(AIMPSkinScript.integer(value.number), radix: 16, uppercase: true)
-            default: text = value.string
+            // `%.3s` keeps the first three characters, as Delphi's does.
+            default: text = precision.map { String(value.string.prefix($0)) } ?? value.string
             }
             if width > text.count { text = String(repeating: " ", count: width - text.count) + text }
+            guard out.utf8.count + text.utf8.count <= Run.textLimit else { throw Budget.Spent(what: "text length") }
             out += text
         }
         return out

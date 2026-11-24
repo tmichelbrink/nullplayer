@@ -68,9 +68,16 @@ struct AIMPSkinExpression: Sendable, Equatable {
 
     let root: Node
 
-    /// Nil for syntax the parser does not take.
+    /// The most tokens an expression may have, and the deepest it may nest: a crafted skin's (or
+    /// script's) expression must not overflow the stack parsing or evaluating it.
+    static let tokenLimit = 512
+    static let nestingLimit = 64
+
+    /// Nil for syntax the parser does not take, or past `tokenLimit` / `nestingLimit`.
     init?(_ text: String) {
-        var parser = Parser(tokens: Self.tokenize(text))
+        let tokens = Self.tokenize(text)
+        guard tokens.count <= Self.tokenLimit else { return nil }
+        var parser = Parser(tokens: tokens)
         guard let root = parser.or(), parser.at == parser.tokens.count else { return nil }
         self.root = root
     }
@@ -176,6 +183,8 @@ struct AIMPSkinExpression: Sendable, Equatable {
     private struct Parser {
         let tokens: [String]
         var at = 0
+        /// How deep `unary` has nested (`not`, `-`, brackets, calls), held to `nestingLimit`.
+        var nesting = 0
 
         mutating func next(_ options: Set<String>) -> String? {
             guard at < tokens.count, options.contains(tokens[at]) else { return nil }
@@ -216,6 +225,9 @@ struct AIMPSkinExpression: Sendable, Equatable {
         mutating func product() -> Node? { chain([.multiply, .divide, .div, .mod, .shl, .shr]) { $0.unary() } }
 
         mutating func unary() -> Node? {
+            guard nesting < AIMPSkinExpression.nestingLimit else { return nil }
+            nesting += 1
+            defer { nesting -= 1 }
             if next(["not"]) != nil { return unary().map { .not($0) } }
             if next(["-"]) != nil { return unary().map { .negate($0) } }
             if next(["("]) != nil {

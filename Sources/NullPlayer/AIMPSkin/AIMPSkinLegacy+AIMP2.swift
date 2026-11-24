@@ -106,6 +106,8 @@ extension AIMPSkinLegacy {
         private static let equalizerWindow = "EquaForm"
         /// A digit strip's glyphs: 0–9, the separator, the minus and a blank, as AIMP 3's.
         private static let digitGlyphs = 13
+        /// The largest window side a skin's `FormMinW`/`FormMinH` is taken at.
+        private static let largestSide = 16_384
 
         /// One object as AIMP 2 places it, whichever version wrote it, before it is an `Object`.
         private struct Placed {
@@ -329,7 +331,9 @@ extension AIMPSkinLegacy {
             guard isVersion2 else {
                 // `[File]`: `FormDisableResizing` 0 lets the window be sized from its edges, never below
                 // `FormMinW`×`FormMinH` (Hameleon: 540 px tall, its playlist's left panel laid out for it).
-                let least = CGSize(width: Int(ini["File", "FormMinW"] ?? "") ?? 0, height: Int(ini["File", "FormMinH"] ?? "") ?? 0)
+                // Held to a window's sensible bounds: a wild value would not convert back to `Int`.
+                let side = { (key: String) in min(max(0, Int(ini["File", key] ?? "") ?? 0), Self.largestSide) }
+                let least = CGSize(width: side("FormMinW"), height: side("FormMinH"))
                 return Settings(sizingEdge: ini["File", "FormDisableResizing"] == "0" ? Self.sizingEdge : nil,
                                 playlist: AIMPSkinLegacy.playlistSettings(ini), activeTab: ini["TabCtrl", "ActiveTab"],
                                 minimumSize: least == .zero ? nil : least)

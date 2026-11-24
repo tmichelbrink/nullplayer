@@ -220,13 +220,16 @@ struct AIMPSkinImage: Sendable {
     }
 
     /// Pictures each below the last, as the frames of one, at the first one's size; nil when a later
-    /// one is larger.
+    /// one is larger, or the strip would pass `AIMPSkinPolicy.decodedPixels` (the caller keeps the
+    /// first: an AIMP 2 slider's plain track).
     static func stacking(_ images: [AIMPSkinImage]) -> AIMPSkinImage? {
         let parts = images.compactMap(\.pixels)
         // A later picture smaller than the first sits at its top-left (Hameleon's lit tracks are a
         // pixel short of their tracks); a larger one does not stack.
+        // Nor does one past the decoded-pixel limit, which each part alone was checked against.
         guard let first = parts.first, parts.count == images.count,
               parts.allSatisfy({ $0.width <= first.width && $0.height <= first.height }),
+              first.width * first.height * parts.count <= AIMPSkinPolicy.decodedPixels,
               let source = AIMPSkinPixels.Source.stacking(parts.map {
                   $0.width == first.width && $0.height == first.height ? $0.source
                       : $0.source.padded(width: $0.width, height: $0.height, toWidth: first.width, toHeight: first.height)

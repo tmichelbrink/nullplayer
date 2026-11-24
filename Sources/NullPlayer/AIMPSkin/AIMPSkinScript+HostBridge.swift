@@ -270,7 +270,15 @@ extension AIMPSkinScript.Run {
             let clock = flow.host.feedback.clock
             engine.state.animation[name].stepped = clock > 0 ? clock : .infinity
         case (_, .parent):
-            if case .object(let parent) = value { engine.state.script[name].parent = parent.name }
+            // Not under itself or anything it holds: that would be a loop no window can lay out.
+            guard case .object(let parent) = value else { break }
+            var above: String? = parent.name, steps = 0
+            while let next = above, steps < 64 {
+                if next == name { return }
+                above = flow.parent(of: next)
+                steps += 1
+            }
+            engine.state.script[name].parent = parent.name
         default:
             // Any other property of a control, item or list: kept, and drawn
             // (`AIMPSkinState.Object.properties`). A colour given as a Delphi colour (`$F1F1F1`,
