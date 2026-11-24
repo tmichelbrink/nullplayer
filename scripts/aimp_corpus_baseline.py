@@ -2,12 +2,12 @@
 """Re-record `Tests/NullPlayerAppTests/Fixtures/AIMPSkin/corpus-baseline.tsv` from a census run.
 
     scripts/aimp_skin_census.sh /tmp/aimp/census
-    scripts/aimp_corpus_baseline.py /tmp/aimp/census
+    scripts/aimp_corpus_baseline.py /tmp/aimp/census [--accept-regressions]
 
 The baseline is the ratchet `AIMPCorpusLoadTests` enforces: a skin recorded `ok` that later fails,
 or whose scripts that run fall below the recorded count, is a regression. Re-record only when you
 have *improved* the engine, never to make a red suite green, which is the failure this file exists
-to prevent.
+to prevent: a census that regresses a recorded `ok` skin is refused unless --accept-regressions.
 """
 import csv
 import os
@@ -28,9 +28,11 @@ HEADER = """\
 
 
 def main():
-    if len(sys.argv) != 2:
+    args = [a for a in sys.argv[1:] if a != "--accept-regressions"]
+    accept = len(args) != len(sys.argv) - 1
+    if len(args) != 1:
         sys.exit(__doc__)
-    census = os.path.join(sys.argv[1], "census.tsv")
+    census = os.path.join(args[0], "census.tsv")
     with open(census, newline="") as f:
         rows = list(csv.DictReader(f, delimiter="\t"))
     if not rows:
@@ -49,6 +51,16 @@ def main():
                 if len(fields) != 6:
                     sys.exit(f"{DEST}: malformed baseline record: {line!r}")
                 merged[fields[0]] = fields
+    # A regression is not re-recorded as the new baseline (that would make a red suite green):
+    # a skin recorded `ok` that now fails, or runs fewer of its scripts, stops the run unless
+    # --accept-regressions says it is meant.
+    regressions = []
+    for row in rows:
+        old = merged.get(row["sha256"])
+        if old and old[1] == "ok" and (row["outcome"] != "ok" or int(row["scripts_ran"] or 0) < int(old[3] or 0)):
+            regressions.append(f"{row['file']}: {old[1]} {old[3]} scripts -> {row['outcome']} {row['scripts_ran']}")
+    if regressions and not accept:
+        sys.exit("regressions, not recorded (pass --accept-regressions to record them):\n  " + "\n  ".join(regressions))
     for row in rows:
         merged[row["sha256"]] = [row["sha256"], row["outcome"], row["codes"], row["scripts_ran"],
                                  row["scripts"], row["file"]]

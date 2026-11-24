@@ -92,7 +92,7 @@ struct AIMPSkinCanvas {
         let image: CGImage?
     }
 
-    private static let slicings = AIMPSkinCache<Sliced, Made>(limit: 64)
+    private static let slicings = AIMPSkinCache<Sliced, Made>(limit: 64, byteLimit: 256 << 20) { AIMPSkinCache<Sliced, Made>.bytes($0.image) }
 
     /// `source` nine-sliced by `margins` into `width`×`height` device pixels, `scale` of them a skin pixel.
     private static func sliced(_ source: CGImage, margins m: AIMPSkinImage.Margins, tiled: Bool, width: Int, height: Int,

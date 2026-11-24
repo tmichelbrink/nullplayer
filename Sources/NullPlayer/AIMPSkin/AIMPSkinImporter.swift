@@ -38,9 +38,13 @@ struct AIMPSkinImporter: SkinFileCatalogue {
             let staging = FileManager.default.temporaryDirectory.appendingPathComponent("aimp-\(UUID().uuidString)")
             try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
             defer { try? FileManager.default.removeItem(at: staging) }
+            // Every skin of the zip loads before any is installed: one that does not leaves the
+            // installed skins as they were, not some of them replaced.
+            let files = try Self.unzipSkins(source, into: staging)
+            for file in files { _ = try await AIMPSkinLoader.load(file: file) }
             var skins: [InstalledSkinFile] = []
-            for file in try Self.unzipSkins(source, into: staging) {
-                skins.append(try await Self.install(file, into: folder))
+            for file in files {
+                skins.append(try await Self.install(file, into: folder) { _ in })
             }
             guard !skins.isEmpty else { throw AIMPSkinImportError.noSkinInZip(source.lastPathComponent) }
             return skins

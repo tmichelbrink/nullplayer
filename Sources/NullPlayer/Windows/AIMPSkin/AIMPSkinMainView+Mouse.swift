@@ -93,7 +93,10 @@ extension AIMPSkinMainView {
 
     /// The track under `point` in the skin's playlist, through the quick search.
     func playlistIndex(_ target: AIMPSkinTarget, at point: CGPoint) -> Int? {
-        guard case .playlist(let rows) = target.kind, let row = rows.row(at: point.y - target.rect.minY) else { return nil }
+        // Only against the rows the user saw: a playlist or search that changed since they were drawn
+        // would put another track under the same row (a double click on A playing B).
+        guard case .playlist(let rows) = target.kind, rows.generation == host.player.playlist.generation,
+              rows.search == skinState.lists.playlistSearch, let row = rows.row(at: point.y - target.rect.minY) else { return nil }
         let shown = host.playlistIndices(matching: skinState.lists.playlistSearch)
         return shown.indices.contains(row) ? shown[row] : nil
     }

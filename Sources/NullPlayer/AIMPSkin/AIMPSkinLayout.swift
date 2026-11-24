@@ -98,6 +98,10 @@ final class AIMPSkinLayout {
         let first: Int
         let visible: Int
         let slots: [Slot]
+        /// The playlist and quick search they were laid out for: a click is resolved only against the
+        /// rows it saw drawn (`AIMPSkinPlayerSnapshot.Playlist.generation`).
+        var generation = 0
+        var search = ""
 
         /// `count` rows, each `height(row)` tall with its header, in `room`, from row `top`, or as
         /// near it as lets the last row show at the bottom.

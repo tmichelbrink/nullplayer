@@ -144,11 +144,12 @@ extension AIMPSkinLayout {
             // AIMP's two lines a track, a header over each group; AIMP 2's one line (`classic`).
             let item = style.classic ? line + 4 : line + CGFloat(style.detailFonts[.normal]?.height ?? 11) + 8
             let header = CGFloat(style.headerFont.height) + 13
-            let rows = Rows(top: state.lists.playlistTop, count: shown.count, room: rect.height) { position in
+            var rows = Rows(top: state.lists.playlistTop, count: shown.count, room: rect.height) { position in
                 let group = tracks[shown[position]].group
                 let starts = !style.classic && !group.isEmpty && (position == 0 || tracks[shown[position - 1]].group != group)
                 return (starts ? header : 0, item)
             }
+            (rows.generation, rows.search) = (host.player.playlist.generation, state.lists.playlistSearch)
             return (.playlist(style, rows: rows, shown: shown),
                     target(AIMPSkinList.playlist.rawValue, .playlist(rows)))
         // The library window's group tree and table: the area NullPlayer's library browser sits over,

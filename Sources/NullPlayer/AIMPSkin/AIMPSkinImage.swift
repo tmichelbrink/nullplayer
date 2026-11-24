@@ -146,8 +146,11 @@ struct AIMPSkinImage: Sendable {
     }
 
     /// Tinted frames, by frame and colour, shared by every picture: a theme's few colours over a
-    /// skin's panels.
-    private static let tintings = AIMPSkinCache<Tinting, Tinted>(limit: 256)
+    /// skin's panels. Held to 128 MiB, each charged for its tinted output and the source frame it
+    /// keeps alive.
+    private static let tintings = AIMPSkinCache<Tinting, Tinted>(limit: 256, byteLimit: 128 << 20) {
+        AIMPSkinCache<Tinting, Tinted>.bytes($0.image) + AIMPSkinCache<Tinting, Tinted>.bytes($0.source)
+    }
 
     private static func multiply(_ source: CGImage, by argb: UInt32) -> CGImage? {
         let width = source.width, height = source.height

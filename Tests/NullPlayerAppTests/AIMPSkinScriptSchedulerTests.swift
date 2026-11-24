@@ -100,7 +100,11 @@ final class AIMPSkinScriptSchedulerTests: XCTestCase {
 
         let done = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in landed.count == 3 }, object: nil)
         wait(for: [done], timeout: 5)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        // Drained: a marker behind any further request on the AIMP queue, then behind its outcome on
+        // the main queue, so a fourth landing would be seen.
+        let settled = expectation(description: "drained")
+        AIMPSkinFrameScheduler.queue.async { DispatchQueue.main.async { settled.fulfill() } }
+        wait(for: [settled], timeout: 5)
         XCTAssertEqual(landed, ["tick 1", "bump", "tick 3"])
         XCTAssertEqual(state.script.variables["seen"], "1")
 
