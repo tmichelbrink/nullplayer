@@ -65,4 +65,20 @@ final class SkinInstallFolderTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: a, encoding: .utf8), "new")
         XCTAssertEqual(try String(contentsOf: b, encoding: .utf8), "b")
     }
+
+    /// A placement that fails after another succeeded puts the skin the first replaced back, and
+    /// leaves nothing set aside.
+    func testCommitAllRestoresWhatItReplacedWhenALaterPlacementFails() async throws {
+        let folder = SkinInstallFolder("Skins", at: root.appendingPathComponent("Skins"))
+        let a = folder.url.appendingPathComponent("a.skin")
+        try folder.commit(try file("oldA", "old"), to: a)
+        // A destination in a folder that is not there: staging and validation pass, placing fails.
+        let unreachable = folder.url.appendingPathComponent("missing/b.skin")
+        do {
+            try await folder.commitAll([(try file("newA", "new"), a, ".skin"), (try file("newB", "b"), unreachable, ".skin")]) { _ in }
+            XCTFail("the batch should have thrown")
+        } catch {}
+        XCTAssertEqual(try String(contentsOf: a, encoding: .utf8), "old")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.url.path), ["a.skin"])
+    }
 }

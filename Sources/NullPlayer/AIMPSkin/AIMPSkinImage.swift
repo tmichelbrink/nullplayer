@@ -318,6 +318,9 @@ struct AIMPSkinImage: Sendable {
 
     /// `ACLIMG32`'s chunks `{ tag, u32 size, data }` after its 16-byte header, by tag, each a
     /// cursor over its own bytes.
+    /// The chunks an image's layout and pixels are read from.
+    private static let chunkTags: Set<String> = ["bitz", "bits", "draw", "layt"]
+
     private static func chunks(_ data: Data, name: String) throws -> [String: AIMPSkinBytes] {
         guard data.count >= 16, data.prefix(8) == Data("ACLIMG32".utf8) else {
             throw AIMPSkinFinding(.entryUnreadable, "\(name) is not an ACLIMG32 image.")
@@ -332,6 +335,8 @@ struct AIMPSkinImage: Sendable {
                 throw AIMPSkinFinding(.entryUnreadable, "\(name): chunk \(tag) runs past the image.")
             }
             let range = try reader.skip(size)
+            // Only the chunks read here are copied out; any other is passed over.
+            guard Self.chunkTags.contains(tag) else { continue }
             chunks[tag] = AIMPSkinBytes(data.subdata(in: (data.startIndex + range.lowerBound)..<(data.startIndex + range.upperBound)),
                                         code: .entryUnreadable)
         }

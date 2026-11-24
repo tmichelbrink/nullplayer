@@ -76,4 +76,19 @@ final class SkinFileCatalogueTests: XCTestCase {
         XCTAssertEqual(validated, ["old"], "the copy validated carries the extension a loader may read")
         XCTAssertNil(catalogue.selection.name, "selecting is the caller's")
     }
+
+    /// Two files of one skin name in a batch install as one skin, the first: the cleanup of one
+    /// must not delete the other.
+    func testInstallAllTakesTheFirstFileOfAName() async throws {
+        let source = folder.deletingLastPathComponent().appendingPathComponent("src-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: source) }
+        let first = source.appendingPathComponent("Theme.\(Catalogue.fileExtensions[1])")
+        let second = source.appendingPathComponent("Theme.\(Catalogue.fileExtensions[0])")
+        try Data("1".utf8).write(to: first)
+        try Data("2".utf8).write(to: second)
+        let skins = try await Catalogue.installAll([first, second], into: catalogue.folder) { _ in }
+        XCTAssertEqual(skins.map(\.name), ["Theme"])
+        XCTAssertEqual(files, [first.lastPathComponent])
+    }
 }

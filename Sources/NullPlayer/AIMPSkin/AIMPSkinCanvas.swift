@@ -88,10 +88,17 @@ struct AIMPSkinCanvas {
         let scale: CGFloat
     }
 
-    /// A made slicing, holding its source so no other picture takes its identity while it is kept.
-    private struct Made: Sendable {
-        let source: CGImage
+    /// A made slicing, and its source, held weakly: a frame shares its whole decoded strip's data,
+    /// which the cache would otherwise keep alive past the pixel budget letting it go. A slicing
+    /// whose source is gone is made again, so another picture at its address is not taken for it.
+    private final class Made: @unchecked Sendable {
+        weak var source: CGImage?
         let image: CGImage?
+
+        init(source: CGImage, image: CGImage?) {
+            self.source = source
+            self.image = image
+        }
     }
 
     private static let slicings = AIMPSkinCache<Sliced, Made>(limit: 64, byteLimit: 256 << 20) { $0.image?.aimpCacheBytes ?? 0 }
@@ -102,7 +109,7 @@ struct AIMPSkinCanvas {
         guard width > 0, height > 0, width * height <= 16_000_000 else { return nil }
         let key = Sliced(source: ObjectIdentifier(source), margins: [m.left, m.top, m.right, m.bottom], tiled: tiled,
                          width: width, height: height, scale: scale)
-        return slicings.value(key) {
+        return slicings.value(key, isValid: { $0.source === source }) {
             guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
                                           space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                           bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return Made(source: source, image: nil) }

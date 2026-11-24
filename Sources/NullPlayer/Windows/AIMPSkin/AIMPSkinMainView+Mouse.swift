@@ -19,13 +19,13 @@ extension AIMPSkinMainView {
     override func mouseMoved(with event: NSEvent) {
         guard press.target == nil else { return }
         let point = canvasPoint(event)
-        interaction.hovered = drawnFrame?.target(at: point)?.control
+        interaction.hovered = inputFrame?.target(at: point)?.control
         pointerMoved(to: point)
         runMouseHandlers(at: point)
         // A control's hint, else the playing track: AIMP shows both on hover, and skins like
         // Cassette-3D have no title display of their own. Drawn by the view, not AppKit's tooltips,
         // which only show while the app is active.
-        let tip = isInside(convert(event.locationInWindow, from: nil)) ? drawnFrame?.hint(at: point)
+        let tip = isInside(convert(event.locationInWindow, from: nil)) ? inputFrame?.hint(at: point)
             ?? [host.player.artist, host.player.title].filter { !$0.isEmpty }.joined(separator: " – ") : ""
         hoverTip.point(at: tip, screenPoint: window.map { $0.convertPoint(toScreen: event.locationInWindow) } ?? .zero)
     }
@@ -44,7 +44,7 @@ extension AIMPSkinMainView {
             return
         }
         guard isInside(convert(event.locationInWindow, from: nil)) else { return }
-        guard let target = drawnFrame?.target(at: canvasPoint(event)) else { return drag.begin(event) }
+        guard let target = inputFrame?.target(at: canvasPoint(event)) else { return drag.begin(event) }
         let under = target.kind.passesDragsThrough ? draggable(at: canvasPoint(event)) : nil
         press.begin(target, under: under.map { ($0, event.locationInWindow) })
         interaction.pressed = target.control
@@ -56,8 +56,9 @@ extension AIMPSkinMainView {
         pressDown(target, with: event)
         // A press the skin's handler does nothing with (the Onkyos' remote-control panels, whose
         // window NullPlayer lacks) moves the window, as a press on bare skin does. The handler runs
-        // off the main thread, so the press is the key's until it answers.
-        if case .hold(let down, _) = target.kind {
+        // off the main thread, so the press is the key's until it answers. Not a key that acts as
+        // it comes up: its release must run however the two answers land.
+        if case .hold(let down, nil) = target.kind, target.releaseHandler == nil {
             let point = canvasPoint(event)
             let arguments = ["X": Double(point.x - target.rect.minX), "Y": Double(point.y - target.rect.minY)]
             let serial = press.serial
@@ -121,7 +122,7 @@ extension AIMPSkinMainView {
 
     /// The wheel scrolls the skin's own playlist under the pointer, three rows a notch.
     override func scrollWheel(with event: NSEvent) {
-        let target = drawnFrame?.targets.last(where: { $0.rect.contains(canvasPoint(event)) })
+        let target = inputFrame?.targets.last(where: { $0.rect.contains(canvasPoint(event)) })
         let lists = skinState.lists
         let rows = event.hasPreciseScrollingDeltas ? -event.scrollingDeltaY / 12 : -event.scrollingDeltaY * 3
         /// The whole rows the wheel moves: a trackpad's fractions of a row add up across its events
@@ -152,7 +153,7 @@ extension AIMPSkinMainView {
             // Over a scroll view, even over a key in it, the wheel scrolls the view: 40 px a notch, or
             // the trackpad's own distance.
             let point = canvasPoint(event)
-            if let view = drawnFrame?.targets.last(where: { target in
+            if let view = inputFrame?.targets.last(where: { target in
                 if case .viewScroll = target.kind { return target.rect.contains(point) } else { return false }
             }), case .viewScroll(let name, let maxTop, _) = view.kind {
                 let distance = event.hasPreciseScrollingDeltas ? -event.scrollingDeltaY : -event.scrollingDeltaY * 40
@@ -210,10 +211,11 @@ extension AIMPSkinMainView {
             return true
         case .page(let group, let step):
             // A selector over a tabbed group (Pioneer's TAPE switch) steps a page a notch, to its ends.
-            guard step.wheel == .next, let flow = runtime?.flow else { return false }
+            guard step.wheel == .next, let runtime else { return false }
+            let flow = runtime.flow
             let count = flow.skin.index.groups[group]?.count ?? 0
             guard count > 0 else { return false }
-            skinState.script[group].activePage = min(max(flow.activePage(group) + steps, 0), count - 1)
+            runtime.showPage(group, min(max(flow.activePage(group) + steps, 0), count - 1))
             return true
         default:
             return false
@@ -226,7 +228,7 @@ extension AIMPSkinMainView {
     func runMouseHandlers(at point: CGPoint?) {
         guard let runtime else { return }
         runtime.asOneEvent {
-            for handlers in drawnFrame?.mouseHandlers ?? [] {
+            for handlers in inputFrame?.mouseHandlers ?? [] {
                 let inside = point.map(handlers.rect.contains) ?? false, was = pointerOverHandlers.contains(handlers.name)
                 if inside, !was {
                     pointerOverHandlers.insert(handlers.name)
@@ -296,7 +298,7 @@ extension AIMPSkinMainView {
 
     /// The topmost knob, slider or seek bar under a point.
     func draggable(at point: CGPoint) -> AIMPSkinTarget? {
-        drawnFrame?.targets.last { $0.kind.isDraggable && $0.rect.contains(point) }
+        inputFrame?.targets.last { $0.kind.isDraggable && $0.rect.contains(point) }
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -317,22 +319,27 @@ extension AIMPSkinMainView {
         case .playlistScroll: scrollPlaylist(target, to: canvasPoint(event))
         case .viewScroll: scrollView(target, to: canvasPoint(event))
         // A key shows pressed while the pointer is over it.
-        default: interaction.pressed = drawnFrame?.target(at: canvasPoint(event))?.control == target.control ? target.control : nil
+        default: interaction.pressed = inputFrame?.target(at: canvasPoint(event))?.control == target.control ? target.control : nil
         }
     }
 
     override func mouseUp(with event: NSEvent) {
         if sizing.drag != nil { return endResize() }
         drag.end(event)
-        guard let (target, holdFired) = press.end() else { return }
+        guard let (target, holdFired, handedOver) = press.end() else { return }
         interaction.pressed = nil
+        // A key a drag took over still lets go: its release handler, and a held key's `up`.
+        if let key = handedOver {
+            if let release = key.releaseHandler { runtime?.runHandler(release, sender: key.name) }
+            if case .hold(_, let up?) = key.kind { runtime?.runHandler(up, sender: key.name) }
+        }
         if let release = target.releaseHandler { runtime?.runHandler(release, sender: target.name) }
         if holdFired { return }
         if case .hold(_, let up) = target.kind {
             if let up { runtime?.runHandler(up, sender: target.name) }
             return
         }
-        guard drawnFrame?.target(at: canvasPoint(event))?.control == target.control else { return }
+        guard inputFrame?.target(at: canvasPoint(event))?.control == target.control else { return }
         activate(target, at: convert(event.locationInWindow, from: nil))
     }
 
@@ -400,7 +407,7 @@ extension AIMPSkinMainView {
         case .optionSkins: ContextMenuBuilder.buildAIMPSkinsMenu().popUp(positioning: nil, at: point, in: self)
         case .visualNext, .visualPrev: runtime?.stepVisual(by: action == .visualNext ? 1 : -1)
         case .searchQuick, .searchAdvanced:
-            guard let box = drawnFrame?.targets.first(where: { if case .search = $0.kind { true } else { false } }),
+            guard let box = inputFrame?.targets.first(where: { if case .search = $0.kind { true } else { false } }),
                   case .search(let list) = box.kind else { return runtime?.onAction?(.action(action)) ?? () }
             search.begin(list, in: box.rect)
         default: runtime?.onAction?(.action(action))
@@ -413,7 +420,7 @@ extension AIMPSkinMainView {
     /// balance to centre) does that; elsewhere the menu.
     override func rightMouseDown(with event: NSEvent) {
         let point = canvasPoint(event)
-        guard let target = drawnFrame?.target(at: point) else { return super.rightMouseDown(with: event) }
+        guard let target = inputFrame?.target(at: point) else { return super.rightMouseDown(with: event) }
         // Over the skin's playlist: NullPlayer's playlist menu, the row clicked selected first when it
         // is not already.
         if case .playlist = target.kind {
@@ -445,7 +452,7 @@ extension AIMPSkinMainView {
     override func keyDown(with event: NSEvent) {
         // Delete takes the selected rows out of the skin's own playlist; Return plays the first.
         let selection = skinState.lists.playlistSelection
-        if !selection.isEmpty, drawnFrame?.targets.contains(where: { if case .playlist = $0.kind { true } else { false } }) == true {
+        if !selection.isEmpty, inputFrame?.targets.contains(where: { if case .playlist = $0.kind { true } else { false } }) == true {
             if [KeyCode.delete, KeyCode.forwardDelete].contains(event.keyCode) {
                 // From the bottom, so each row is where it was.
                 for row in selection.sorted(by: >) { runtime?.onAction?(.removeRow(row)) }

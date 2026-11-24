@@ -76,9 +76,13 @@ extension SkinFileCatalogue {
     }
 
     /// `install` for several files at once, all or none (a zip's skins): each copy committed is
-    /// validated, and none replaces an installed skin until every one has passed.
+    /// validated, and none replaces an installed skin until every one has passed. Of several files
+    /// with one skin name (`Theme.acs4`, `Theme.acs5`), the first is the skin and the rest are left
+    /// out, so the cleanup of one cannot delete another.
     static func installAll(_ files: [URL], into folder: SkinInstallFolder,
                            validate: (URL) async throws -> Void) async throws -> [InstalledSkinFile] {
+        var names = Set<String>()
+        let files = files.filter { names.insert($0.deletingPathExtension().lastPathComponent).inserted }
         let skins = files.map { destination(of: $0, in: folder) }
         try await folder.commitAll(zip(files, skins).map { ($0, $1.url, "." + $1.url.pathExtension) }, validate: validate)
         for skin in skins {

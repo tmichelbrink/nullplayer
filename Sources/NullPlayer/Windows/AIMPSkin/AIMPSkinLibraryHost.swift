@@ -58,6 +58,15 @@ final class AIMPSkinLibraryHost {
         style = nil
     }
 
+    /// `view`'s window went off screen: the browser leaves it, if it was there. True when it was, so
+    /// the views still on screen report their areas again and one takes it.
+    @discardableResult
+    func release(from view: AIMPSkinMainView) -> Bool {
+        guard holder === view else { return false }
+        unmount()
+        return true
+    }
+
     private func unmount() {
         surface?.unmountFromHolder()
         holder = nil

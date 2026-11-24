@@ -55,6 +55,20 @@ final class AIMPSkinPlaylistMenuTests: XCTestCase {
         XCTAssertEqual(engine.playlist.map(\.title), ["Track 3"])
     }
 
+    /// With a quick search, Select All and Invert Selection reach only the rows it shows, so Remove
+    /// Selected cannot take a hidden track: here the search shows none of them.
+    func testSelectionCommandsStayInsideTheQuickSearch() throws {
+        let (target, runtime) = try make(tracks: 4)
+        runtime.state.lists.playlistSearch = "no such track"
+        target.selectAll(nil)
+        XCTAssertEqual(runtime.state.lists.playlistSelection, [])
+        target.invertSelection(nil)
+        XCTAssertEqual(runtime.state.lists.playlistSelection, [], "the hidden tracks stay out")
+        runtime.state.lists.playlistSelection = [0, 1]
+        target.removeSelected(nil)
+        XCTAssertEqual(engine.playlist.count, 4, "a hidden selected track is not removed")
+    }
+
     func testTheSectionMenusComeFromTheBuilder() throws {
         let (target, runtime) = try make(tracks: 2)
         runtime.state.lists.playlistSelection = []

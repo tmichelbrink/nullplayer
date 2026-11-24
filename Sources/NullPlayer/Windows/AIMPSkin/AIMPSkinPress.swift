@@ -10,6 +10,9 @@ final class AIMPSkinPress {
     /// A knob or slider under a pressed key (Vega lays its mute switch over the volume knob): a drag
     /// hands the press to it, a click stays the key's.
     private var under: (target: AIMPSkinTarget, start: NSPoint)?
+    /// The key a drag took the press from: what it does on release still runs as the button comes
+    /// up (a long press's counter-driven action ends with its `OnMouseUp`).
+    private(set) var handedOver: AIMPSkinTarget?
     /// Where a knob's drag started, in window points, and its value then.
     var knobStart: (point: NSPoint, value: Double)?
     private var holdTimer: Timer?
@@ -24,6 +27,7 @@ final class AIMPSkinPress {
         serial += 1
         self.target = target
         self.under = under
+        handedOver = nil
         holdFired = false
     }
 
@@ -31,6 +35,7 @@ final class AIMPSkinPress {
     /// from where it went down: the press is now that drag's. Nil while it stays the key's.
     func handOver(at point: NSPoint) -> (target: AIMPSkinTarget, start: NSPoint)? {
         guard let under, hypot(point.x - under.start.x, point.y - under.start.y) > 3 else { return nil }
+        handedOver = target
         target = under.target
         self.under = nil
         return under
@@ -57,16 +62,17 @@ final class AIMPSkinPress {
         }
     }
 
-    /// The button came up: the press is over. The target that was held, and whether a hold acted;
-    /// nil when none was.
-    func end() -> (target: AIMPSkinTarget, holdFired: Bool)? {
+    /// The button came up: the press is over. The target that was held, whether a hold acted, and
+    /// the key a drag took the press from; nil when none was held.
+    func end() -> (target: AIMPSkinTarget, holdFired: Bool, handedOver: AIMPSkinTarget?)? {
         knobStart = nil
         holdTimer?.invalidate()
         holdTimer = nil
         guard let target else { return nil }
         self.target = nil
         under = nil
-        return (target, holdFired)
+        defer { handedOver = nil }
+        return (target, holdFired, handedOver)
     }
 
     /// A timer that also fires while a mouse button is held, which AppKit tracks in its

@@ -322,6 +322,36 @@ final class AIMPSkinScriptTests: XCTestCase {
         XCTAssertEqual(engine.state.script.variables["where"], "BFirstASecondFirst")
     }
 
+    /// `nil` compares with a link handle by identity: `LinkFind` of a pin with a link is not `nil`,
+    /// of one without is.
+    func testLinkFindComparesWithNilByIdentity() throws {
+        func call(_ object: String, _ method: String, _ arg: String) -> String {
+            "<dsgn><node text=\"\(object)\"/><node text=\"\(method)\"/><expr><string text=\"'\(arg)'\"/></expr></dsgn>"
+        }
+        func assign(_ name: String, _ value: String) -> String {
+            "<assignstmt><dsgn><node text=\"\(name)\"/></dsgn><expr>\(value)</expr></assignstmt>"
+        }
+        let isNil = { (pin: String) in call("B", "LinkFind", pin) + "<op text=\"=\"/><dsgn><node text=\"nil\"/></dsgn>" }
+        let engine = try Self.run("""
+        <program><procedure><name text="Execute"/><compoundstmt>
+          \(assign("B", "<dsgn><node text=\"TASEBindings\"/><node text=\"Create\"/></dsgn>"))
+          \(assign("L", call("B", "LinkAdd", "A")))
+          \(assign("Given", isNil("A")))
+          \(assign("Seen", isNil("Missing")))
+        </compoundstmt></procedure></program>
+        """)
+        XCTAssertEqual(engine.state.script.variables["given"], "0", "a link that exists is not nil")
+        XCTAssertEqual(engine.state.script.variables["seen"], "1", "a missing link is nil")
+    }
+
+    /// A length a server sends out of `Int`'s range is held, not trapped on.
+    @MainActor func testATrackLengthOutOfRangeIsBounded() {
+        XCTAssertEqual(AIMPSkinAudioEngineHost.seconds(9.3e18), 31_536_000_000)
+        XCTAssertEqual(AIMPSkinAudioEngineHost.seconds(.infinity), 0)
+        XCTAssertEqual(AIMPSkinAudioEngineHost.seconds(-3), 0)
+        XCTAssertEqual(AIMPSkinAudioEngineHost.seconds(61.9), 61)
+    }
+
     /// The effect resets set speed and tempo to 1 and pitch to 0: tempo moves NullPlayer's speed,
     /// pitch its pitch shift, and each value is the knob's middle (normal speed, no shift).
     func testTempoMovesTheSpeedAndPitchThePitchShift() throws {
@@ -454,7 +484,7 @@ final class AIMPSkinScriptTests: XCTestCase {
     /// `scripts` by name (`<name>.fsxml`), and a `Schema.xml` declaring the variables the tests read
     /// their results from: what a script needs of a skin.
     static func skin(form: String = #"<form name="AIMPMainForm"/>"#, entries more: [(String, String)] = [],
-                     scripts: [String: String] = [:]) throws -> AIMPSkin {
+                     scripts: [String: String] = [:], files: [(String, Data)] = []) throws -> AIMPSkin {
         func utf16LE(_ text: String) -> Data {
             Data([UInt8(text.utf16.count & 0xFF), UInt8(text.utf16.count >> 8)]) + (text.data(using: .utf16LittleEndian) ?? Data())
         }
@@ -464,7 +494,7 @@ final class AIMPSkinScriptTests: XCTestCase {
           <variable name="Where" value="" valueType="String"/></variables></schema>
         """
         let entries = ([("AIMPMainForm.xml", form), ("Schema.xml", schema)] + more).map { ($0, Data($1.utf8)) }
-            + (try scripts.sorted { $0.key < $1.key }.map { ("\($0.key).fsxml", fsxml(try node($0.value))) })
+            + (try scripts.sorted { $0.key < $1.key }.map { ("\($0.key).fsxml", fsxml(try node($0.value))) }) + files
         // The header (13 bytes), the metadata block (u32 length: name, author, about, no preview),
         // the entry count and the entries.
         let meta = utf16LE("Test") + utf16LE("") + utf16LE("") + [0]

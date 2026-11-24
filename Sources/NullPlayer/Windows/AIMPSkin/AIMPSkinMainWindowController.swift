@@ -85,6 +85,12 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
         window.delegate = self
         window.contentView = skinView
         forms.onContentChange = { [weak self] in self?.updateCompanionVisibility() }
+        // A hidden form gives the library browser up, and the windows still showing lists take it back.
+        forms.onFormHidden = { [weak self] view in
+            guard let self, self.libraryHost.release(from: view) else { return }
+            self.skinView.reportLibraryArea()
+            self.forms.reportLibraryAreas()
+        }
         skinView.onLibraryArea = { [weak self] view, rect, colours in self?.libraryHost.libraryArea(rect, colours: colours, in: view) }
         skinView.extraMenuItems = { [weak self] in self?.companionMenuItems() ?? [] }
         skinView.popupMenu = { [weak self] popup, clickedRow, window in

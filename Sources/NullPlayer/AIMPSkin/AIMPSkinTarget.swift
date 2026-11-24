@@ -110,11 +110,15 @@ struct AIMPSkinTarget: Equatable, Sendable {
         self.mask = mask
     }
 
-    /// Whether `point` (skin pixels) hits this target: inside its rect, on a drawn pixel.
+    /// Whether `point` (skin pixels) hits this target: inside its rect, on a drawn pixel. A mask of
+    /// another size than the rect is sampled as the picture is drawn stretched over it, so the clear
+    /// part of a stretched control is not clickable.
     func hit(_ point: CGPoint) -> Bool {
         guard rect.contains(point), visibleRect?.contains(point) ?? true else { return false }
-        guard let mask, mask.width == Int(rect.width), mask.height == Int(rect.height) else { return true }
-        return mask.covers(Int(point.x - rect.minX), Int(point.y - rect.minY))
+        guard let mask, mask.width > 0, mask.height > 0, rect.width > 0, rect.height > 0 else { return true }
+        let x = Int((point.x - rect.minX) * CGFloat(mask.width) / rect.width)
+        let y = Int((point.y - rect.minY) * CGFloat(mask.height) / rect.height)
+        return mask.covers(min(x, mask.width - 1), min(y, mask.height - 1))
     }
 
     /// Of `targets` (topmost last), the one a click at `point` reaches: the topmost hit, unless its

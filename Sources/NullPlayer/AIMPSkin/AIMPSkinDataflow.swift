@@ -25,7 +25,13 @@ struct AIMPSkinDataflow {
         }
 
         var values: [Key: Double] = [:]
+        /// Each concatenator's inputs (`inputs(of:)`), by depth as its value is.
+        var inputs: [Key: [Double]] = [:]
     }
+
+    /// Past this many numbers a concatenator's inputs are watched as one hash of them: a tree of
+    /// concatenators sharing inputs would otherwise return lists that grow with every level.
+    private static let mostInputs = 64
 
     /// Whether a form or item is shown: its `Visible` pin.
     func isVisible(_ name: String, depth: Int = 0) -> Bool { value(name, "Visible", depth: depth) != 0 }
@@ -117,13 +123,24 @@ struct AIMPSkinDataflow {
     /// number stays (a new title under `%T`), so every field of the playing track a template can show
     /// counts too, by their hash (not the formatted text: this is read every settle pass of every
     /// frame).
+    /// Worked out once per concatenator and depth for this state, as commutators' values are: one read
+    /// by many inputs is not expanded again on every path to it.
     func inputs(of link: AIMPSkinLink, depth: Int = 0) -> [Double] {
         guard case .concatenator(let name) = link.read, depth < 8 else { return [value(of: link)] }
-        return (skin.index.providers[name]?.bindings.links ?? []).flatMap { input -> [Double] in
+        let key = Memo.Key(depth: depth, name: name)
+        if let known = commutators.inputs[key] { return known }
+        var numbers = (skin.index.providers[name]?.bindings.links ?? []).flatMap { input -> [Double] in
             let numbers = inputs(of: input, depth: depth + 1)
             guard input.pin == "FileInfo" else { return numbers }
             return numbers + [Double(host.player.templateFingerprint)]
         }
+        if numbers.count > Self.mostInputs {
+            var hasher = Hasher()
+            for number in numbers { hasher.combine(number) }
+            numbers = [Double(hasher.finalize())]
+        }
+        commutators.inputs[key] = numbers
+        return numbers
     }
 
     /// `source`'s `pin`, named at run time (a script's `BindingsGetDataAsInteger`, a counter's

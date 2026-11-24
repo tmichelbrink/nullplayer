@@ -130,7 +130,9 @@ enum AIMPControlClass: Sendable {
             .slider(Slider(isSeek: seek, isVertical: name == "SliderVertical" || props["Orientation"]?.reference == "oVertical",
                            thumb: props["SkinThumb"]?.reference))
         }
-        let digits = Digits(places: integer("Digits"), indent: integer("IndentBetweenDigits") ?? 0)
+        // Held to ±4,096 px, as the spectrum's indent is: past a screen's width no gap means more, and
+        // the painter's column arithmetic must stay inside `Int`.
+        let digits = Digits(places: integer("Digits"), indent: min(max(integer("IndentBetweenDigits") ?? 0, -4_096), 4_096))
         // Past 4,096 columns no screen shows another bar, and each is drawn every frame.
         let spectrum = Spectrum(columns: min(max(1, integer("ColumnsCount") ?? 16), 4_096), indent: CGFloat(min(max(0, integer("ColumnsIndent") ?? 1), 4_096)),
                                 color: AIMPSkinColor(props["Color"]), peakColumns: props["PeakColumns"]?.reference,

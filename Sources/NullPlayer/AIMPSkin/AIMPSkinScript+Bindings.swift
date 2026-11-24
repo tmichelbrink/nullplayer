@@ -93,7 +93,7 @@ extension AIMPSkinScript.Run {
         case .getDataAsNumber:
             return .number(link.map { flow.value(of: $0) } ?? 0)
         case .executeAction:
-            if let link { perform(link) }
+            if let link { try perform(link) }
             return Value.none
         default:
             throw Unsupported(what: "method \(member) on bindings")
@@ -135,7 +135,7 @@ extension AIMPSkinScript.Run {
 
     /// What pressing a control bound so does: an AIMP action, a counter stepped by the link's
     /// `Expression`, a tabbed group's page, or an item shown or hidden.
-    private func perform(_ link: AIMPSkinLink) {
+    private func perform(_ link: AIMPSkinLink) throws {
         let source = link.source ?? "", pin = link.pin ?? ""
         if let action = AIMPAction(source) {
             engine.ask(.action(action))
@@ -150,7 +150,9 @@ extension AIMPSkinScript.Run {
         } else if pin == "Visible" || pin == "Visibility" {
             engine.state.script[source].visible = flow.value(source, pin) == 0
         } else if pin == "Position", skin.index.providers[source]?.kind.isCounter == true {
-            engine.setCounter(source, to: flow.wrapped(AIMPSkinScript.integer(flow.value(of: link)), counter: source))
+            // As a script's own move: a counter stopped by a limit passes it on, so this run is
+            // undone with it and both run again, rather than the move being lost.
+            try engine.movingCounter(source, to: flow.wrapped(AIMPSkinScript.integer(flow.value(of: link)), counter: source))
         }
     }
 

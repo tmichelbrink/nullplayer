@@ -113,6 +113,11 @@ final class AIMPSkinMainView: NSView {
 
     /// The frame last drawn, and when and how the next is.
     var drawnFrame: AIMPSkinFrame?
+    /// The skin `drawnFrame` was drawn for (`Generation.skin`).
+    private var drawnFrameSkin = 0
+    /// `drawnFrame`, while it is the current skin's: after a switch the old frame still shows until
+    /// the new one is drawn, but a click must not reach the old skin's keys through the new runtime.
+    var inputFrame: AIMPSkinFrame? { drawnFrameSkin == generation.skin ? drawnFrame : nil }
     let scheduler = AIMPSkinFrameScheduler()
     var pointerArea: NSTrackingArea?
     let hoverTip = AIMPSkinHoverTip()
@@ -212,6 +217,7 @@ final class AIMPSkinMainView: NSView {
     /// Takes a drawn frame: its hover rects, rows, gauges and measured content, then shows it.
     private func show(_ output: AIMPSkinFrameScheduler.RenderOutput, clock: Double) {
         drawnFrame = output.frame
+        drawnFrameSkin = output.generation.skin
         // What `AutoHide` hid in this form, for the skin's bindings (a change draws again).
         runtime?.noteAutoHidden(output.frame?.autoHidden ?? [], by: self)
         if let rects = drawnFrame?.namedRects.filter({ runtime?.skin.index.hoverSources.contains($0.key) == true }), rects != hoverRects { hoverRects = rects }
@@ -227,7 +233,9 @@ final class AIMPSkinMainView: NSView {
         shadowFrameSize = (drawnFrame?.image).map { CGSize(width: $0.width, height: $0.height) }
         // Settled once a measured frame of the latest change shows (or there is no frame to measure).
         if output.generation.content == generation.content, output.measured != nil || output.frame == nil { contentDirty = false }
-        if let measured = output.measured {
+        // Only a measure of the latest content: an older render finishing after a resize would
+        // refit the window to a size already replaced (`contentDirty` keeps the next one measuring).
+        if let measured = output.measured, output.generation.content == generation.content {
             if hasContent != (measured.bounds != nil) {
                 hasContent = measured.bounds != nil
                 onContentChange?()

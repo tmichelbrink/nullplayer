@@ -15,11 +15,18 @@ final class AIMPSkinPlaylistMenuTarget: NSObject, PlaylistMenuTarget {
 
     private var engine: AudioEngine { WindowManager.shared.audioEngine }
 
-    /// The selected rows still in the playlist.
-    var selection: Set<Int> {
+    /// The selected rows still in the playlist and shown by the quick search: a command never
+    /// reaches a track the search hides.
+    var selection: Set<Int> { (runtime?.state.lists.playlistSelection ?? []).intersection(shown) }
+
+    /// The rows the quick search shows (all of them with no search), in order.
+    private var shownRows: [Int] {
         let rows = engine.playlist.indices
-        return (runtime?.state.lists.playlistSelection ?? []).filter(rows.contains)
+        guard let runtime, !runtime.state.lists.playlistSearch.isEmpty else { return Array(rows) }
+        return runtime.host.playlistIndices(matching: runtime.state.lists.playlistSearch).filter(rows.contains)
     }
+
+    private var shown: Set<Int> { Set(shownRows) }
 
     private func select(_ rows: Set<Int>, anchor: Int?) {
         guard let runtime else { return }
@@ -75,10 +82,13 @@ final class AIMPSkinPlaylistMenuTarget: NSObject, PlaylistMenuTarget {
 
     // MARK: Selecting
 
-    func selectAll(_ sender: Any?) { select(Set(engine.playlist.indices), anchor: engine.playlist.isEmpty ? nil : 0) }
+    func selectAll(_ sender: Any?) {
+        let rows = shownRows
+        select(Set(rows), anchor: rows.first)
+    }
     func selectNone(_ sender: Any?) { select([], anchor: nil) }
     func invertSelection(_ sender: Any?) {
-        select(Set(engine.playlist.indices).subtracting(selection), anchor: nil)
+        select(shown.subtracting(selection), anchor: nil)
     }
 
     // MARK: Sorting

@@ -135,8 +135,8 @@ final class AIMPSkinAudioEngineHost {
         // counter reads 000).
         let elapsed = engine.state == .stopped ? 0 : engine.currentTime
         player.position = duration.isFinite && duration > 0 ? min(1, max(0, elapsed / duration)) : 0
-        player.elapsedSeconds = elapsed.isFinite && elapsed > 0 ? Int(elapsed) : 0
-        player.durationSeconds = duration.isFinite && duration > 0 ? Int(duration) : 0
+        player.elapsedSeconds = Self.seconds(elapsed)
+        player.durationSeconds = Self.seconds(duration)
         let now = Calendar.current.dateComponents([.hour, .minute, .second], from: Date())
         player.timeOfDay = (now.hour ?? 0) * 3_600 + (now.minute ?? 0) * 60 + (now.second ?? 0)
         player.shuffle = engine.shuffleEnabled
@@ -237,7 +237,7 @@ final class AIMPSkinAudioEngineHost {
         let rows = engine.playlist.map { track -> AIMPSkinPlayerSnapshot.Playlist.Row in
             let key = PlaylistKey(track, fields: fields)
             let text = texts[key] ?? playlistTextCache[key] ?? (fields.text(for: track),
-                                                                track.duration.map { $0.isFinite && $0 > 0 ? Int($0) : 0 } ?? 0)
+                                                                track.duration.map(Self.seconds) ?? 0)
             texts[key] = text
             let bytes = fileSizes[track.url]
             if bytes == nil, track.url.isFileURL { unsized.append(track.url) }
@@ -464,5 +464,11 @@ final class AIMPSkinAudioEngineHost {
         let duration = engine.duration
         let end = duration.isFinite && duration > 0 ? duration - 1 : .infinity
         engine.seek(to: max(0, min(end, seconds)))
+    }
+
+    /// Whole seconds of a time a skin shows, 0 for none; held under a thousand years so a length a
+    /// server sends (a Subsonic song's) cannot trap converting to `Int`.
+    nonisolated static func seconds(_ time: TimeInterval) -> Int {
+        time.isFinite && time > 0 ? Int(min(time, 31_536_000_000)) : 0
     }
 }

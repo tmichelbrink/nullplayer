@@ -22,6 +22,12 @@ enum AIMPAction: Hashable, Sendable, CustomStringConvertible {
     /// Whether NullPlayer does something for it: the player's actions (`AIMPSkinAudioEngineHost`'s
     /// `perform`) and the window's own (`AIMPSkinMainView.perform`). A key for one it does not do
     /// is dimmed and says so (`AIMPSkinLayout.unavailable`).
+    /// An action only a press of the user's may ask for: quitting, and writing the playing track to
+    /// the clipboard. A skin's frame, timer and load scripts run unasked, and may not.
+    var needsUserInput: Bool {
+        [.mainExit, .playableFileCopyInfoToClipboard, .playableFileCopyFileToClipboard].contains(self)
+    }
+
     var isHandled: Bool {
         switch self {
         case .playerRadioCapture, .playerRepeatPartAB, .unknown: false

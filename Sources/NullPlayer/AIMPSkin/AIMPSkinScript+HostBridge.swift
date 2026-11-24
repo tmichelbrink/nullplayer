@@ -250,8 +250,11 @@ extension AIMPSkinScript.Run {
             // Taking the control over afresh, the script's value holds until its `Visibility`
             // bindings next change from where they stand now (`Engine.pushVisibility`), not from the
             // value last seen under an earlier override: Vega MP-120 swaps its stop key on every
-            // stop, and a gate value stale from the first swap would undo the second at once.
-            if engine.state.script[name].visible == nil { engine.state.script[name].visibleGate = nil }
+            // stop, and a gate value stale from the first swap would undo the second at once. The
+            // gate is taken as it stands now, so one that moves before the next frame still ends it.
+            if engine.state.script[name].visible == nil {
+                engine.state.script[name].visibleGate = engine.visibilityGate(name, flow: flow)
+            }
             engine.state.script[name].visible = value.number != 0
         case (_, .enabled):
             engine.state.script[name].timerEnabled = value.number != 0

@@ -31,14 +31,19 @@ final class AIMPSkinCache<Key: Hashable & Sendable, Value: Sendable>: Sendable {
     }
 
     /// The value for `key`, as `make` makes it, made once while it is kept. One costing more than
-    /// the whole `byteLimit` is handed back without being kept.
-    func value(_ key: Key, making make: () -> Value) -> Value {
-        if let found = stored.withLock({ $0.values[key] }) { return found }
+    /// the whole `byteLimit` is handed back without being kept. A kept value `isValid` refuses (one
+    /// whose source is gone) is made again and replaced.
+    func value(_ key: Key, isValid: (Value) -> Bool = { _ in true }, making make: () -> Value) -> Value {
+        if let found = stored.withLock({ $0.values[key] }), isValid(found) { return found }
         let made = make()
         let bytes = cost(made)
         guard bytes <= byteLimit else { return made }
         return stored.withLock { [limit, byteLimit] stored in
-            if let found = stored.values[key] { return found }
+            if let found = stored.values[key], isValid(found) { return found }
+            if stored.values[key] != nil {
+                stored.bytes -= stored.costs.removeValue(forKey: key) ?? 0
+                stored.order.removeAll { $0 == key }
+            }
             stored.values[key] = made
             stored.costs[key] = bytes
             stored.bytes += bytes

@@ -177,6 +177,24 @@ enum AIMPSkinRenderer {
         let skin: AIMPSkin
         /// The page each tabbed group shows.
         let page: (String) -> Int
+        /// Each search made, by item and what it inherits: a tree of side-by-side parts under items
+        /// with minimums is searched once per item, not again at every level that passes a floor.
+        private let searches = Searches()
+
+        private final class Searches {
+            struct Key: Hashable {
+                let item: ObjectIdentifier
+                let revealing: Bool
+                let inset: [CGFloat]
+                let floor: [CGFloat]
+            }
+
+            var found: [Key: Found] = [:]
+        }
+
+        init(skin: AIMPSkin, page: @escaping (String) -> Int) {
+            (self.skin, self.page) = (skin, page)
+        }
 
         /// What a search found: the size, when it met a picture (or a row of parts beside each
         /// other); the largest `SizeMinimal` (with the margins around it) met on the way, the first
@@ -199,6 +217,15 @@ enum AIMPSkinRenderer {
         /// `item`'s size: its picture's, grown to its ancestors' minimums (`floor`), the margins
         /// around it (`inset`) included. `revealing`: items that start hidden count too.
         func search(_ item: AIMPSkinItem, revealing: Bool, inset: CGSize = .zero, floor: CGSize = .zero) -> Found {
+            let key = Searches.Key(item: ObjectIdentifier(item), revealing: revealing,
+                                   inset: [inset.width, inset.height], floor: [floor.width, floor.height])
+            if let known = searches.found[key] { return known }
+            let found = searched(item, revealing: revealing, inset: inset, floor: floor)
+            searches.found[key] = found
+            return found
+        }
+
+        private func searched(_ item: AIMPSkinItem, revealing: Bool, inset: CGSize, floor: CGSize) -> Found {
             var found = Found()
             let inset = item.layout.slot(inset)
             var floor = floor

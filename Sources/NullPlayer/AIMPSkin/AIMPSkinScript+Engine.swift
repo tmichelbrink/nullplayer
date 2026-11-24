@@ -197,12 +197,18 @@ extension AIMPSkinScript {
         private func pushVisibility() {
             let flow = self.flow
             for name in state.script.objects.values(\.visible).keys {
-                let gates = (skin.index.byName[name]?.gates ?? []).filter { $0.source != skin.index.mirrors[name] }
-                guard !gates.isEmpty else { continue }
-                let value: Double = gates.allSatisfy { flow.value(of: $0) != 0 } ? 1 : 0
+                guard let value = visibilityGate(name, flow: flow) else { continue }
                 if let last = state.script[name].visibleGate, last != value { state.script[name].visible = nil }
                 state.script[name].visibleGate = value
             }
+        }
+
+        /// What `name`'s `Visibility` bindings say now (1 shown, 0 hidden), its mirror's left out; nil
+        /// with none. A script's override of `Visible` holds until this changes (`pushVisibility`).
+        func visibilityGate(_ name: String, flow: AIMPSkinDataflow) -> Double? {
+            let gates = (skin.index.byName[name]?.gates ?? []).filter { $0.source != skin.index.mirrors[name] }
+            guard !gates.isEmpty else { return nil }
+            return gates.allSatisfy { flow.value(of: $0) != 0 } ? 1 : 0
         }
 
         /// Sets counter `name` to `value`. A `ScriptableOperatorCounter` runs its script with `State`
@@ -257,7 +263,9 @@ extension AIMPSkinScript {
             guard !runningCounters.contains(name) else { return }
             runningCounters.insert(name)
             defer { runningCounters.remove(name) }
-            let after = try atomically { try run(program, statePosition: position) }
+            // One call deeper on the budget, its block too: counters whose blocks move each other
+            // stop at the depth limit rather than running the stack out.
+            let after = try budget.nested { try atomically { try run(program, statePosition: position) } }
             state.script[name].counter = AIMPSkinScript.integer(after)
         }
 

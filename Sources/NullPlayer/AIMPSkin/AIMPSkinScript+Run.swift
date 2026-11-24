@@ -369,6 +369,11 @@ extension AIMPSkinScript {
                 guard case .array(let members) = right else { return .number(0) }
                 return truth(members.values.contains { $0.string == left.string })
             }
+            // `nil` and a binding handle compare by identity: both read as '' as text, so
+            // `LinkFind('X') = nil` held for a link that exists.
+            if numeric == .equal || numeric == .notEqual, let same = Self.sameHandle(left, right) {
+                return truth(numeric == .equal ? same : !same)
+            }
             if op.isComparison, !Self.comparesAsNumbers(left, right) {
                 let (a, b) = (left.string, right.string)
                 switch numeric {
@@ -396,6 +401,18 @@ extension AIMPSkinScript {
         }
 
         /// Whether a comparison is numeric: a number against a number, or against text that reads as one.
+        /// Whether `left` and `right` are one handle, when either is `nil` or a binding handle; nil when
+        /// neither is, and they compare as values do.
+        private static func sameHandle(_ left: Value, _ right: Value) -> Bool? {
+            switch (left, right) {
+            case (.none, .none): return true
+            case (.link(let a, let i), .link(let b, let j)): return a == b && i == j
+            case (.bindings(let a), .bindings(let b)): return a == b
+            case (.none, _), (_, .none), (.link, _), (_, .link), (.bindings, _), (_, .bindings): return false
+            default: return nil
+            }
+        }
+
         private static func comparesAsNumbers(_ left: Value, _ right: Value) -> Bool {
             func number(_ value: Value) -> Double? {
                 switch value {

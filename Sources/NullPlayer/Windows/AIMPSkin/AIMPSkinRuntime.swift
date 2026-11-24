@@ -270,7 +270,7 @@ final class AIMPSkinRuntime {
             if !(woken && outcome.changes.isEmpty) {
                 for view in self.views where view.isOnScreen || view.contentDirty { view.render(clock: now) }
             }
-            self.send(outcome)
+            self.send(outcome, byUser: false)
             self.wakeForTimers(after: now, late: CACurrentMediaTime() - asked)
         }
     }
@@ -321,12 +321,17 @@ final class AIMPSkinRuntime {
 
     /// Sends what the scripts ask of the player. The first job whose budget ran out is logged: the
     /// scripts it stopped run again when their input next moves, rather than stalling anything now.
-    private func send(_ outcome: AIMPSkinScript.Outcome) {
+    /// Scripts the user's input did not run (the frame's, timers', load handlers') may not ask for an
+    /// action that needs it (`AIMPAction.needsUserInput`).
+    private func send(_ outcome: AIMPSkinScript.Outcome, byUser: Bool) {
         if outcome.spentBudget, !reportedSpentBudget {
             reportedSpentBudget = true
             NSLog("AIMPSkin: '%@' scripts ran out of their per-frame budget", skin.name)
         }
-        outcome.commands.forEach { onAction?($0) }
+        for command in outcome.commands {
+            if !byUser, case .action(let action) = command, action.needsUserInput { continue }
+            onAction?(command)
+        }
     }
     private var reportedSpentBudget = false
 
@@ -348,7 +353,7 @@ final class AIMPSkinRuntime {
         scripts.run(jobs.map(\.job), host: host) { [weak self] outcomes in
             for (outcome, asked) in zip(outcomes, jobs) {
                 self?.apply(outcome.changes)
-                self?.send(outcome)
+                self?.send(outcome, byUser: asked.job != .load)
                 asked.done?(outcome.didSomething)
             }
         }
@@ -397,11 +402,16 @@ final class AIMPSkinRuntime {
         let current = Double(flow.activePage(group))
         // A skin's step expression may evaluate to anything (`AIMPSkinStep.next` holds it to an `Int`).
         let next = AIMPSkinScript.integer(step.next(from: current) ?? current)
-        let page = ((next % count) + count) % count
+        showPage(group, ((next % count) + count) % count)
+    }
+
+    /// Shows page `page` of tabbed group `group`, a click's or the wheel's; a mirrored page's group
+    /// turns with it (`AIMPSkinIndex.mirrors`).
+    func showPage(_ group: String, _ page: Int) {
         state.script[group].activePage = page
-        // A mirrored page's group turns with it (`AIMPSkinIndex.mirrors`).
-        let index = flow.skin.index
-        if let tab = index.groups[group]?[page], let mirror = index.mirrors[tab], let other = index.tabOf[mirror] {
+        let index = skin.index
+        if let pages = index.groups[group], pages.indices.contains(page), let mirror = index.mirrors[pages[page]],
+           let other = index.tabOf[mirror] {
             state.script[other.group].activePage = other.index
         }
     }

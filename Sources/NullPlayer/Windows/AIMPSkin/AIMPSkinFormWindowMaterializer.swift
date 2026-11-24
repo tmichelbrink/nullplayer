@@ -42,6 +42,9 @@ final class AIMPSkinFormWindowMaterializer: NSObject, NSWindowDelegate {
     var recordsVisibility = false
     /// What one of the forms draws changed size or content: the controller shows and hides by it.
     var onContentChange: (() -> Void)?
+    /// A form's window was ordered out (`update`): the library browser it may hold goes back to a view
+    /// still on screen.
+    var onFormHidden: ((AIMPSkinMainView) -> Void)?
 
     init(store: SkinWindowStore) {
         self.store = store
@@ -116,6 +119,7 @@ final class AIMPSkinFormWindowMaterializer: NSObject, NSWindowDelegate {
             guard wanted != (windows[name]?.window.isVisible ?? false) else { continue }
             guard wanted else {
                 windows[name]?.window.orderOut(nil)
+                onFormHidden?(view)
                 continue
             }
             // Off screen it was not drawn (`AIMPSkinRuntime.tick`): it shows a frame of now.
@@ -167,6 +171,11 @@ final class AIMPSkinFormWindowMaterializer: NSObject, NSWindowDelegate {
     }
 
     // MARK: - Size and place
+
+    /// Every form's view reports its library area again (`AIMPSkinMainView.reportLibraryArea`).
+    func reportLibraryAreas() {
+        for view in views.values { view.reportLibraryArea() }
+    }
 
     /// The UI scale changed: every form draws and fits at it.
     func apply(scale: CGFloat) {
