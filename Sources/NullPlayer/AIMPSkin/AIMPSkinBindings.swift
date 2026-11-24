@@ -45,8 +45,11 @@ struct AIMPSkinBindings: Sendable {
             guard let source = link["Source"], link["SourcePin"] == nil, link["TargetPin"] == nil, AIMPAction(source) != nil else {
                 return [AIMPSkinLink(link, names: names)]
             }
+            // Its other attributes come along (`Expression="not Value"` shapes the lamp).
             return ["Action", "State"].map { pin in
-                AIMPSkinLink(AIMPNode.element("link", ["Source": source, "SourcePin": pin, "TargetPin": pin], []), names: names)
+                var attributes = link.attributes
+                (attributes["SourcePin"], attributes["TargetPin"]) = (pin, pin)
+                return AIMPSkinLink(AIMPNode.element("link", attributes, []), names: names)
             }
         }
         byTarget = Dictionary(grouping: links.filter { $0.target != nil }, by: { $0.target! })

@@ -83,10 +83,11 @@ extension AIMPSkinScript {
                 let interval = tickedInterval(state.script[name].timerInterval ?? timer.interval ?? 1_000)
                 let last = state.animation[name].timerFired ?? -.infinity
                 guard host.feedback.clock - last >= interval else { continue }
-                state.animation[name].timerFired = host.feedback.clock
-                // Every link reads the counters as the timer fired.
+                // Every link reads the counters as the timer fired; a tick its gate holds back does
+                // not fire, so the interval still runs from the last one that did.
                 let flow = self.flow
                 if let gate = timer.bindings["Accessibility"], flow.value(of: gate) == 0 { continue }
+                state.animation[name].timerFired = host.feedback.clock
                 for link in timer.bindings.all("Action") {
                     guard let source = link.source else { continue }
                     // A timer on an action repeats it (Technics' REW/FF held down seek every 100 ms).

@@ -78,8 +78,13 @@ struct AIMPSkinDataflow {
         if let set = state.script[name].visible { return set ? 1 : 0 }
         // An item's own `Visibility` bindings, as the painter shows it (Unsquareable's tab column
         // shows while `TabControl_Small`, shown with the hidden compact player, is hidden).
+        // Bindings that all read true show it, whatever it was saved as (`InitialVisible` False), as
+        // the painter draws it; with none, its saved visibility stands.
         let gates = (skin.index.byName[name]?.gates ?? []).filter { !isMirror($0, of: name) }
-        if !gates.isEmpty, !gates.allSatisfy({ value(of: $0, depth: depth + 1) != 0 }) { return 0 }
+        if !gates.isEmpty {
+            guard gates.allSatisfy({ value(of: $0, depth: depth + 1) != 0 }) else { return 0 }
+            return isOnActivePage(name, depth: depth + 1) ? 1 : 0
+        }
         return (!skin.index.hiddenItems.contains(name) && isOnActivePage(name, depth: depth + 1)) ? 1 : 0
     }
 
@@ -105,15 +110,26 @@ struct AIMPSkinDataflow {
 
     /// What `link` reads, as a trigger watches it: a concatenator's inputs, and theirs (its text
     /// changes when any of them does), else its value. A `FileInfo` input's text moves while its
-    /// number stays (a new title under `%T`), so the playing track's tags count too, by their hash
-    /// (not the formatted text: this is read every settle pass of every frame).
+    /// number stays (a new title under `%T`), so every field of the playing track a template can show
+    /// counts too, by their hash (not the formatted text: this is read every settle pass of every
+    /// frame).
     func inputs(of link: AIMPSkinLink, depth: Int = 0) -> [Double] {
         guard case .concatenator(let name) = link.read, depth < 8 else { return [value(of: link)] }
         return (skin.index.providers[name]?.bindings.links ?? []).flatMap { input -> [Double] in
             let numbers = inputs(of: input, depth: depth + 1)
             guard input.pin == "FileInfo" else { return numbers }
             let track = host.player
-            return numbers + [Double([track.title, track.artist, track.album].hashValue)]
+            var hasher = Hasher()
+            for text in [track.title, track.artist, track.album, track.genre, track.fileType, track.fileName, track.fileDirectory] {
+                hasher.combine(text)
+            }
+            for number in [track.year, track.bitrate, track.sampleRate, track.channels, track.durationSeconds, track.discNumber] {
+                hasher.combine(number)
+            }
+            hasher.combine(track.fileSize)
+            hasher.combine(track.rating)
+            hasher.combine(track.playCount)
+            return numbers + [Double(hasher.finalize())]
         }
     }
 
@@ -158,11 +174,15 @@ struct AIMPSkinDataflow {
         // `%IFEqual(…)` to 0 for a file, 2 for radio). A trigger watches its inputs (`inputs(of:)`).
         case .concatenator(let name):
             return Double(concatenatorText(name, depth: depth + 1).trimmingCharacters(in: .whitespaces)) ?? 0
+        // Read through its `Module`, as a position it holds is: `PositionDefault` 4 of 3 positions is 1.
         case .counter(let name):
             if let held = state.script[name].counter { return Double(held) }
+            if name == "CounterPosition" { return host.value(.elapsed) }
             guard let provider = skin.index.providers[name] else { return 0 }
-            if let link = provider.bindings["Position"] { return value(of: link, depth: depth + 1) }
-            return Double(provider.positionDefault)
+            if let link = provider.bindings["Position"] {
+                return Double(wrapped(AIMPSkinScript.integer(value(of: link, depth: depth + 1)), counter: name))
+            }
+            return Double(wrapped(provider.positionDefault, counter: name))
         }
     }
 

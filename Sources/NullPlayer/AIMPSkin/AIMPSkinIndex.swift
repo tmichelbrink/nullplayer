@@ -197,8 +197,9 @@ struct AIMPSkinIndex: Sendable {
         for node in nodes + unopened.flatMap({ $0.descendants() }) where node.tag == "item" {
             guard let name = node["name"] else { continue }
             let layout = AIMPSkinItem.Layout(node)
-            names.items.insert(name)
-            if !layout.savedShown { hiddenItems.insert(name) }
+            // Its saved visibility is the first item's of the name, the one lookups find: an unopened
+            // form's hidden namesake does not hide the main form's.
+            if names.items.insert(name).inserted, !layout.savedShown { hiddenItems.insert(name) }
             // The forms shown first: a name an unopened form repeats is theirs.
             guard layout.isTabbedGroup, groups[name] == nil else { continue }
             // Only named pages are tabs: an unnamed one counts in neither `tabOf` nor the first shown.

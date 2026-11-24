@@ -45,14 +45,15 @@ extension AIMPSkinScript {
         return try node(0)
     }
 
-    /// XML character references in attribute text (`&#60;&#62;` is `<>`).
+    /// XML character references in attribute text (`&#60;&#62;` and `&#x3C;&#x3E;` are `<>`); an
+    /// unterminated `&` stays as written.
     static func decodeEntities(_ text: String) -> String {
         guard text.contains("&") else { return text }
         var out = ""
         var rest = Substring(text)
         while let amp = rest.firstIndex(of: "&") {
-            out += rest[..<amp]
             guard let semi = rest[amp...].firstIndex(of: ";") else { break }
+            out += rest[..<amp]
             let entity = rest[rest.index(after: amp)..<semi]
             switch entity {
             case "lt": out += "<"
@@ -61,7 +62,9 @@ extension AIMPSkinScript {
             case "quot": out += "\""
             case "apos": out += "'"
             default:
-                if entity.hasPrefix("#"), let code = UInt32(entity.dropFirst()), let scalar = UnicodeScalar(code) {
+                let number = entity.dropFirst()
+                let code = number.first == "x" || number.first == "X" ? UInt32(number.dropFirst(), radix: 16) : UInt32(number)
+                if entity.hasPrefix("#"), let code, let scalar = UnicodeScalar(code) {
                     out.append(Character(scalar))
                 } else {
                     out += rest[amp...semi]

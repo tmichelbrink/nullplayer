@@ -5290,8 +5290,9 @@ class WindowManager {
         // Update minSize. A `.wal` skin declares its own `minimum_w`/`minimum_h` and may be freely
         // resizable, so pinning the minimum to the current size would take that away. A `.wmz`
         // skin declares the same thing as `WMPResizeLimits`, enforced in its own
-        // `windowWillResize`, and is excluded for the same reason.
-        if uiMode != .winampModern, uiMode.controllerFamily != .wmp {
+        // `windowWillResize`, and is excluded for the same reason. An AIMP skin sizes from its own
+        // edges, never below its layout's least size (`AIMPSkinMainView+Sizing`), likewise.
+        if uiMode != .winampModern, uiMode.controllerFamily != .wmp, uiMode.controllerFamily != .aimp {
             mainWindow.minSize = mainAdjustedSize
         }
 

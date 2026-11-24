@@ -66,8 +66,18 @@ indirect enum AIMPSkinSource: Sendable, Equatable {
         /// NullPlayer's window for a form the skin does not draw (`AIMPFormRole.isOpen`).
         case window(AIMPFormRole)
 
+        /// The pin names matched below, by their lower case: AIMP reads a pin's name without regard to
+        /// case (`prvPlayerState.trackposition` is the position, not 0).
+        private static let pins: [String: String] = Dictionary(uniqueKeysWithValues: [
+            "Action", "BitRate", "Channels", "Checked", "Count", "CoverArt", "Duration", "Flashing", "LevelL", "LevelR",
+            "Mark", "MarkAvailable", "NightMode", "OnTrackFinished", "OnTrackStarted", "Position", "PositionMax", "Progress",
+            "SampleRate", "Size", "State", "Time", "TrackDuration", "TrackPosition", "TrackPositionRemaining", "Visible",
+            "WaveformEnabled",
+        ].map { ($0.lowercased(), $0) })
+
         /// The pin `source`.`pin` of the player, nil for anything else.
         init?(_ source: String, _ pin: String) {
+            let pin = Self.pins[pin.lowercased()] ?? pin
             switch (source, pin) {
             // Scripts ask an action whether it is on as `Checked`: Denon Classic Style's speakers
             // script mutes when its speakers go off unless already muted, and read as never muted it
@@ -87,7 +97,7 @@ indirect enum AIMPSkinSource: Sendable, Equatable {
             case ("Playlist", "Duration"): self = .playlistDuration
             case ("Playlist", "Size"): self = .playlistSize
             // AIMP reads pin names without regard to case; skins spell this one both ways.
-            case ("prvPlayingFileInfo", "BitRate"), ("prvPlayingFileInfo", "Bitrate"): self = .bitrate
+            case ("prvPlayingFileInfo", "BitRate"): self = .bitrate
             case ("prvPlayingFileInfo", "SampleRate"): self = .sampleRate
             case ("prvPlayingFileInfo", "Channels"): self = .channels
             case ("prvPlayingFileInfo", "Mark"): self = .rating
@@ -160,6 +170,8 @@ indirect enum AIMPSkinSource: Sendable, Equatable {
         case ("prvPlaylistManager", "ActivePlaylistName"): return .text(AIMPSkinList.playlistName)
         default: break
         }
+        // Vega MP-120's tape counter: playback seconds until its script sets it, then its own position.
+        if source == "CounterPosition", pin.caseInsensitiveCompare("Position") == .orderedSame { return .counter(source) }
         if let player = PlayerPin(source, pin) { return .player(player) }
         switch (names.providers[source], pin) {
         case (.commutator?, "Result"): return .commutator(source)

@@ -128,10 +128,10 @@ extension AIMPSkinScript.Run {
             try arity(2)
             // A tabbed group's page reads as its name: Mayak MP-140C builds `Skin.VUAveraged` +
             // 'Green' from its `Colour` group.
-            if args[1].string == "ActivePage", let pages = skin.index.groups[args[0].string], !pages.isEmpty {
-                return .string(pages[flow.activePage(args[0].string)])
-            }
-            return .string(Value.number(flow.value(args[0].string, args[1].string)).string)
+            // Through the text reader the four-argument form uses: a page as its name (Mayak MP-140C
+            // builds `Skin.VUAveraged` + 'Green' from its `Colour` group), `FileInfo` as the title, a
+            // number as its digits.
+            return .string(text(of: link(source: args[0].string, pin: args[1].string, expression: "", textFormat: "")))
         case .dataAsText3:
             try arity(4)
             return .string(text(of: link(source: args[0].string, pin: args[1].string, expression: args[2].string,

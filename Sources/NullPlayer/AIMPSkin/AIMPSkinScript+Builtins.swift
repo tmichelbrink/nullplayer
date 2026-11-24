@@ -10,7 +10,7 @@ extension AIMPSkinScript {
         // `var` parameters: the first argument is the variable, read by name.
         case inc, dec, delete
         // Strings, 1-based as Pascal's.
-        case toText, toNumber, copy, pos, chr, ord, insert, compareText, compareStr, trim, length, uppercase, lowercase, format
+        case toText, toNumber, toInteger, copy, pos, chr, ord, insert, compareText, compareStr, trim, length, uppercase, lowercase, format
         // Numbers.
         case round, trunc, frac, abs, sqr, sqrt, ln, exp, sin, cos, arctan, log10, pi, power, min, max, random
         case strToBool, boolToStr, validInt, validFloat, formatFloat, null
@@ -36,7 +36,7 @@ extension AIMPSkinScript {
         /// The one table of names: what each built-in is called in a script, lowercased.
         private static let table: [String: Builtin] = [
             "inttostr": .toText, "floattostr": .toText, "vartostr": .toText,
-            "strtoint": .toNumber, "strtofloat": .toNumber, "strtointdef": .toNumber, "strtoint64": .toNumber, "strtoint64def": .toNumber,
+            "strtoint": .toInteger, "strtofloat": .toNumber, "strtointdef": .toInteger, "strtoint64": .toInteger, "strtoint64def": .toInteger,
             "copy": .copy, "pos": .pos, "chr": .chr, "ord": .ord, "insert": .insert,
             "comparetext": .compareText, "comparestr": .compareStr, "trim": .trim, "length": .length,
             "uppercase": .uppercase, "lowercase": .lowercase, "format": .format,
@@ -105,6 +105,11 @@ extension AIMPSkinScript {
                 return (.none, [0: .string(String(chars))])
             case .toText: return value(.string(text(0)))
             case .toNumber: return value(.number(Double(text(0)) ?? number(1)))
+            // An integer, decimal or Delphi's `$FF` hex; anything else (`'1.5'`) is the fallback.
+            case .toInteger:
+                let digits = text(0).trimmingCharacters(in: .whitespaces)
+                let parsed = digits.hasPrefix("$") ? Int64(digits.dropFirst(), radix: 16) : Int64(digits)
+                return value(.number(parsed.map(Double.init) ?? number(1)))
             case .copy:
                 let chars = Array(text(0)), start = Swift.max(1, integer(1)) - 1
                 let count = args.count > 2 ? Swift.max(0, integer(2)) : chars.count

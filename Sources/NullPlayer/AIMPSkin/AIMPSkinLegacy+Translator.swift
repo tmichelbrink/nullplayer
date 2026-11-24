@@ -28,7 +28,8 @@ extension AIMPSkinLegacy {
             self.images = images
             self.settings = settings
             self.equalizerWindow = equalizerWindow
-            self.objects = Dictionary(grouping: objects, by: \.item).mapValues { $0.sorted { $0.z < $1.z } }
+            // By item name without regard to case, as `[Parents]` and the layout may differ in it.
+            self.objects = Dictionary(grouping: objects, by: { $0.item.lowercased() }).mapValues { $0.sorted { $0.z < $1.z } }
         }
 
         /// A picture that draws: AIMP 3.0 keeps a 0×0 one for every object.
@@ -73,6 +74,9 @@ extension AIMPSkinLegacy {
             let align = ["top": "laTop", "bottom": "laBottom", "left": "laLeft", "right": "laRight", "client": "laClient"][
                 source["Align"] ?? "top"] ?? "laTop"
             var props = [AIMPNode.property("Alignment", align)]
+            // Its level among its docked siblings, as AIMP's conversion writes it: the layout orders by
+            // it, also where a form's or frame's own items come in another order.
+            if let level = source["AlignLevel"], Int(level) != nil { props.append(AIMPNode.property("AlignmentLevel", level)) }
             // The playlist frame's top dock is its caption while it floats: AIMP 5.40 shows it only
             // undocked (its conversion binds it `not PlaylistFrame.Docked`), and NullPlayer docks the
             // frame. NGuvu's 42-px caption over its 295-px bars, Bloom's 33-px one.
@@ -240,12 +244,16 @@ extension AIMPSkinLegacy {
 
         /// The controls in `item`, back to front, less those parked.
         func controls(in item: String, size: CGSize) -> [AIMPNode] {
-            (objects[item] ?? []).flatMap { object -> [AIMPNode] in
+            (objects[item.lowercased()] ?? []).flatMap { object -> [AIMPNode] in
                 let rect = AIMPPlacement.rect(anchors: object.anchors, margins: object.margins, size: object.size,
                                               in: CGRect(origin: .zero, size: size)) ?? .zero
                 // Parked objects sit left of or above the item; those past its right or bottom edge
-                // show when the window grows (Vega's EQ, right of the info panel).
-                guard rect.width > 0, rect.height > 0, rect.maxX > 0, rect.maxY > 0 else { return [] }
+                // show when the window grows (Vega's EQ, right of the info panel), as does one anchored
+                // to both sides that has no room yet at the item's own size.
+                let stretches = object.anchors.count == 4 ? (object.anchors[0] != 0 && object.anchors[2] != 0,
+                                                             object.anchors[1] != 0 && object.anchors[3] != 0) : (false, false)
+                guard rect.width > 0 || stretches.0, rect.height > 0 || stretches.1, rect.maxX > 0 || stretches.0,
+                      rect.maxY > 0 || stretches.1 else { return [] }
                 return control(object)
             }
         }

@@ -25,7 +25,9 @@ extension AIMPSkinColor {
     static func argb(delphi value: Int64) -> UInt32 {
         let raw = UInt32(truncatingIfNeeded: value)
         if raw & 0xFF00_0000 != 0 {
-            guard raw & 0x00FF_FFFF < 0x40 else { return raw }
+            // A system colour is `0xFF0000NN`; any other alpha byte keeps the value (`0x01000020` is a
+            // nearly clear colour, not black).
+            guard raw >> 24 == 0xFF, raw & 0x00FF_FFFF < 0x40 else { return raw }
             return [5: 0xFFFF_FFFF, 15: 0xFFF0_F0F0, 13: 0xFF33_99FF][Int(raw & 0xFF)] ?? 0xFF00_0000
         }
         return 0xFF00_0000 | (raw & 0xFF) << 16 | (raw & 0xFF00) | (raw >> 16) & 0xFF

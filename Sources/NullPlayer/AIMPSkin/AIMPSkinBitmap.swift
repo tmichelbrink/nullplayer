@@ -55,8 +55,10 @@ enum AIMPSkinBitmap {
         let rowBytes = Header.rowBytes(width: width, bits: bits)
         let (end, overflow) = rowBytes.multipliedReportingOverflow(by: height)
         let paletteEnd = 14 + infoSize + paletteCount * (infoSize == 12 ? 3 : 4)
+        // A 40-byte header's three bit masks follow it; the palette or the masks end before the rows.
+        let headerEnd = compression == 3 && infoSize == 40 ? 14 + infoSize + 12 : paletteEnd
         let pixelOffset = overflow ? 0 : min(stored.pixelOffset, data.count - end)
-        guard !overflow, pixelOffset >= 14 + infoSize, paletteEnd <= data.count else {
+        guard !overflow, pixelOffset >= headerEnd, paletteEnd <= data.count else {
             throw AIMPSkinFinding(.entryUnreadable, "\(name) is shorter than its \(width)×\(height) pixels.")
         }
         return Header(width: width, height: height, bitsPerPixel: bits, topDown: rawHeight < 0, pixelOffset: pixelOffset,

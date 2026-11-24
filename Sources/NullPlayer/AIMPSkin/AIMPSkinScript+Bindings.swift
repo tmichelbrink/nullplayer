@@ -31,8 +31,14 @@ extension AIMPSkinScript.Run {
         case (_, .free):
             return Value.none
         case (.link(let set, let pin), .set) where args.count == 2:
-            bindingSets[set, default: [:]][pin] = Self.link(bindingSets[set]?[pin], setting: first, to: args[1].string,
-                                                             names: skin.index.names)
+            let link = Self.link(bindingSets[set]?[pin], setting: first, to: args[1].string, names: skin.index.names)
+            // A new `TargetPin` files the link under that pin, where `LinkFind` and the controls look.
+            if first.caseInsensitiveCompare("TargetPin") == .orderedSame, let moved = link.target, moved != pin {
+                bindingSets[set, default: [:]][pin] = nil
+                bindingSets[set, default: [:]][moved] = link
+            } else {
+                bindingSets[set, default: [:]][pin] = link
+            }
             return Value.none
         case (.link(let set, let pin), .get) where args.count == 1:
             return .string(bindingSets[set]?[pin].flatMap { Self.attribute(first, of: $0) } ?? "")
@@ -89,7 +95,9 @@ extension AIMPSkinScript.Run {
     /// page by name, a text a script set, else the number.
     func text(of link: AIMPSkinLink) -> String {
         let source = link.source ?? "", pin = link.pin ?? ""
-        if pin == "FileInfo" { return AIMPSkinTemplate.format(link.textFormat ?? "%T", host: engine.host) }
+        if pin == "FileInfo" {
+            return AIMPSkinTemplate.format(link.textFormat.flatMap { $0.isEmpty ? nil : $0 } ?? "%T", host: engine.host)
+        }
         if pin == "ActivePage", let pages = skin.index.groups[source], !pages.isEmpty { return pages[flow.activePage(source)] }
         if let text = engine.state.script[source].text { return text }
         return Value.number(flow.value(of: link)).string
