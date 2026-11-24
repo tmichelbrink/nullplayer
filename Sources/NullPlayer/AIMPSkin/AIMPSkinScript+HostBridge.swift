@@ -270,13 +270,14 @@ extension AIMPSkinScript.Run {
             let clock = flow.host.feedback.clock
             engine.state.animation[name].stepped = clock > 0 ? clock : .infinity
         case (_, .parent):
-            // Not under itself or anything it holds: that would be a loop no window can lay out.
-            guard case .object(let parent) = value else { break }
-            var above: String? = parent.name, steps = 0
-            while let next = above, steps < 64 {
-                if next == name { return }
+            // Only into something the skin has, and not under itself or anything it holds: a holder
+            // that does not exist, or a loop, would take it out of every window. The walk goes to the
+            // top, however far.
+            guard case .object(let parent) = value, skin.index.byName[parent.name] != nil else { break }
+            var above: String? = parent.name, seen: Set<String> = []
+            while let next = above {
+                if next == name || !seen.insert(next).inserted { return }
                 above = flow.parent(of: next)
-                steps += 1
             }
             engine.state.script[name].parent = parent.name
         default:

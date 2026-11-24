@@ -30,18 +30,22 @@ extension AIMPSkinScript.Run {
         // A script frees what it made; nothing here holds on to it.
         case (_, .free):
             return Value.none
-        case (.link(let set, let pin), .set) where args.count == 2:
+        case (.link(let set, let handle), .set) where args.count == 2:
+            let pin = filed(set, handle)
             let link = Self.link(bindingSets[set]?[pin], setting: first, to: args[1].string, names: skin.index.names)
-            // A new `TargetPin` files the link under that pin, where `LinkFind` and the controls look.
+            // A new `TargetPin` files the link under that pin, where `LinkFind` and the controls look;
+            // the handle the script holds follows it (`movedLinks`).
             if first.caseInsensitiveCompare("TargetPin") == .orderedSame, let moved = link.target, moved != pin {
                 bindingSets[set, default: [:]][pin] = nil
                 bindingSets[set, default: [:]][moved] = link
+                movedLinks[set, default: [:]][handle] = moved
+                movedLinks[set]?[moved] = nil
             } else {
                 bindingSets[set, default: [:]][pin] = link
             }
             return Value.none
-        case (.link(let set, let pin), .get) where args.count == 1:
-            return .string(bindingSets[set]?[pin].flatMap { Self.attribute(first, of: $0) } ?? "")
+        case (.link(let set, let handle), .get) where args.count == 1:
+            return .string(bindingSets[set]?[filed(set, handle)].flatMap { Self.attribute(first, of: $0) } ?? "")
         case (.bindings(let set), _):
             return try method(onSet: set, member, first)
         default:
@@ -53,6 +57,8 @@ extension AIMPSkinScript.Run {
         let link = bindingSets[set]?[pin]
         switch member {
         case .linkAdd:
+            // A new link under this pin is its own, not where an earlier one moved from.
+            movedLinks[set]?[pin] = nil
             bindingSets[set, default: [:]][pin] = Self.link(link, setting: "TargetPin", to: pin, names: skin.index.names)
             return .link(set, pin: pin)
         case .linkFind:
@@ -101,6 +107,13 @@ extension AIMPSkinScript.Run {
         if pin == "ActivePage", let pages = skin.index.groups[source], !pages.isEmpty { return pages[flow.activePage(source)] }
         if let text = engine.state.script[source].text { return text }
         return Value.number(flow.value(of: link)).string
+    }
+
+    /// The pin a handle's link is filed under now, after any `TargetPin` moves.
+    private func filed(_ set: AIMPSkinScript.BindingSetKey, _ handle: String) -> String {
+        var pin = handle, seen: Set<String> = [handle]
+        while let next = movedLinks[set]?[pin], seen.insert(next).inserted { pin = next }
+        return pin
     }
 
     /// A link to `source`'s `pin` (`BindingsGetDataAsText3`), with its `Expression` when it has one.

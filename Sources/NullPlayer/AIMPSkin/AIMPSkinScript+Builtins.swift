@@ -309,7 +309,8 @@ extension AIMPSkinScript {
             let parts = spec.split(separator: ".", omittingEmptySubsequences: false)
             // Held to `formatWidthLimit`: `%999999999d` would otherwise pad to a gigabyte.
             let width = Swift.min(Int(parts.first ?? "") ?? 0, formatWidthLimit)
-            let precision = parts.count > 1 ? Int(parts[1]).map { Swift.min($0, formatWidthLimit) } : nil
+            // A negative precision (`%.-1s`) is none, as a negative width is no padding.
+            let precision = parts.count > 1 ? Int(parts[1]).flatMap { $0 < 0 ? nil : Swift.min($0, formatWidthLimit) } : nil
             var text: String
             switch kind.lowercased() {
             case "d", "u":

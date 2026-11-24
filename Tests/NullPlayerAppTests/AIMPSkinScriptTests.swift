@@ -116,6 +116,35 @@ final class AIMPSkinScriptTests: XCTestCase {
         XCTAssertEqual(engine.state.script.variables["seen"], "4")
     }
 
+    /// A `var` parameter's write survives a routine that then raises: the caller's `except` sees it.
+    func testAVarParameterWriteSurvivesARaise() throws {
+        let engine = try Self.run("""
+        <program>
+          <procedure><name text="Change"/>
+            <parameters><varparams/><var><ident text="N"/><type text="Integer"/></var></parameters>
+            <compoundstmt>
+              <assignstmt><dsgn><node text="N"/></dsgn><expr><number text="3"/></expr></assignstmt>
+              <assignstmt><dsgn><node text="N"/></dsgn><expr><number text="1"/><op text="div"/><number text="0"/></expr></assignstmt>
+            </compoundstmt>
+          </procedure>
+          <procedure><name text="Execute"/><compoundstmt>
+            <assignstmt><dsgn><node text="Given"/></dsgn><expr><number text="1"/></expr></assignstmt>
+            <trystmt>
+              <callstmt><dsgn><node text="Change"/><expr><dsgn><node text="Given"/></dsgn></expr></dsgn></callstmt>
+              <exceptstmt><assignstmt><dsgn><node text="Seen"/></dsgn><expr><number text="1"/></expr></assignstmt></exceptstmt>
+            </trystmt>
+          </compoundstmt></procedure>
+        </program>
+        """)
+        XCTAssertEqual(engine.state.script.variables["seen"], "1", "the raise was caught")
+        XCTAssertEqual(engine.state.script.variables["given"], "3", "the write before it stands")
+    }
+
+    /// A negative precision is none, not a crash: `Format('%.-1s', ['abc'])` is `abc`.
+    func testANegativeFormatPrecisionIsNone() throws {
+        XCTAssertEqual(try AIMPSkinScript.format("%.-1s", .string("abc")), "abc")
+    }
+
     /// Delphi's clock is the local civil time: 03:00 local is an eighth of the local day, whatever the
     /// time zone.
     func testTheDelphiClockReadsLocalCivilTime() throws {
@@ -334,10 +363,19 @@ final class AIMPSkinScriptTests: XCTestCase {
     }
 
     /// A script docks and undocks forms and moves items: `form.Undock`, `form.Dock`,
-    /// `FindObject(a).Parent := FindObject(b)`, and reads where one sits.
+    /// `FindObject(a).Parent := FindObject(b)`, and reads where one sits. A move into something the
+    /// skin does not have, or under the item itself, is refused.
     func testDockingAndMovingItems() throws {
-        let engine = try Self.run("""
+        let skin = try Self.skin(form: """
+        <layout><items><item name="AioHost"/><item name="Table"><items><item name="Inner"/></items></item></items></layout>
+        """)
+        let engine = AIMPSkinScript.Engine(skin: skin, host: AIMPSkinHostState(player: .probe), state: AIMPSkinState())
+        try engine.run(AIMPSkinScript.compile(Self.node("""
         <program><procedure><name text="Execute"/><compoundstmt>
+          <assignstmt><dsgn><node text="FindObject"/><expr><string text="'Table'"/></expr><node text="Parent"/></dsgn>
+            <expr><dsgn><node text="FindObject"/><expr><string text="'Missing'"/></expr></dsgn></expr></assignstmt>
+          <assignstmt><dsgn><node text="FindObject"/><expr><string text="'Table'"/></expr><node text="Parent"/></dsgn>
+            <expr><dsgn><node text="FindObject"/><expr><string text="'Inner'"/></expr></dsgn></expr></assignstmt>
           <callstmt><dsgn><node text="FindObject"/><expr><string text="'LibraryForm'"/></expr><node text="Undock"/></dsgn></callstmt>
           <callstmt><dsgn><node text="FindObject"/><expr><string text="'PlaylistForm'"/></expr><node text="Dock"/></dsgn></callstmt>
           <assignstmt><dsgn><node text="FindObject"/><expr><string text="'Table'"/></expr><node text="Parent"/></dsgn>
@@ -345,7 +383,7 @@ final class AIMPSkinScriptTests: XCTestCase {
           <assignstmt><dsgn><node text="Where"/></dsgn>
             <expr><dsgn><node text="FindObject"/><expr><string text="'Table'"/></expr><node text="Parent"/></dsgn></expr></assignstmt>
         </compoundstmt></procedure></program>
-        """)
+        """)))
         XCTAssertEqual(engine.state.script.objects.values(\.docked), ["LibraryForm": false, "PlaylistForm": true])
         XCTAssertEqual(engine.state.script.parents, ["Table": "AioHost"])
         XCTAssertEqual(engine.state.script.variables["where"], "AioHost")

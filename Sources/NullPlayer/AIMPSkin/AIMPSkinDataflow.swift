@@ -13,8 +13,9 @@ struct AIMPSkinDataflow {
     let skin: AIMPSkin
     let host: AIMPSkinHostState
     let state: AIMPSkinState
-    /// Each commutator's value, worked out once for this state: one that reads others through shared
-    /// inputs would otherwise be read again on every path to it, exponentially many in a crafted skin.
+    /// Each commutator's value, worked out once for this state at each depth it is read from: one
+    /// that reads others through shared inputs would otherwise be read again on every path to it,
+    /// exponentially many in a crafted skin.
     private let commutators = Memo()
 
     private final class Memo {
@@ -163,10 +164,12 @@ struct AIMPSkinDataflow {
         // totals and groups: the skin's read-outs of them read nothing.
         case .table, .text: return 0
         case .libraryScanning: return host.player.libraryScanning ? 1 : 0
+        // By depth as well: a value cut short near the depth limit is not one read from higher up.
         case .commutator(let name):
-            if let known = commutators.values[name] { return known }
+            let key = "\(depth) \(name)"
+            if let known = commutators.values[key] { return known }
             let result = commutatorValue(name, depth: depth)
-            commutators.values[name] = result
+            commutators.values[key] = result
             return result
         // Text joined from its values, read as the number it spells, else 0 (Antares' source digit:
         // `%IFEqual(…)` to 0 for a file, 2 for radio). A trigger watches its inputs (`inputs(of:)`).

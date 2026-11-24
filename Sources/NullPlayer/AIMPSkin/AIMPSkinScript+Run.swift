@@ -89,6 +89,9 @@ extension AIMPSkinScript {
         /// Binding sets the script holds (`AIMPSkinScript+Bindings.swift`).
         var bindingSets: [BindingSetKey: BindingSet] = [:]
         var bindingSetsMade = 0
+        /// Where a link a script moved to another `TargetPin` went, by its old pin: a handle the script
+        /// still holds (`L := LinkAdd('Old')`) follows it there.
+        var movedLinks: [BindingSetKey: [String: String]] = [:]
 
         var skin: AIMPSkin { engine.skin }
         var flow: AIMPSkinDataflow { engine.flow }
@@ -175,10 +178,12 @@ extension AIMPSkinScript {
         /// names; otherwise they are bound in order in a new scope, a missing one at its default.
         /// Returns the routine's `Result` (or the value assigned to its name).
         @discardableResult
-        private func run(_ index: Int, arguments: [Value]?) throws -> Value { try running(index, arguments: arguments).result }
+        private func run(_ index: Int, arguments: [Value]?) throws -> Value { try run(index, arguments: arguments, writingBack: [:]) }
 
-        /// As `run`, with the last value of each of its `var` parameters.
-        private func running(_ index: Int, arguments: [Value]?) throws -> (result: Value, finals: [String: Value]) {
+        /// As `run`, each `var` parameter's last value written back to the caller's variable named in
+        /// `writingBack` (by parameter position) as the routine's scope goes, whether it returns or
+        /// raises: a caller that catches the error still sees what was written.
+        private func run(_ index: Int, arguments: [Value]?, writingBack: [Int: String]) throws -> Value {
             try engine.budget.nested {
                 let routine = program.routines[index]
                 var scope: [String: Value] = [:]
@@ -189,15 +194,18 @@ extension AIMPSkinScript {
                     scope["result"] = .number(0)
                 }
                 scopes.append(scope)
-                defer { scopes.removeLast() }
+                defer {
+                    let own = scopes.removeLast()
+                    for (i, variable) in writingBack where routine.parameters.indices.contains(i) && routine.parameters[i].byReference {
+                        if let value = own[routine.parameters[i].name] { assign(variable, value) }
+                    }
+                }
                 try declare(routine.declarations)
                 if let body = routine.body {
                     do { try execute(body) } catch is ExitSignal {}
                 }
                 let own = scopes[scopes.count - 1]
-                var finals: [String: Value] = [:]
-                for parameter in routine.parameters where parameter.byReference { finals[parameter.name] = own[parameter.name] }
-                return (own[routine.name] ?? own["result"] ?? .none, finals)
+                return own[routine.name] ?? own["result"] ?? .none
             }
         }
 
@@ -447,12 +455,9 @@ extension AIMPSkinScript {
             switch call.target {
             // A `var` parameter writes its last value back to the variable passed for it (`Bump(X)`).
             case .routine(let index):
-                let (result, finals) = try running(index, arguments: args)
-                for (i, parameter) in program.routines[index].parameters.enumerated()
-                where parameter.byReference && i < call.arguments.count {
-                    if let variable = call.arguments[i].variable, let final = finals[parameter.name] { assign(variable, final) }
-                }
-                return result
+                var writingBack: [Int: String] = [:]
+                for (i, argument) in call.arguments.enumerated() { if let variable = argument.variable { writingBack[i] = variable } }
+                return try run(index, arguments: args, writingBack: writingBack)
             case .builtin(let builtin): return write(try builtin.call(args), to: call.arguments)
             case .host(let host): return try self.host(host, args)
             case .unresolved:
