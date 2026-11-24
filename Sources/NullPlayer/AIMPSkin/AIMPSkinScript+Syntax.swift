@@ -22,8 +22,9 @@ extension AIMPSkinScript {
 
     struct Routine: Sendable {
         let name: String
-        /// In order, each with its default (`maxTries: Integer = 5`, Soot's `acSetState`).
-        let parameters: [(name: String, initial: Expression?)]
+        /// In order, each with its default (`maxTries: Integer = 5`, Soot's `acSetState`), and whether
+        /// it is a `var` one, written back to the caller's variable.
+        let parameters: [(name: String, initial: Expression?, byReference: Bool)]
         let declarations: [Declaration]
         let body: Statement?
     }
@@ -284,9 +285,16 @@ extension AIMPSkinScript {
         }
 
         private func routine(_ node: AIMPNode) throws -> Routine {
-            let parameters = try (node.child("parameters")?.children("var") ?? []).flatMap { group in
-                let initial = try group.child("init")?.child("expr").map(expression)
-                return group.children("ident").compactMap { $0["text"]?.lowercased() }.map { (name: $0, initial: initial) }
+            // A `var` group arrives after a `varparams` marker.
+            var parameters: [(name: String, initial: Expression?, byReference: Bool)] = []
+            var byReference = false
+            for child in node.child("parameters")?.children ?? [] {
+                if child.tag == "varparams" { byReference = true; continue }
+                guard child.tag == "var" else { continue }
+                let initial = try child.child("init")?.child("expr").map(expression)
+                parameters += child.children("ident").compactMap { $0["text"]?.lowercased() }
+                    .map { (name: $0, initial: initial, byReference: byReference) }
+                byReference = false
             }
             return Routine(name: node.child("name")?["text"]?.lowercased() ?? "", parameters: parameters,
                            declarations: try declarations(in: node), body: try node.child("compoundstmt").map(statement))

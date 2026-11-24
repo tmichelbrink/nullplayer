@@ -166,7 +166,7 @@ extension AIMPSkinScript.Run {
             let text = property?["value"] ?? property?.named["Value"]?["value"] ?? ""
             return Double(text).map(Value.number) ?? .string(text)
         case (.object(let object), .set) where args.count == 2:
-            set(object, args[0].string, to: args[1])
+            try set(object, args[0].string, to: args[1])
             return .none
         case (.object(let object), .get) where args.count == 1:
             return get(object, args[0].string)
@@ -212,7 +212,7 @@ extension AIMPSkinScript.Run {
 
     // MARK: - Objects
 
-    private func set(_ object: HostObject, _ path: String, to value: Value) {
+    private func set(_ object: HostObject, _ path: String, to value: Value) throws {
         let name = object.name
         switch (object.kind, AIMPSkinScript.Property(path)) {
         case (_, .activePage):
@@ -235,12 +235,12 @@ extension AIMPSkinScript.Run {
         case (_, .position):
             // A scripted counter runs its script when it moves (Red Bias 2.0's layout switch sets
             // `ThemeSettingLayout`, whose script docks and undocks the library).
-            // `setCounter` writes the position itself, after keeping the old one: out of budget, the
-            // counter stays where it was, so its script runs on its next move.
+            // `movingCounter` writes the position itself, after keeping the old one: out of budget,
+            // the counter stays where it was and this script stops too, so both run again.
             let position = AIMPSkinScript.integer(value.number)
             let moved = AIMPSkinScript.integer(flow.value(name, "Position")) != position
             if moved, object.provider?.kind == .counter(scripted: true) {
-                engine.setCounter(name, to: position)
+                try engine.movingCounter(name, to: position)
             } else {
                 engine.state.script[name].counter = position
             }

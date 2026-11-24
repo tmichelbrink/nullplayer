@@ -209,11 +209,23 @@ extension AIMPSkinScript {
         /// plays), and `State` after the run is the counter's position. Stopped by a limit (the step
         /// budget, the text length), the counter stays where it was, so its script runs on the next move.
         func setCounter(_ name: String, to value: Int) {
+            _ = stopsOnLimit { try movingCounter(name, to: value) }
+        }
+
+        /// As `setCounter`, for a script that moves a counter: stopped by a limit, the counter is put
+        /// back and the limit passed on, so the script that moved it is undone too and both run again
+        /// on a later tick (rather than the outer one standing, its input seen, and the move lost).
+        func movingCounter(_ name: String, to value: Int) throws {
             let before = state
             state.script[name].counter = value
             guard let provider = skin.index.providers[name], provider.kind == .counter(scripted: true),
                   let script = provider.script, let program = program(script) else { return }
-            if stopsOnLimit({ try runCounter(name, program, at: Double(value)) }) { state = before }
+            do {
+                try runCounter(name, program, at: Double(value))
+            } catch let spent as Budget.Spent {
+                state = before
+                throw spent
+            }
         }
 
         /// Runs the event handler `handler` (a `ScriptableEventHandler` provider, or a script by

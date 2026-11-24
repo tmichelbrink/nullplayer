@@ -77,6 +77,55 @@ final class AIMPSkinScriptTests: XCTestCase {
         XCTAssertEqual(try Self.engine().run(program, statePosition: 2), 3)
     }
 
+    /// The counter's position binds its `State` parameter even where the schema declares a variable
+    /// of the same name: the variable does not stand in for the position.
+    func testACounterStateParameterShadowsASchemaVariable() throws {
+        let program = try AIMPSkinScript.compile(Self.node("""
+        <program><procedure><name text="Execute"/>
+          <parameters><varparams/><var><ident text="Seen"/><type text="Integer"/></var></parameters>
+          <compoundstmt><assignstmt><dsgn><node text="Seen"/></dsgn>
+            <expr><dsgn><node text="Seen"/></dsgn><op text="+"/><number text="1"/></expr></assignstmt></compoundstmt>
+        </procedure></program>
+        """))
+        XCTAssertEqual(try Self.engine().run(program, statePosition: 4), 5)
+    }
+
+    /// A routine's `var` parameter writes its last value back to the variable passed for it; a value
+    /// parameter does not.
+    func testAVarParameterWritesBack() throws {
+        let engine = try Self.run("""
+        <program>
+          <procedure><name text="Bump"/>
+            <parameters><varparams/><var><ident text="N"/><type text="Integer"/></var></parameters>
+            <compoundstmt><assignstmt><dsgn><node text="N"/></dsgn>
+              <expr><dsgn><node text="N"/></dsgn><op text="+"/><number text="1"/></expr></assignstmt></compoundstmt>
+          </procedure>
+          <procedure><name text="Copy"/>
+            <parameters><var><ident text="N"/><type text="Integer"/></var></parameters>
+            <compoundstmt><assignstmt><dsgn><node text="N"/></dsgn><expr><number text="9"/></expr></assignstmt></compoundstmt>
+          </procedure>
+          <procedure><name text="Execute"/><compoundstmt>
+            <assignstmt><dsgn><node text="Given"/></dsgn><expr><number text="2"/></expr></assignstmt>
+            <callstmt><dsgn><node text="Bump"/><expr><dsgn><node text="Given"/></dsgn></expr></dsgn></callstmt>
+            <assignstmt><dsgn><node text="Seen"/></dsgn><expr><number text="4"/></expr></assignstmt>
+            <callstmt><dsgn><node text="Copy"/><expr><dsgn><node text="Seen"/></dsgn></expr></dsgn></callstmt>
+          </compoundstmt></procedure>
+        </program>
+        """)
+        XCTAssertEqual(engine.state.script.variables["given"], "3")
+        XCTAssertEqual(engine.state.script.variables["seen"], "4")
+    }
+
+    /// Delphi's clock is the local civil time: 03:00 local is an eighth of the local day, whatever the
+    /// time zone.
+    func testTheDelphiClockReadsLocalCivilTime() throws {
+        let local = try XCTUnwrap(DateComponents(calendar: Calendar(identifier: .gregorian), year: 2026, month: 11, day: 24, hour: 3).date)
+        let value = AIMPSkinScript.Builtin.dateTime(local)
+        XCTAssertEqual(value - value.rounded(.down), 0.125, accuracy: 0.000_01)
+        XCTAssertEqual(value.rounded(.down), 46_350, "2026-11-24 is day 46,350 from 1899-12-30")
+        XCTAssertEqual(AIMPSkinScript.Builtin.date(value).timeIntervalSince(local), 0, accuracy: 0.01)
+    }
+
     /// A unit with no `Execute` runs its own `begin … end.` block and finishes.
     func testAProgramWithoutExecuteRunsItsBlock() throws {
         let engine = try Self.run("""

@@ -186,7 +186,7 @@ extension AIMPSkinScript {
                 let now = Self.dateTime(Date())
                 return value(.number(now - now.rounded(.down)))
             case .encodeDate:
-                let parts = DateComponents(calendar: Calendar(identifier: .gregorian), year: integer(0), month: integer(1), day: integer(2))
+                let parts = DateComponents(calendar: Self.civil, year: integer(0), month: integer(1), day: integer(2))
                 return value(.number(parts.date.map { ($0.timeIntervalSince(Self.epoch) / 86_400).rounded() } ?? 0))
             case .encodeTime: return value(.number((number(0) * 3_600 + number(1) * 60 + number(2) + number(3) / 1_000) / 86_400))
             case .decodeTime:
@@ -212,7 +212,15 @@ extension AIMPSkinScript {
             }
         }
 
-        private static let epoch = DateComponents(calendar: Calendar(identifier: .gregorian), year: 1899, month: 12, day: 30).date!
+        /// Delphi's `TDateTime` is a civil date and time, days since 1899-12-30: kept in UTC, so the
+        /// local offset is applied once, at the real instant (local 03:00 in UTC−5 read as 22:00 the
+        /// day before when the epoch was local too).
+        private static let civil: Calendar = {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone(identifier: "UTC") ?? .current
+            return calendar
+        }()
+        private static let epoch = DateComponents(calendar: civil, year: 1899, month: 12, day: 30).date!
 
         static func dateTime(_ date: Date) -> Double {
             let local = date.addingTimeInterval(TimeInterval(TimeZone.current.secondsFromGMT(for: date)))

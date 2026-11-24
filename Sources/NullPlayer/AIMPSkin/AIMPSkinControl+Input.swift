@@ -114,12 +114,13 @@ extension AIMPSkinControl {
         /// NullPlayer's like it, else the player menu.
         static func press(_ bindings: AIMPSkinBindings, props: [String: AIMPNode], index: AIMPSkinIndex) -> AIMPSkinTarget.Kind? {
             if let link = bindings["Action"], let source = link.source {
-                if let action = AIMPAction(source) { return .action(action) }
-                // AIMP providers count 0–100. A counter the skin declares under a `prv` name is its own,
-                // stepped below.
-                if index.providers[source]?.kind.isCounter != true,
-                   let provider = AIMPSkinProvider(player: source), let fixed = link.expression.flatMap(Double.init) {
-                    return .setValue(provider: provider, value: fixed / 100)
+                // What the skin declares under a name comes first: its own counter `acMode`, its page
+                // group `prvPages`, are not AIMP's action or player value of that name.
+                let declared = index.providers[source] != nil || index.groups[source] != nil || index.byName[source] != nil
+                if !declared, let action = AIMPAction(source) { return .action(action) }
+                // AIMP providers count 0–100.
+                if !declared, let provider = AIMPSkinProvider(player: source), let fixed = Self.fixedValue(link.expression) {
+                    return .setValue(provider: provider, value: fixed)
                 }
                 // No `Expression`: a press turns to the next page, wrapping, as a counter's steps
                 // (Kantaris-Teyp's settings: the `>` beside its speaker style number).
@@ -155,6 +156,13 @@ extension AIMPSkinControl {
             return props["PopupMenu"]?.reference.map { .menu(index.customMenus[$0] != nil ? .custom($0) : AIMPSkinPopup($0)) }
         }
 
+        /// A link's fixed `Expression` for a player value, AIMP's 0–100 as 0–1: nil for none or one
+        /// that is not a finite number, held to the range (`150` is the top).
+        private static func fixedValue(_ expression: String?) -> Double? {
+            guard let fixed = expression.flatMap(Double.init), fixed.isFinite else { return nil }
+            return min(1, max(0, fixed / 100))
+        }
+
         /// A `ContextMenu` binding: a knob back to its middle (the Akais' bass and treble to 60),
         /// the balance keys to centre, an action.
         private static func rightClick(_ bindings: AIMPSkinBindings, index: AIMPSkinIndex) -> AIMPSkinTarget.Kind? {
@@ -164,7 +172,9 @@ extension AIMPSkinControl {
                 if index.counterModule(source) != nil {
                     return Int(exactly: fixed.rounded(.towardZero)).map { .counter(name: source, step: AIMPSkinStep(String($0))) }
                 }
-                if let provider = AIMPSkinProvider(player: source) { return .setValue(provider: provider, value: fixed / 100) }
+                if let provider = AIMPSkinProvider(player: source), let value = Self.fixedValue(link.expression) {
+                    return .setValue(provider: provider, value: value)
+                }
             }
             if let action = AIMPAction(source), link.pin == "Action" { return .action(action) }
             return nil

@@ -130,9 +130,10 @@ extension AIMPSkinScript {
         }
 
         /// The program's own block, then `Execute`, its parameters being the globals of the same
-        /// name, so a `var State` writes back; returns `State` after the run.
+        /// name, so a `var State` writes back; returns `State` after the run. The counter's position
+        /// binds `State` first: a schema variable of the same name does not stand in for it.
         func execute(statePosition: Double) throws -> Double {
-            if lookup(program.stateName) == nil { scopes[0][program.stateName] = .number(statePosition) }
+            scopes[0][program.stateName] = .number(statePosition)
             scopes[0].merge(["true": .number(1), "false": .number(0), "nil": .none]) { _, constant in constant }
             // The objects the event's other parameters are, by name.
             for (name, object) in [("arguments", Value.arguments), ("eventdata", .eventData), ("data", .visualData)]
@@ -171,7 +172,10 @@ extension AIMPSkinScript {
         /// names; otherwise they are bound in order in a new scope, a missing one at its default.
         /// Returns the routine's `Result` (or the value assigned to its name).
         @discardableResult
-        private func run(_ index: Int, arguments: [Value]?) throws -> Value {
+        private func run(_ index: Int, arguments: [Value]?) throws -> Value { try running(index, arguments: arguments).result }
+
+        /// As `run`, with the last value of each of its `var` parameters.
+        private func running(_ index: Int, arguments: [Value]?) throws -> (result: Value, finals: [String: Value]) {
             try engine.budget.nested {
                 let routine = program.routines[index]
                 var scope: [String: Value] = [:]
@@ -187,7 +191,10 @@ extension AIMPSkinScript {
                 if let body = routine.body {
                     do { try execute(body) } catch is ExitSignal {}
                 }
-                return scopes[scopes.count - 1][routine.name] ?? scopes[scopes.count - 1]["result"] ?? .none
+                let own = scopes[scopes.count - 1]
+                var finals: [String: Value] = [:]
+                for parameter in routine.parameters where parameter.byReference { finals[parameter.name] = own[parameter.name] }
+                return (own[routine.name] ?? own["result"] ?? .none, finals)
             }
         }
 
@@ -435,7 +442,14 @@ extension AIMPSkinScript {
             }
             let args = try call.arguments.map { try evaluate($0.value) }
             switch call.target {
-            case .routine(let index): return try run(index, arguments: args)
+            // A `var` parameter writes its last value back to the variable passed for it (`Bump(X)`).
+            case .routine(let index):
+                let (result, finals) = try running(index, arguments: args)
+                for (i, parameter) in program.routines[index].parameters.enumerated()
+                where parameter.byReference && i < call.arguments.count {
+                    if let variable = call.arguments[i].variable, let final = finals[parameter.name] { assign(variable, final) }
+                }
+                return result
             case .builtin(let builtin): return write(try builtin.call(args), to: call.arguments)
             case .host(let host): return try self.host(host, args)
             case .unresolved:
