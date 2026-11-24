@@ -2,7 +2,7 @@ import AppKit
 
 // MARK: - Sonique skins actions
 
-/// The Skins menu's Sonique entries; all but Mode and Get More are `SingleCanvasMainWindow`'s.
+/// The Skins menu's Sonique entries; all but Mode and Get More are `SkinFileMainWindow`'s.
 @MainActor
 extension MenuActions {
     private var soniqueController: SoniqueSkinMainWindowController? {

@@ -32,6 +32,20 @@ struct SkinInstallFolder {
         try place(incoming, at: destination)
     }
 
+    /// Several commits, all or none: every source is copied in and `validate`d as that copy, and only
+    /// once all have passed are they placed (an archive of skins: one that fails leaves every
+    /// installed skin as it was). `targets` pairs each source with its destination and staging suffix.
+    func commitAll(_ targets: [(source: URL, destination: URL, suffix: String)],
+                   validate: (URL) async throws -> Void) async throws {
+        var staged: [(incoming: URL, destination: URL)] = []
+        defer { for copy in staged { try? fileManager.removeItem(at: copy.incoming) } }
+        for target in targets {
+            staged.append((try stage(target.source, suffix: target.suffix), target.destination))
+            try await validate(staged[staged.count - 1].incoming)
+        }
+        for copy in staged { try place(copy.incoming, at: copy.destination) }
+    }
+
     /// The same commit for a family that validated the source already and imports synchronously.
     func commit(_ source: URL, to destination: URL, suffix: String = "") throws {
         let incoming = try stage(source, suffix: suffix)

@@ -1,21 +1,21 @@
 import AppKit
 
 /// What the Skins menu does for a family whose skins are installed by name and loaded by a
-/// `SingleCanvasMainWindow` (Audion, Sonique): switch to it, choose an installed skin, load one from a
+/// `SkinFileMainWindow` (Audion, Sonique, AIMP): switch to it, choose an installed skin, load one from a
 /// file, open its folder, remove one. Each family's `MenuActions` entry points call these, so its menu
 /// keeps its own selectors.
 @MainActor
-extension SingleCanvasMainWindow {
+extension SkinFileMainWindow {
     private static var shown: Self? { WindowManager.shared.mainWindowController as? Self }
 
     static func switchToFamily() {
-        guard AppCapabilities.supports(feature), WindowManager.shared.uiMode != mode else { return }
+        guard feature.isOffered, WindowManager.shared.uiMode != mode else { return }
         WindowManager.shared.reloadUI(to: mode)
     }
 
     /// In place inside the family; otherwise the selection is saved and entering the family loads it.
     static func chooseSkin(named name: String) {
-        guard AppCapabilities.supports(feature) else { return }
+        guard feature.isOffered else { return }
         if let shown {
             shown.selectSkin(named: name)
         } else {
@@ -25,7 +25,7 @@ extension SingleCanvasMainWindow {
     }
 
     static func loadSkinFromFile() {
-        guard AppCapabilities.supports(feature) else { return }
+        guard feature.isOffered else { return }
         if let shown {
             shown.importFromPanel()
         } else {

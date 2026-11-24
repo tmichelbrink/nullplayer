@@ -61,7 +61,7 @@ final class SoniqueSkinMainWindowController: NSWindowController, MainWindowProvi
 
     required init?(coder: NSCoder) { nil }
 
-    // MARK: - Choosing a skin (`SingleCanvasMainWindow`)
+    // MARK: - Choosing a skin (`SkinFileMainWindow`)
 
     var skinSelection: SkinSelection { importer.selection }
     func selectedSkinURL() throws -> URL? { try importer.selectedSkinURL() }

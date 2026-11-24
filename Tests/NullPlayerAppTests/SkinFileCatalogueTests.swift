@@ -2,11 +2,12 @@ import XCTest
 @testable import NullPlayer
 
 /// A one-file-per-skin family's installed skins (`SkinFileCatalogue`): what the selection resolves to,
-/// the errors' wording, and what installing and removing touch.
+/// the errors' wording, and that a name is one skin across the family's extensions.
 final class SkinFileCatalogueTests: XCTestCase {
+    /// A family of two extensions, the first preferred.
     private struct Catalogue: SkinFileCatalogue {
         static let family = "Test"
-        static let fileExtension = "skn"
+        static let fileExtensions = ["new", "old"]
         let folder: SkinInstallFolder
         let selection: SkinSelection
     }
@@ -47,32 +48,32 @@ final class SkinFileCatalogueTests: XCTestCase {
         }
     }
 
-    func testSkinsAreTheFamilysVisibleFilesByName() async throws {
-        try touch("Deck.skn", "Other.SKN", ".hidden.skn", "notes.txt")
+    func testANameIsOneSkinAcrossExtensions() async throws {
+        try touch("Deck.old", "Deck.NEW", "Other.old", ".hidden.new", "notes.txt")
         XCTAssertEqual(catalogue.installedSkins().map(\.name), ["Deck", "Other"])
         XCTAssertNil(catalogue.skin(named: "../Deck"))
         catalogue.selection.select("Deck")
-        XCTAssertEqual(try catalogue.selectedSkinURL()?.lastPathComponent, "Deck.skn")
+        XCTAssertEqual(try catalogue.selectedSkinURL()?.lastPathComponent, "Deck.NEW")
         try await catalogue.removeSkin(named: "Deck")
-        XCTAssertEqual(files, ["Other.SKN", "notes.txt"])
+        XCTAssertEqual(files, ["Other.old", "notes.txt"])
         XCTAssertNil(catalogue.selection.name)
     }
 
-    func testInstallingGivesTheFamilysExtensionAndReplacesTheSkinOfThatName() async throws {
-        try touch("Deck.skn")
+    func testInstallingUnderAnotherExtensionReplacesTheSkinAndAForeignOneTakesTheFirst() async throws {
+        try touch("Deck.new")
         let source = FileManager.default.temporaryDirectory.appendingPathComponent("skin-catalogue-source-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: source) }
-        try Data("y".utf8).write(to: source.appendingPathComponent("Deck.bin"))
+        for name in ["Deck.OLD", "Plain.bin"] { try Data("y".utf8).write(to: source.appendingPathComponent(name)) }
 
-        var validated = 0
-        let deck = try await Catalogue.install(source.appendingPathComponent("Deck.bin"), into: catalogue.folder) { _ in
-            validated += 1
+        var validated: [String] = []
+        let deck = try await Catalogue.install(source.appendingPathComponent("Deck.OLD"), into: catalogue.folder) {
+            validated.append($0.pathExtension)
         }
-        XCTAssertEqual(deck.url.lastPathComponent, "Deck.skn")
-        XCTAssertEqual(files, ["Deck.skn"])
-        XCTAssertEqual(try String(contentsOf: deck.url, encoding: .utf8), "y")
-        XCTAssertEqual(validated, 1)
+        XCTAssertEqual(deck.url.lastPathComponent, "Deck.old")
+        _ = try await Catalogue.install(source.appendingPathComponent("Plain.bin"), into: catalogue.folder) { _ in }
+        XCTAssertEqual(files, ["Deck.old", "Plain.new"])
+        XCTAssertEqual(validated, ["old"], "the copy validated carries the extension a loader may read")
         XCTAssertNil(catalogue.selection.name, "selecting is the caller's")
     }
 }
