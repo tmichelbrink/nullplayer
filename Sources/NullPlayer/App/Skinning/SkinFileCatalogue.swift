@@ -104,7 +104,17 @@ extension SkinFileCatalogue {
     /// skin. The skin is installed by then, and its extension may not be the preferred one, so a
     /// file that will not go is left rather than failing the install.
     private static func otherFiles(of skin: InstalledSkinFile, in folder: SkinInstallFolder) -> [URL] {
-        (skinFilesByName(in: folder)[skin.name] ?? []).filter { $0.lastPathComponent != skin.url.lastPathComponent }
+        (skinFilesByName(in: folder)[skin.name] ?? []).filter { !isSameFile($0, skin.url) }
+    }
+
+    /// Whether `a` and `b` are one file on disk: on a case-insensitive volume `Deck.SGF` and
+    /// `Deck.sgf` are, and the skin just installed under one must not be removed as the other.
+    private static func isSameFile(_ a: URL, _ b: URL) -> Bool {
+        if a.lastPathComponent == b.lastPathComponent { return true }
+        let key = URLResourceKey.fileResourceIdentifierKey
+        guard let first = (try? a.resourceValues(forKeys: [key]))?.fileResourceIdentifier,
+              let second = (try? b.resourceValues(forKeys: [key]))?.fileResourceIdentifier else { return false }
+        return first.isEqual(second)
     }
 
     /// The visible skin files in `folder` by skin name, each name's in `fileExtensions` order.

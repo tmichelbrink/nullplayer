@@ -91,4 +91,19 @@ final class SkinFileCatalogueTests: XCTestCase {
         XCTAssertEqual(skins.map(\.name), ["Theme"])
         XCTAssertEqual(files, [first.lastPathComponent])
     }
+
+    /// A skin installed over a file of its name in another case (`Deck.NEW`, put there by hand) is
+    /// kept: on a case-insensitive disk the two are one file, which the cleanup must not delete.
+    func testInstallingOverAnotherCaseKeepsTheSkin() async throws {
+        try Data("old".utf8).write(to: folder.appendingPathComponent("Deck.NEW"))
+        let source = folder.deletingLastPathComponent().appendingPathComponent("src-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: source) }
+        let file = source.appendingPathComponent("Deck.new")
+        try Data("new".utf8).write(to: file)
+        let skin = try await Catalogue.install(file, into: catalogue.folder) { _ in }
+        XCTAssertEqual(files.count, 1)
+        XCTAssertEqual(try String(contentsOf: skin.url, encoding: .utf8), "new", "the installed skin is still there")
+        XCTAssertEqual(catalogue.installedSkins().map(\.name), ["Deck"])
+    }
 }
