@@ -28,13 +28,17 @@ final class AIMPSkinLibraryHost {
 
     /// `view` laid its library lists out at `rect` (its own points; nil: it shows none now) in the
     /// skin's `colours`. A view that shows no area gives the browser up; one in a window that is not
-    /// on screen does not take it from one that is.
+    /// on screen does not take it from one that is, and a skin form's off-screen view never takes it.
     func libraryArea(_ rect: NSRect?, colours: AIMPSkinControl.Library?, in view: AIMPSkinMainView) {
         guard let rect, !rect.isEmpty, view.window != nil else {
             if holder === view { unmount() }
             return
         }
         if let holder, holder !== view, holder.window?.isVisible == true, view.window?.isVisible != true { return }
+        // A skin form's view off screen (its window ordered out, or not shown yet) never takes it,
+        // even with no holder: the browser would sit in a window no one sees. It reports again as its
+        // window shows (`AIMPSkinFormWindowMaterializer.update`).
+        if holder !== view, !view.drawsWithoutWindow, view.window?.isVisible != true { return }
         let surface = self.surface ?? make(scaledBy: view)
         if surface.view.superview !== view {
             surface.unmountFromHolder()

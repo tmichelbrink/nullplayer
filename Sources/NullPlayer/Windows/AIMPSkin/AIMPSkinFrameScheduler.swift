@@ -95,14 +95,17 @@ final class AIMPSkinFrameScheduler {
         var measured: (bounds: CGRect?, size: CGSize)?
         if input.measures, let frame {
             // Measured with everything a pointer reveals revealed, so the window holds still as it comes
-            // and goes; and over the frame as drawn too, so a panel shown only while the pointer is
-            // away (an `IsActive` gate's inverse) is not cropped out.
-            var revealed = input.host
-            revealed.feedback.pointer = .anywhere
-            let full = input.host.feedback.hoverRects.isEmpty ? nil
-                : AIMPSkinRenderer.frame(input.skin, size: input.size, form: input.form, host: revealed, state: input.state,
-                                         interaction: input.interaction, scale: input.scale)
-            let bounds = [frame.drawnBounds, full?.drawnBounds].compactMap { $0 }
+            // and goes; with the pointer outside the window too, so a panel shown only while the
+            // pointer is away (an `IsActive` gate's inverse) counts wherever the pointer is now; and
+            // over the frame as drawn.
+            func drawn(pointer: AIMPSkinFrameFeedback.Pointer) -> AIMPSkinFrame? {
+                var host = input.host
+                host.feedback.pointer = pointer
+                return AIMPSkinRenderer.frame(input.skin, size: input.size, form: input.form, host: host, state: input.state,
+                                              interaction: input.interaction, scale: input.scale)
+            }
+            let others = input.host.feedback.hoverRects.isEmpty ? [] : [drawn(pointer: .anywhere), drawn(pointer: .outside)]
+            let bounds = ([frame.drawnBounds] + others.map { $0?.drawnBounds }).compactMap { $0 }
             measured = (bounds.dropFirst().reduce(bounds.first) { $0?.union($1) }, input.size)
         }
         return RenderOutput(generation: input.generation, frame: frame, measured: measured)

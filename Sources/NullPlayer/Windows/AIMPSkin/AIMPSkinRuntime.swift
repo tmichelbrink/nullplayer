@@ -418,7 +418,13 @@ final class AIMPSkinRuntime {
 
     /// Shows a hidden item, or hides a shown one.
     func toggle(_ item: String) {
-        state.script[item].visible = flow.value(item, "Visibility") == 0
+        setVisible(item, flow.value(item, "Visibility") == 0)
+    }
+
+    /// Shows or hides a form or item over its bindings (`AIMPSkinState.override`).
+    func setVisible(_ name: String, _ visible: Bool) {
+        let flow = self.flow
+        state.override(visible: visible, of: name, gateFrom: flow)
     }
 }
 

@@ -148,7 +148,7 @@ extension AIMPSkinScript.Run {
                 engine.state.script[other.group].activePage = other.index
             }
         } else if pin == "Visible" || pin == "Visibility" {
-            engine.state.script[source].visible = flow.value(source, pin) == 0
+            engine.state.override(visible: flow.value(source, pin) == 0, of: source, gateFrom: flow)
         } else if pin == "Position", skin.index.providers[source]?.kind.isCounter == true {
             // As a script's own move: a counter stopped by a limit passes it on, so this run is
             // undone with it and both run again, rather than the move being lost.

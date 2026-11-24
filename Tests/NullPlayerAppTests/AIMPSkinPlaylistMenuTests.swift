@@ -69,6 +69,27 @@ final class AIMPSkinPlaylistMenuTests: XCTestCase {
         XCTAssertEqual(engine.playlist.count, 4, "a hidden selected track is not removed")
     }
 
+    /// A search that matches one row: Select All takes only it, Invert Selection stays inside the
+    /// match, and Remove Selected keeps every track the search hides.
+    func testSelectionCommandsActOnlyOnTheRowsASearchShows() throws {
+        let (target, runtime) = try make(tracks: 4)
+        target.refreshRows = { [engine] in
+            var player = AIMPSkinPlayerSnapshot()
+            player.playlist = .init(rows: engine.playlist.map { .init(title: $0.title ?? "", seconds: 0) }, generation: 1)
+            runtime.update(player: player)
+        }
+        runtime.state.lists.playlistSearch = "Track 1"
+        target.selectAll(nil)
+        XCTAssertEqual(runtime.state.lists.playlistSelection, [1])
+        target.invertSelection(nil)
+        XCTAssertEqual(runtime.state.lists.playlistSelection, [], "inverted within the one match")
+        target.invertSelection(nil)
+        XCTAssertEqual(runtime.state.lists.playlistSelection, [1])
+        runtime.state.lists.playlistSelection = [0, 1, 3]
+        target.removeSelected(nil)
+        XCTAssertEqual(engine.playlist.map(\.title), ["Track 0", "Track 2", "Track 3"], "only the shown track goes")
+    }
+
     func testTheSectionMenusComeFromTheBuilder() throws {
         let (target, runtime) = try make(tracks: 2)
         runtime.state.lists.playlistSelection = []

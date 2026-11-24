@@ -197,19 +197,13 @@ extension AIMPSkinScript {
         private func pushVisibility() {
             let flow = self.flow
             for name in state.script.objects.values(\.visible).keys {
-                guard let value = visibilityGate(name, flow: flow) else { continue }
+                guard let value = flow.visibilityGate(name) else { continue }
                 if let last = state.script[name].visibleGate, last != value { state.script[name].visible = nil }
                 state.script[name].visibleGate = value
             }
         }
 
-        /// What `name`'s `Visibility` bindings say now (1 shown, 0 hidden), its mirror's left out; nil
-        /// with none. A script's override of `Visible` holds until this changes (`pushVisibility`).
-        func visibilityGate(_ name: String, flow: AIMPSkinDataflow) -> Double? {
-            let gates = (skin.index.byName[name]?.gates ?? []).filter { $0.source != skin.index.mirrors[name] }
-            guard !gates.isEmpty else { return nil }
-            return gates.allSatisfy { flow.value(of: $0) != 0 } ? 1 : 0
-        }
+
 
         /// Sets counter `name` to `value`. A `ScriptableOperatorCounter` runs its script with `State`
         /// the new value (Pioneer's play key sets `RemoteControllScript` to 1, and the script

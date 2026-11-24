@@ -85,6 +85,10 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
         window.delegate = self
         window.contentView = skinView
         forms.onContentChange = { [weak self] in self?.updateCompanionVisibility() }
+        playlistMenu.refreshRows = { [weak self] in
+            self?.engineHost.playlistChanged()
+            self?.refreshHostState()
+        }
         // A hidden form gives the library browser up, and the windows still showing lists take it back.
         forms.onFormHidden = { [weak self] view in
             guard let self, self.libraryHost.release(from: view) else { return }
@@ -229,7 +233,7 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
                 if open.contains(surface), !Self.isOpen(surface) { nativeOpens.append(surface) }
                 continue
             }
-            for form in own { state?.script[form.name].visible = open.contains(surface) }
+            for form in own { if let flow = runtime?.flow { state?.override(visible: open.contains(surface), of: form.name, gateFrom: flow) } }
         }
         if let state { runtime?.state = state }
         return nativeOpens
@@ -258,7 +262,8 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
     func revealSurface(_ surface: SkinSurface, toggle: Bool, restoredFrame: NSRect?) {
         guard var state = runtime?.state else { return }
         let open = toggle ? !isShowingSurface(surface) : true
-        for form in ownForms(surface) { state.script[form.name].visible = open }
+        let flow = runtime?.flow
+        for form in ownForms(surface) { if let flow { state.override(visible: open, of: form.name, gateFrom: flow) } }
         runtime?.state = state
     }
 
@@ -274,7 +279,7 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
     /// The companion windows, checked while shown, for the context menu (AIMP lists them in its own).
     private func companionMenuItems() -> [NSMenuItem] {
         guard let runtime else { return [] }
-        return forms.menuItems(runtime.flow) { [weak runtime] name, visible in runtime?.state.script[name].visible = visible }
+        return forms.menuItems(runtime.flow) { [weak runtime] name, visible in runtime?.setVisible(name, visible) }
     }
 
     func applyUIScale(_ scale: CGFloat) {

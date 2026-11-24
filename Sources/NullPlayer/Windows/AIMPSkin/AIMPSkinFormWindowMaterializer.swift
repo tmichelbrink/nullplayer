@@ -269,7 +269,7 @@ final class AIMPSkinFormWindowMaterializer: NSObject, NSWindowDelegate {
     /// The close command hides the form, as its own close key does.
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard let name = form(of: sender) else { return true }
-        runtime?.state.script[name].visible = false
+        runtime?.setVisible(name, false)
         return false
     }
 

@@ -12,6 +12,9 @@ import AppKit
 final class AIMPSkinPlaylistMenuTarget: NSObject, PlaylistMenuTarget {
     weak var runtime: AIMPSkinRuntime?
     weak var window: NSWindow?
+    /// Rebuilds the runtime's playlist rows from the engine's playlist now: the snapshot is otherwise
+    /// rebuilt a turn after a change, and a command between the two would read the old row numbers.
+    var refreshRows: (() -> Void)?
 
     private var engine: AudioEngine { WindowManager.shared.audioEngine }
 
@@ -23,6 +26,7 @@ final class AIMPSkinPlaylistMenuTarget: NSObject, PlaylistMenuTarget {
     private var shownRows: [Int] {
         let rows = engine.playlist.indices
         guard let runtime, !runtime.state.lists.playlistSearch.isEmpty else { return Array(rows) }
+        refreshRows?()
         return runtime.host.playlistIndices(matching: runtime.state.lists.playlistSearch).filter(rows.contains)
     }
 
