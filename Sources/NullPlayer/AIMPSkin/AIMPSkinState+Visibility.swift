@@ -1,10 +1,11 @@
 import Foundation
 
 extension AIMPSkinDataflow {
-    /// What `name`'s `Visibility` bindings say now (1 shown, 0 hidden), its mirror's left out; nil
-    /// with none. An override of its `Visible` holds until this changes (`Engine.pushVisibility`).
+    /// What `name`'s `Visibility` bindings say now (1 shown, 0 hidden), its mirror's `Visibility`
+    /// link left out as drawing leaves it (`isMirror`), any other link to the mirror kept; nil with
+    /// none. An override of its `Visible` holds until this changes (`Engine.pushVisibility`).
     func visibilityGate(_ name: String) -> Double? {
-        let gates = (skin.index.byName[name]?.gates ?? []).filter { $0.source != skin.index.mirrors[name] }
+        let gates = (skin.index.byName[name]?.gates ?? []).filter { !isMirror($0, of: name) }
         guard !gates.isEmpty else { return nil }
         return gates.allSatisfy { value(of: $0) != 0 } ? 1 : 0
     }
