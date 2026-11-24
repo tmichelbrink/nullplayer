@@ -1,11 +1,11 @@
 import AppKit
 
 /// What the Skins menu does for a family whose skins are installed by name and loaded by a
-/// `SingleCanvasMainWindow` (Audion, Sonique): switch to it, choose an installed skin, load one from a
+/// `SkinFileMainWindow` (Audion, Sonique, AIMP): switch to it, choose an installed skin, load one from a
 /// file, open its folder, remove one. Each family's `MenuActions` entry points call these, so its menu
 /// keeps its own selectors.
 @MainActor
-extension SingleCanvasMainWindow {
+extension SkinFileMainWindow {
     private static var shown: Self? { WindowManager.shared.mainWindowController as? Self }
 
     static func switchToFamily() {

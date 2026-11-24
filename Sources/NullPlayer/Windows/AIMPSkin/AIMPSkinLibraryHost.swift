@@ -1,0 +1,103 @@
+import AppKit
+
+/// NullPlayer's real library browser, inside the skin's library lists: one
+/// `EmbeddedLibraryBrowserSurface` per skin session, as `.wal`'s component bridge keeps one
+/// (`WinampModernComponentBridge.makeLibrarySurface`), so servers, tabs, search and history behave as
+/// in NullPlayer's own library window. The skin draws the list area's fill and the chrome around it
+/// (`AIMPSkinLayout.Look.libraryArea`); the browser sits over the area.
+///
+/// The one browser moves into whichever on-screen view reports a library area (the skin's library
+/// window, the deck's lists, a docked library site) and leaves a view that stops reporting one. It
+/// wears the skin's list colours (`AIMPSkinControl.Library`), through `SkinnedSurfaceStyle`'s
+/// legibility rules; a skin that names none gets AIMP mode's own neutral style.
+@MainActor
+final class AIMPSkinLibraryHost {
+    private var surface: EmbeddedLibraryBrowserSurface?
+    /// The view the browser is in now.
+    private weak var holder: AIMPSkinMainView?
+    private var style: SkinnedSurfaceStyle?
+    /// The style for a skin whose lists name no colours.
+    private let fallbackStyle: SkinnedSurfaceStyle
+
+    init(fallbackStyle: SkinnedSurfaceStyle) {
+        self.fallbackStyle = fallbackStyle
+    }
+
+    /// The browser, while one is made.
+    var browserView: NSView? { surface?.view }
+
+    /// `view` laid its library lists out at `rect` (its own points; nil: it shows none now) in the
+    /// skin's `colours`. A view that shows no area gives the browser up; one in a window that is not
+    /// on screen does not take it from one that is.
+    func libraryArea(_ rect: NSRect?, colours: AIMPSkinControl.Library?, in view: AIMPSkinMainView) {
+        guard let rect, !rect.isEmpty, view.window != nil else {
+            if holder === view { unmount() }
+            return
+        }
+        if let holder, holder !== view, holder.window?.isVisible == true, view.window?.isVisible != true { return }
+        let surface = self.surface ?? make(scaledBy: view)
+        if surface.view.superview !== view {
+            surface.unmountFromHolder()
+            view.addSubview(surface.view)
+            holder = view
+        }
+        surface.view.frame = rect
+        surface.applyContentScale(view.uiScale)
+        let style = colours.map { Self.style($0, over: fallbackStyle) } ?? fallbackStyle
+        if style != self.style {
+            self.style = style
+            surface.applyStyle(style)
+        }
+    }
+
+    /// The skin is going: the browser goes with it, its server work cancelled.
+    func teardown() {
+        surface?.prepareForUITeardown()
+        surface = nil
+        holder = nil
+        style = nil
+    }
+
+    private func unmount() {
+        surface?.unmountFromHolder()
+        holder = nil
+    }
+
+    private func make(scaledBy view: AIMPSkinMainView) -> EmbeddedLibraryBrowserSurface {
+        let surface = EmbeddedLibraryBrowserSurface(
+            frame: NSRect(x: 0, y: 0, width: 400, height: 300),
+            contentScaleFallback: { [weak view] in view?.uiScale ?? 1 },
+            presentLinkSheet: { [weak self] in self?.presentLinkSheet() })
+        self.surface = surface
+        return surface
+    }
+
+    /// The Plex link sheet, on the window the browser is in, as `WindowManager.showPlexLinkSheet`
+    /// shows it on NullPlayer's.
+    private func presentLinkSheet() {
+        guard let window = holder?.window else { return }
+        PlexLinkSheet().showAsSheet(from: window) { [weak self] linked in
+            if linked { self?.surface?.reloadData() }
+        }
+    }
+
+    /// The skin's list colours as the browser's roles: its fill the background, its row text the
+    /// text and the accent (source, chosen tab, index letters), its selected row's fill and text the
+    /// selection; whatever it leaves out from `fallback`. The selected text is made for its row's
+    /// fill, not the list's: AIMP Modern v3.63's light blue, an accent on its blue list, was hard to read.
+    static func style(_ colours: AIMPSkinControl.Library, over fallback: SkinnedSurfaceStyle) -> SkinnedSurfaceStyle {
+        let background = colours.fill.map(color) ?? fallback.background
+        let text = colours.rowText.map(color) ?? fallback.text
+        let selection = colours.selected.map(color) ?? fallback.selectionBackground
+        let selectionText = colours.selectedText.map(color) ?? fallback.selectionText
+        return SkinnedSurfaceStyle(roles: SkinnedSurfaceRoles(
+            background: background, text: text, currentText: text, selectionBackground: selection,
+            selectionText: selectionText, treeText: text, treeSelection: selection))
+    }
+
+    /// An AIMP colour (`0xAARRGGBB`).
+    private static func color(_ argb: UInt32) -> NSColor {
+        NSColor(srgbRed: CGFloat(argb >> 16 & 0xFF) / 255, green: CGFloat(argb >> 8 & 0xFF) / 255,
+                blue: CGFloat(argb & 0xFF) / 255, alpha: CGFloat(argb >> 24 & 0xFF) / 255)
+    }
+}

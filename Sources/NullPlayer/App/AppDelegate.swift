@@ -221,6 +221,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 return controller is AudionFaceMainWindowController
             case .sonique:
                 return controller is SoniqueSkinMainWindowController
+            case .aimp:
+                return controller is AIMPSkinMainWindowController
             }
         }
 

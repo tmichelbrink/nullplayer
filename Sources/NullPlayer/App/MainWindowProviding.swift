@@ -95,11 +95,12 @@ protocol SkinSizedMainWindow: MainWindowProviding {
 extension WinampModernMainWindowController: SkinSizedMainWindow {}
 extension WMPMainWindowController: SkinSizedMainWindow {}
 
-/// A main window that is one skin canvas and nothing else (`PlayerUIControllerFamily.isSingleCanvas`):
-/// it loads the selected skin itself, and the skin decides its size, so a restored frame places only
-/// its top-left. The family supplies its selection, its loader and what to show; choosing, reloading
-/// and resetting the skin are shared.
-protocol SingleCanvasMainWindow: NSWindowController, SkinSizedMainWindow {
+/// A main window that shows one skin file it loads itself (Audion's faces and Sonique's skins, both
+/// `PlayerUIControllerFamily.isSingleCanvas`): the skin decides its size, so a restored frame places
+/// only its top-left. The family supplies its selection, its loader and what to show; choosing,
+/// reloading and resetting the skin are shared. Nothing here assumes the skin is the family's only
+/// window.
+protocol SkinFileMainWindow: NSWindowController, SkinSizedMainWindow {
     associatedtype Skin
     var skinLoad: SkinLoadTask { get }
     var skinSelection: SkinSelection { get }
@@ -115,7 +116,7 @@ protocol SingleCanvasMainWindow: NSWindowController, SkinSizedMainWindow {
     /// Shows `shown`, or with nil the family's fallback, saying why when `error` is set.
     func present(_ shown: (skin: Skin, url: URL)?, error: Error?)
 
-    // The Skins menu (`SingleCanvasMainWindow+SkinsMenu`).
+    // The Skins menu (`SkinFileMainWindow+SkinsMenu`).
     associatedtype Importer: SkinFileImporting
     /// The mode the family's window runs in, and the feature that gates it.
     static var mode: PlayerUIMode { get }
@@ -135,7 +136,7 @@ protocol SkinFileImporting {
     @MainActor func removeSkin(named name: String) async throws
 }
 
-extension SingleCanvasMainWindow {
+extension SkinFileMainWindow {
     func restoreFrame(_ frame: NSRect) {
         guard frame != .zero, let window else { return }
         window.setFrameTopLeftPoint(NSPoint(x: frame.minX, y: frame.maxY))
@@ -172,5 +173,5 @@ extension SingleCanvasMainWindow {
     }
 }
 
-extension AudionFaceMainWindowController: SingleCanvasMainWindow {}
-extension SoniqueSkinMainWindowController: SingleCanvasMainWindow {}
+extension AudionFaceMainWindowController: SkinFileMainWindow {}
+extension SoniqueSkinMainWindowController: SkinFileMainWindow {}

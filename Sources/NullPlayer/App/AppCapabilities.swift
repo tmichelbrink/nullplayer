@@ -17,6 +17,7 @@ enum AppFeature {
     case wmpSkinMode
     case audionFaceMode
     case soniqueSkinMode
+    case aimpSkinMode
     case compactWindowVisualsMenu
 }
 
@@ -29,6 +30,15 @@ enum AppFeature {
 /// to know which edition that is.
 enum AppCapabilities {
     static func supports(_ feature: AppFeature) -> Bool {
+        // AIMP skins are still in development: debug builds only until the family is ready to
+        // ship (as Audion faces, WMP and Sonique skins were before theirs).
+        if feature == .aimpSkinMode {
+            #if DEBUG
+            return true
+            #else
+            return false
+            #endif
+        }
         #if EDITION_CUSTOM
         return EditionPolicy.supports(feature)
         #else

@@ -58,7 +58,7 @@ final class AudionFaceMainWindowController: NSWindowController, MainWindowProvid
 
     required init?(coder: NSCoder) { nil }
 
-    // MARK: - Choosing a face (`SingleCanvasMainWindow`)
+    // MARK: - Choosing a face (`SkinFileMainWindow`)
 
     var skinSelection: SkinSelection { importer.selection }
     func selectedSkinURL() throws -> URL? { try importer.selectedFaceURL() }

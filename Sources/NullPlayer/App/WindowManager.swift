@@ -434,6 +434,7 @@ class WindowManager {
         case is WMPMainWindowController: return .wmp
         case is AudionFaceMainWindowController: return .audion
         case is SoniqueSkinMainWindowController: return .sonique
+        case is AIMPSkinMainWindowController: return .aimp
         case is ModernMainWindowController: return .nullPlayerModern
         case is MainWindowController: return .classic
         default: return uiMode.controllerFamily
@@ -449,7 +450,7 @@ class WindowManager {
         case .nullPlayerModern: return .nullPlayerModern
         case .wmp: return .wmp
         // The shared controllers, as `.wmp`; their chrome comes from `hostedSurfaceStyle`.
-        case .audion, .sonique: return .wmp
+        case .audion, .sonique, .aimp: return .wmp
         }
     }
 
@@ -780,6 +781,16 @@ class WindowManager {
             }
         }
 
+        if uiMode.controllerFamily == .aimp,
+           let controller = mainWindowController as? AIMPSkinMainWindowController {
+            // AIMP-only, gated as the `.wmz` branch above is: a skin form's window (speakers, an
+            // amplifier, the skin's playlist) docks and snaps beside the deck as a snap target only.
+            // Like a `.wmz` view it is an arbitrary authored canvas with no column to join.
+            for window in controller.materializedAuxiliaryWindows {
+                add(window, snapTarget: true)
+            }
+        }
+
         if let controller = winampModernHostedController {
             // `.wal`-only: this whole branch is gated on the Winamp Modern controller existing, so no
             // other UI mode reaches it. A `newDynamicContainer` copy (B110) is still managed — levels,
@@ -1036,8 +1047,8 @@ class WindowManager {
             return (mainWindowController as? WinampModernMainWindowController)?.loadedSkinURL?.path
         case .wmp:
             return (mainWindowController as? WMPMainWindowController)?.loadedSkinURL?.path
-        case .audion, .sonique:
-            return (mainWindowController as? any SingleCanvasMainWindow)?.loadedSkinURL?.path
+        case .audion, .sonique, .aimp:
+            return (mainWindowController as? any SkinFileMainWindow)?.loadedSkinURL?.path
         }
     }
 
@@ -1150,6 +1161,7 @@ class WindowManager {
         case .wmp: return WMPMainWindowController()
         case .audion: return AudionFaceMainWindowController()
         case .sonique: return SoniqueSkinMainWindowController()
+        case .aimp: return AIMPSkinMainWindowController()
         }
     }
     
@@ -1190,6 +1202,7 @@ class WindowManager {
         case .winampModern: return winampModernSurfaces
         case .wmp: return (mainWindowController as? WMPMainWindowController).map(WMPSkinSurfaceRouter.init)
         case .sonique: return mainWindowController as? SoniqueSkinMainWindowController
+        case .aimp: return mainWindowController as? AIMPSkinMainWindowController
         }
     }
 
@@ -1271,8 +1284,8 @@ class WindowManager {
         return palette.surfaceStyle
     }
 
-    /// A single-canvas family's colours: its window's, or its unskinned ones before there is one.
-    private func singleCanvasSurfaceStyle<Window: SingleCanvasMainWindow>(_: Window.Type) -> SkinnedSurfaceStyle {
+    /// A skin-file family's colours: its window's, or its unskinned ones before there is one.
+    private func skinFileSurfaceStyle<Window: SkinFileMainWindow>(_: Window.Type) -> SkinnedSurfaceStyle {
         (mainWindowController as? Window)?.surfaceStyle ?? Window.unskinnedSurfaceStyle
     }
 
@@ -1287,8 +1300,9 @@ class WindowManager {
         case .classic, .nullPlayerModern: return nil
         case .winampModern: return winampModernSurfaceStyle
         case .wmp: return wmpSurfaceStyle
-        case .audion: return singleCanvasSurfaceStyle(AudionFaceMainWindowController.self)
-        case .sonique: return singleCanvasSurfaceStyle(SoniqueSkinMainWindowController.self)
+        case .audion: return skinFileSurfaceStyle(AudionFaceMainWindowController.self)
+        case .sonique: return skinFileSurfaceStyle(SoniqueSkinMainWindowController.self)
+        case .aimp: return skinFileSurfaceStyle(AIMPSkinMainWindowController.self)
         }
     }
 
@@ -1489,6 +1503,7 @@ class WindowManager {
         case .winampModern: return "wal"
         case .audion: return "audion"
         case .sonique: return "sonique"
+        case .aimp: return "aimp"
         case .wmp:
             guard let controller = mainWindowController as? WMPMainWindowController else { return nil }
             return MainActor.assumeIsolated { controller.hostedInteriorScope }
@@ -1785,7 +1800,7 @@ class WindowManager {
         return true
     }
 
-    /// Put away NullPlayer's own playlist or equalizer when the skin now on screen draws
+    /// Put away NullPlayer's own playlist, equalizer or library when the skin now on screen draws
     /// that surface itself.
     ///
     /// Ours is a *fallback* — `routeSkinSurface` gives the skin's own copy the toggle first. But the
@@ -1801,9 +1816,13 @@ class WindowManager {
         guard let router = skinSurfaceRouter else { return }
         var closed = false
         for (surface, window) in [(SkinSurface.playlist, playlistWindowController?.window),
-                                  (SkinSurface.equalizer, equalizerWindowController?.window)] {
+                                  (SkinSurface.equalizer, equalizerWindowController?.window),
+                                  (SkinSurface.library, plexBrowserWindowController?.window)] {
             guard router.drawsSurface(surface), let window, window.isVisible else { continue }
             window.orderOut(nil)
+            // Ordering the library out posts no occlusion change, so its Cava backdrop would keep
+            // analysing for a hidden window (as `togglePlexBrowser` reconciles it).
+            if surface == .library { plexBrowserWindowController?.refreshLibraryBackdrop() }
             closed = true
         }
         guard closed else { return }
@@ -2472,6 +2491,7 @@ class WindowManager {
                 case .wmp: "WMP_PLACE_TRACE"
                 case .audion: "AUDION_PLACE_TRACE"
                 case .sonique: "SONIQUE_PLACE_TRACE"
+                case .aimp: "AIMP_PLACE_TRACE"
                 case .winampModern, .classic, .nullPlayerModern: "WINAMP_MODERN_PLACE_TRACE"
                 }
                 if ProcessInfo.processInfo.environment[traceKey] == "1" {
@@ -2595,6 +2615,9 @@ class WindowManager {
     
     func showPlexBrowser(at restoredFrame: NSRect? = nil) {
         if routeSkinSurface(.library, toggle: false, restoredFrame: restoredFrame) { return }
+        if skinSurfaceRouter?.deferUntilSkinLoads(.library, { [weak self] in self?.showPlexBrowser(at: restoredFrame) }) == true {
+            return
+        }
         let isNewWindow = plexBrowserWindowController == nil
         if isNewWindow {
             createPlexBrowserWindowController()
@@ -5504,8 +5527,8 @@ class WindowManager {
         // raised the equalizer above the playlist, and the video window above the visualizer and the
         // library, in Classic. The feature windows keep the case order of `CenterStackWindowKind`.
         //
-        // A `.wmz` or `.wal` skin's own windows are not controllers, so they are not in this list;
-        // `raiseOrder` appends them in those two modes only.
+        // A `.wmz`, `.wal` or AIMP skin's own windows are not controllers, so they are not in this
+        // list; `raiseOrder` appends them in those modes only.
         let appWindows: [NSWindow?] = [
             mainWindowController?.window,
             equalizerWindowController?.window,
@@ -5517,17 +5540,19 @@ class WindowManager {
             equalizerStudioWindow
         ]
 
-        // `.wmz`/`.wal`-only: ordered front regardless of activation. A click from another app starts
-        // this raise while the activation is still settling, and a plain `orderFront` then left some
-        // of a skin's panels behind the other app's window (W273).
+        // `.wmz`/`.wal`/AIMP-only: ordered front regardless of activation. A click from another app
+        // starts this raise while the activation is still settling, and a plain `orderFront` then left
+        // some of a skin's panels behind the other app's window (W273).
         let family = uiMode.controllerFamily
-        let raisesSkinWindows = family == .wmp || family == .winampModern
+        let raisesSkinWindows = Self.familiesRaisingSkinWindows.contains(family)
         let windows = Self.raiseOrder(appWindows, family: family, skinWindows: {
             switch family {
             case .wmp:
                 return (self.mainWindowController as? WMPMainWindowController)?.materializedAuxiliaryWindows ?? []
             case .winampModern:
                 return (self.mainWindowController as? WinampModernMainWindowController)?.skinOwnedWindows ?? []
+            case .aimp:
+                return (self.mainWindowController as? AIMPSkinMainWindowController)?.materializedAuxiliaryWindows ?? []
             default:
                 return []
             }
@@ -5559,13 +5584,16 @@ class WindowManager {
         }
     }
     
+    /// The families whose skins open top-level windows of their own beside the player.
+    private static let familiesRaisingSkinWindows: Set<PlayerUIControllerFamily> = [.wmp, .winampModern, .aimp]
+
     /// The windows `bringAllWindowsToFront` orders front, bottom first. A `.wmz` skin's
-    /// `theme.openView` panels and a `.wal` skin's container and hosted windows are windows of their
-    /// own, so in those two modes they follow the app's windows; every other mode raises
-    /// `appWindows` unchanged.
+    /// `theme.openView` panels, a `.wal` skin's container and hosted windows and an AIMP skin's form
+    /// windows are windows of their own, so in those modes they follow the app's windows; every other
+    /// mode raises `appWindows` unchanged.
     static func raiseOrder(_ appWindows: [NSWindow?], family: PlayerUIControllerFamily,
                            skinWindows: () -> [NSWindow]) -> [NSWindow?] {
-        guard family == .wmp || family == .winampModern else { return appWindows }
+        guard familiesRaisingSkinWindows.contains(family) else { return appWindows }
         return appWindows + skinWindows().map { $0 }
     }
 
@@ -5604,6 +5632,27 @@ class WindowManager {
         }
 
         return docked
+    }
+
+    /// Keeps what hangs under `window` attached after it changed size in place: every snap target
+    /// docked below `oldFrame` moves by however far the window's bottom edge moved. For a skin window
+    /// that grows or shrinks itself with its top-left held (a panel opening in the skin); a programmatic
+    /// move, so it runs under `isSnappingWindow` and never starts a group drag.
+    func carryWindowsDockedBelow(_ window: NSWindow, from oldFrame: NSRect) {
+        let deltaY = window.frame.minY - oldFrame.minY
+        guard deltaY != 0 else { return }
+        let others = snapTargetWindows().filter { $0 !== window }
+        let docked = Self.windowsDocked(below: oldFrame, among: others, threshold: dockThreshold)
+        guard !docked.isEmpty else { return }
+
+        isSnappingWindow = true
+        defer { isSnappingWindow = false }
+        for win in docked {
+            var frame = win.frame
+            frame.origin.y += deltaY
+            win.setFrame(frame, display: true, animate: false)
+        }
+        postLayoutChangeNotification()
     }
 
     /// Calculate the bounding box of the docked vertical center stack
@@ -6374,6 +6423,13 @@ class WindowManager {
             snapWMPToDefaultPositions()
             return
         }
+        // An AIMP skin's form windows are borderless as well, floating free of any stack.
+        if uiMode.controllerFamily == .aimp {
+            if let controller = mainWindowController as? AIMPSkinMainWindowController, let playerWindow = controller.window {
+                snapHostedFamilyToDefaultPositions(playerWindow: playerWindow, skinWindows: controller.materializedAuxiliaryWindows)
+            }
+            return
+        }
         // A single canvas's window is borderless too, and has no stack to build.
         if uiMode.controllerFamily.isSingleCanvas {
             if let playerWindow = mainWindowController?.window {
@@ -6401,6 +6457,7 @@ class WindowManager {
         case .wmp: fallbackMainSize = WMPMainWindowController.unskinnedSize
         case .audion: fallbackMainSize = AudionFaceMainWindowController.unskinnedSize
         case .sonique: fallbackMainSize = SoniqueSkinMainWindowController.placeholderSize
+        case .aimp: fallbackMainSize = AIMPSkinMainWindowController.placeholderSize
         }
         let mainSize = mainWindowController?.window?.frame.size ?? fallbackMainSize
 
