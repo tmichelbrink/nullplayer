@@ -1,39 +1,95 @@
 import Foundation
 
-/// A Windows INI file (Sonique's `/skin.ini`), read the way Win32's `GetPrivateProfileString` reads
-/// it: sections and keys case-insensitive, the first section of a name is the only one consulted, and
-/// the first value of a key within it wins. Values stay raw text, both ends trimmed; interpreting them
-/// is the family's.
+/// A Windows INI file: `[Section]` headers over `key=value` lines, as skins write them (Sonique's
+/// `skin.ini`). Sections and keys are found without regard to case, the first of a name winning.
 ///
 /// - A header is a line that starts with `[`, named up to its first `]`; one with no `]` is skipped.
-/// - A line starting with `;` or `//` is a comment; one with no `=` that is no header is ignored.
-/// - Lines before the first header belong to no section.
+/// - A line starting with `;` or `//` is a comment. A line with no `=` that is no header is ignored.
+/// - A line splits at its first `=`: the key is trimmed, the value kept as written after the `=`
+///   (`Section.writtenLines`). `Section.lines` and `subscript(section:key:)` trim only its end, so a
+///   value that starts with spaces keeps them; `value(_:_:)` trims both ends.
+/// - Lines before the first header belong to a section named "".
+/// - Sections, and each section's lines, keep file order, duplicates included.
+/// - A header repeated later either carries on the first section of its name, or is ignored with its
+///   lines (`RepeatedSections`).
 struct INIFile: Sendable {
-    private var sections: [String: [String: String]] = [:]
+    /// What a second `[Section]` header of a name means. Win32's `GetPrivateProfileString` reads the
+    /// first section of a name and nothing after; Delphi's `TMemIniFile` adds the later one's lines to it.
+    enum RepeatedSections: Sendable {
+        case ignored
+        case continued
+    }
 
-    init(_ text: String) {
-        var current: String?
-        var seen: Set<String> = []
+    struct Section: Sendable {
+        /// As the file first spells it.
+        let name: String
+        /// Every `key=value` line, in file order, duplicates included; each value as written, the
+        /// spaces it ends with kept.
+        fileprivate(set) var writtenLines: [(key: String, value: String)] = []
+        /// Lowercased key to its first value.
+        private var first: [String: String] = [:]
+
+        fileprivate init(name: String) { self.name = name }
+
+        /// The same lines, each value without the spaces it ends with.
+        var lines: [(key: String, value: String)] { writtenLines.map { ($0.key, Self.trimmingEnd($0.value)) } }
+
+        fileprivate mutating func append(_ key: String, written: Substring) {
+            writtenLines.append((key, String(written)))
+            let lower = key.lowercased()
+            if first[lower] == nil { first[lower] = Self.trimmingEnd(written) }
+        }
+
+        private static func trimmingEnd<Text: StringProtocol>(_ text: Text) -> String {
+            String(text.reversed().drop { $0.isWhitespace && !$0.isNewline }.reversed())
+        }
+
+        /// The first value of `key`, without the spaces it ends with.
+        subscript(key: String) -> String? { first[key.lowercased()] }
+    }
+
+    /// In file order.
+    private(set) var sections: [Section] = []
+    private var index: [String: Int] = [:]
+
+    init(_ text: String, repeatedSections: RepeatedSections = .ignored) {
+        var current: Int? = nil
+        var started = false
         for raw in text.split(whereSeparator: \.isNewline) {
             let line = raw.trimmingCharacters(in: .whitespaces)
             if line.hasPrefix("[") {
                 guard let close = line.firstIndex(of: "]") else { continue }
-                let name = line[line.index(after: line.startIndex)..<close].trimmingCharacters(in: .whitespaces).lowercased()
-                current = seen.insert(name).inserted ? name : nil
+                let name = line[line.index(after: line.startIndex)..<close].trimmingCharacters(in: .whitespaces)
+                let repeated = index[name.lowercased()] != nil
+                current = repeated && repeatedSections == .ignored ? nil : section(named: name)
+                started = true
                 continue
             }
-            guard let section = current, !line.hasPrefix(";"), !line.hasPrefix("//"),
-                  let equals = line.firstIndex(of: "=") else { continue }
-            let key = line[..<equals].trimmingCharacters(in: .whitespaces).lowercased()
-            let value = line[line.index(after: equals)...].trimmingCharacters(in: .whitespaces)
-            if !key.isEmpty, sections[section, default: [:]][key] == nil {
-                sections[section, default: [:]][key] = value
+            guard !line.hasPrefix(";"), !line.hasPrefix("//"), let equals = raw.firstIndex(of: "=") else { continue }
+            if !started {
+                current = section(named: "")
+                started = true
             }
+            guard let at = current else { continue }
+            sections[at].append(raw[..<equals].trimmingCharacters(in: .whitespaces), written: raw[raw.index(after: equals)...])
         }
     }
 
-    /// `section`'s `key`; nil when either is missing.
+    subscript(section: String) -> Section? { index[section.lowercased()].map { sections[$0] } }
+
+    /// `section`'s `key` without the spaces its value ends with; nil when either is missing.
+    subscript(section: String, key: String) -> String? { self[section]?[key] }
+
+    /// `section`'s `key` with both ends trimmed, as `GetPrivateProfileString` returns it.
     func value(_ section: String, _ key: String) -> String? {
-        sections[section.lowercased()]?[key.lowercased()]
+        self[section, key]?.trimmingCharacters(in: .whitespaces)
+    }
+
+    private mutating func section(named name: String) -> Int {
+        let lower = name.lowercased()
+        if let at = index[lower] { return at }
+        sections.append(Section(name: name))
+        index[lower] = sections.count - 1
+        return sections.count - 1
     }
 }

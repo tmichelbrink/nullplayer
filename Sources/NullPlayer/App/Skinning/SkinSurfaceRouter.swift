@@ -15,8 +15,8 @@ enum SkinSurface: CaseIterable {
 /// the fallback for every surface `drawsSurface` answers false for.
 ///
 /// One conformer per family, picked by `WindowManager.skinSurfaceRouter`'s switch on the family:
-/// `.wal`'s `WinampModernSurfaceCoordinator`, `.wmz`'s `WMPSkinSurfaceRouter` and Sonique's controller
-/// (its navigator drawer is its equaliser).
+/// `.wal`'s `WinampModernSurfaceCoordinator`, `.wmz`'s `WMPSkinSurfaceRouter`, Sonique's controller
+/// (its navigator drawer is its equaliser) and AIMP's (the skin's own playlist and library forms).
 protocol SkinSurfaceRouter {
     /// Whether the skin draws this surface itself, so NullPlayer must not open its own window for it.
     func drawsSurface(_ surface: SkinSurface) -> Bool

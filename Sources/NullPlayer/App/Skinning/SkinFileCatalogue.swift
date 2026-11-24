@@ -22,22 +22,23 @@ enum SkinFileCatalogueError: LocalizedError {
 }
 
 /// A family whose skin is one file (Sonique's `.sgf`): its installed-skins folder, by name, and the
-/// selection preference. The family keeps its own loader check and naming of what it imports;
-/// `install` commits one file through `SkinInstallFolder`. Its `folder`, `selection` and
-/// `removeSkin(named:)` are what the Skins menu asks of it (`SkinFileImporting`).
+/// selection preference. A name is one skin, whatever its extension: of two files with one name, the
+/// first of `fileExtensions` is the skin, removing the skin removes both, and installing one under
+/// another extension replaces the skin of that name. The family keeps its own loader check and naming
+/// of what it imports; `install` commits one file through `SkinInstallFolder`. Its `folder`,
+/// `selection` and `removeSkin(named:)` are what the Skins menu asks of it (`SkinFileImporting`).
 protocol SkinFileCatalogue: SkinFileImporting {
     /// The family as its messages name it ("Sonique").
     static var family: String { get }
-    /// A skin file's extension, lowercased.
-    static var fileExtension: String { get }
+    /// A skin file's extensions, lowercased, the one a name prefers first.
+    static var fileExtensions: [String] { get }
 }
 
 extension SkinFileCatalogue {
+    var directoryURL: URL { folder.url }
+
     func installedSkins() -> [InstalledSkinFile] {
-        let suffix = "." + Self.fileExtension
-        let names = (try? folder.fileManager.contentsOfDirectory(atPath: folder.url.path)) ?? []
-        return names.filter { !$0.hasPrefix(".") && $0.lowercased().hasSuffix(suffix) }
-            .map { InstalledSkinFile(name: String($0.dropLast(suffix.count)), url: folder.url.appendingPathComponent($0)) }
+        Self.skinFilesByName(in: folder).compactMap { name, files in files.first.map { InstalledSkinFile(name: name, url: $0) } }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
@@ -55,20 +56,75 @@ extension SkinFileCatalogue {
         return skin.url
     }
 
-    /// Deletes an installed skin off the main thread; removing the selected one clears the selection.
+    /// Deletes an installed skin, every file of its name, off the main thread; removing the selected
+    /// one clears the selection.
     func removeSkin(named name: String) async throws {
         guard let skin = skin(named: name) else { throw SkinFileCatalogueError.notInstalled(family: Self.family, name: name) }
-        try await folder.remove(skin.url)
+        for file in Self.skinFilesByName(in: folder)[skin.name] ?? [] { try await folder.remove(file) }
         selection.forget(name)
     }
 
-    /// Installs `file` under its own name with the family's extension, replacing one of that name, once
-    /// `validate` passes the copy being committed. Selecting it is the caller's.
+    /// Installs `file` under its own name, replacing the skin of that name, once `validate` passes the
+    /// copy being committed. Its extension is kept when it is one of the family's, else the first.
+    /// Selecting it is the caller's.
     static func install(_ file: URL, into folder: SkinInstallFolder,
                         validate: (URL) async throws -> Void) async throws -> InstalledSkinFile {
+        let skin = destination(of: file, in: folder)
+        try await folder.commit(file, to: skin.url, suffix: "." + skin.url.pathExtension, validate: validate)
+        for other in otherFiles(of: skin, in: folder) { try? await folder.remove(other) }
+        return skin
+    }
+
+    /// `install` for several files at once, all or none (a zip's skins): each copy committed is
+    /// validated, and none replaces an installed skin until every one has passed. Of several files
+    /// with one skin name (`Theme.acs4`, `Theme.acs5`), the first is the skin and the rest are left
+    /// out, so the cleanup of one cannot delete another.
+    static func installAll(_ files: [URL], into folder: SkinInstallFolder,
+                           validate: (URL) async throws -> Void) async throws -> [InstalledSkinFile] {
+        var names = Set<String>()
+        let files = files.filter { names.insert($0.deletingPathExtension().lastPathComponent).inserted }
+        let skins = files.map { destination(of: $0, in: folder) }
+        try await folder.commitAll(zip(files, skins).map { ($0, $1.url, "." + $1.url.pathExtension) }, validate: validate)
+        for skin in skins {
+            for other in otherFiles(of: skin, in: folder) { try? await folder.remove(other) }
+        }
+        return skins
+    }
+
+    /// Where `file` installs: under its own name, with its extension when that is one of the
+    /// family's, else the first.
+    private static func destination(of file: URL, in folder: SkinInstallFolder) -> InstalledSkinFile {
         let name = file.deletingPathExtension().lastPathComponent
-        let destination = folder.url.appendingPathComponent(name + "." + fileExtension)
-        try await folder.commit(file, to: destination, validate: validate)
-        return InstalledSkinFile(name: name, url: destination)
+        let own = file.pathExtension.lowercased()
+        let ext = fileExtensions.contains(own) ? own : fileExtensions[0]
+        return InstalledSkinFile(name: name, url: folder.url.appendingPathComponent("\(name).\(ext)"))
+    }
+
+    /// The files of an installed skin's name other than its own, which go so the name stays one
+    /// skin. The skin is installed by then, and its extension may not be the preferred one, so a
+    /// file that will not go is left rather than failing the install.
+    private static func otherFiles(of skin: InstalledSkinFile, in folder: SkinInstallFolder) -> [URL] {
+        (skinFilesByName(in: folder)[skin.name] ?? []).filter { !isSameFile($0, skin.url) }
+    }
+
+    /// Whether `a` and `b` are one file on disk: on a case-insensitive volume `Deck.SGF` and
+    /// `Deck.sgf` are, and the skin just installed under one must not be removed as the other.
+    private static func isSameFile(_ a: URL, _ b: URL) -> Bool {
+        if a.lastPathComponent == b.lastPathComponent { return true }
+        let key = URLResourceKey.fileResourceIdentifierKey
+        guard let first = (try? a.resourceValues(forKeys: [key]))?.fileResourceIdentifier,
+              let second = (try? b.resourceValues(forKeys: [key]))?.fileResourceIdentifier else { return false }
+        return first.isEqual(second)
+    }
+
+    /// The visible skin files in `folder` by skin name, each name's in `fileExtensions` order.
+    private static func skinFilesByName(in folder: SkinInstallFolder) -> [String: [URL]] {
+        var ranked: [String: [(rank: Int, url: URL)]] = [:]
+        for file in (try? folder.fileManager.contentsOfDirectory(atPath: folder.url.path)) ?? [] where !file.hasPrefix(".") {
+            let url = folder.url.appendingPathComponent(file)
+            guard let rank = fileExtensions.firstIndex(of: url.pathExtension.lowercased()) else { continue }
+            ranked[url.deletingPathExtension().lastPathComponent, default: []].append((rank, url))
+        }
+        return ranked.mapValues { $0.sorted { $0.rank < $1.rank }.map(\.url) }
     }
 }

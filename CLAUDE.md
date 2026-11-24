@@ -27,6 +27,7 @@ Technical documentation lives in `skills/`. Read the owning skill before changin
 - `wmp-skin-guide`: Windows Media Player `.wmz`/`.wms` loading, rendering, scripting, menus, state, and WMP-owned windows
 - `audion-face-guide`: Panic Audion faces — a FaceKit port with a FaceKit oracle, so a diff against the oracle is a defect
 - `sonique-skin-guide`: Sonique `.sgf` skins — the decoded format, the corpus, and real Sonique under Wine as the oracle
+- `aimp-skin-guide`: AIMP `.acs5`/`.acs4`/`.acs3` skins — the decoded format, the script engine, and real AIMP under Wine as the oracle
 - `plex-integration`, `jellyfin-integration`, `subsonic-integration`, `emby-integration`: media servers
 - `sonos-casting`, `chromecast-casting`: casting protocols and debugging; `cast-testing`: live CLI casting checks against the LAN's TVs; `visualization-cast`: casting the Visualizations window live
 - `stream-ripper`: URL ripping; `youtube-source`: YouTube audio; `cue-sheets`: cue playback/splitting; `radio-streaming`: radio; `video-playback`: the shared video path and window
@@ -49,7 +50,7 @@ never a new file, a code comment, or prose handed back. (GitHub issues are for u
 issue a PR must link; see `CONTRIBUTING.md`.)
 
 - `WMP_TASKS.md` (`.wmz`), `WINAMP5_TASKS.md` (`.wal`), `AUDION_TASKS.md` (Audion faces),
-  `SONIQUE_TASKS.md` (`.sgf`), and `MISC_TASKS.md` for everything else, including the local library.
+  `SONIQUE_TASKS.md` (`.sgf`), `AIMP_TASKS.md` (AIMP skins), and `MISC_TASKS.md` for everything else, including the local library.
   Classic and Original have no backlog of their own; their rows go in `MISC_TASKS.md`.
 - Read the file's header before adding a row: it says how a row is numbered and laid out, and where
   closed rows go (usually that family's archive, in the change that closes them).
@@ -63,7 +64,7 @@ Sources/NullPlayer/
 ├── App/, Windows/                         App lifecycle and UI
 ├── Audio/, Casting/                       Playback, EQ, and casting
 ├── StreamRipper/, Radio/                  Downloading and radio
-├── Skin/, ModernSkin/, WinampModern/, WMPSkin/, AudionFace/, SoniqueSkin/  Skin engines
+├── Skin/, ModernSkin/, WinampModern/, WMPSkin/, AudionFace/, SoniqueSkin/, AIMPSkin/  Skin engines
 ├── Plex/, Subsonic/, Jellyfin/, Emby/      Server integrations
 ├── Visualization/, Cava/, PeppyMeter/, Waveform/  Visuals
 └── Data/Models/, Utilities/               Models and local library

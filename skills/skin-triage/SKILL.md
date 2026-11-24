@@ -1,6 +1,6 @@
 ---
 name: skin-triage
-description: The canonical test-and-fix procedure for a skin in every skin family (Classic, Original, Original-Metal, Winamp Modern .wal, Windows Media Player .wmz, Audion faces) — headless first over every window, control and component, blockers and unlockers fixed as they are found, a reference-image matching loop run to completion, then the live UI. Fixed phase order, the technique for each phase, the evidence that closes it, and a fill-in record. Use when a user reports a skin that looks or behaves wrong, when asked to test, fix or bring up a skin, or when picking up a skin backlog row.
+description: The canonical test-and-fix procedure for a skin in every skin family (Classic, Original, Original-Metal, Winamp Modern .wal, Windows Media Player .wmz, Audion faces, AIMP) — headless first over every window, control and component, blockers and unlockers fixed as they are found, a reference-image matching loop run to completion, then the live UI. Fixed phase order, the technique for each phase, the evidence that closes it, and a fill-in record. Use when a user reports a skin that looks or behaves wrong, when asked to test, fix or bring up a skin, or when picking up a skin backlog row.
 ---
 
 # Triaging a skin
@@ -70,6 +70,7 @@ Phase 5 onward only for the rows the scan files.
 | `.wal` | the skin's own artwork, `screenshot.png`, `.m`/MAKI | unclassified | `WinampModernRenderDumpTests`, interaction + motion sweeps | `winamp-modern-skin-guide/reference/harness.md` | `tasks/WINAMP5_TASKS.md`, `skins.md` |
 | `.wmz` | the skin's own artwork, markup, JScript | unclassified | `WMPRenderDumpTests` | `wmp-skin-guide/reference/harness.md` | `tasks/WMP_TASKS.md`, `reference/skins/` |
 | Audion | the FaceKit oracle | a defect unless a listed departure | `AudionFaceRenderDumpTests` | `audion-face-guide/reference/harness.md` | `tasks/AUDION_TASKS.md` |
+| AIMP | the skin's own artwork and XML/script, the catalog's `*_full.jpg` screenshot | unclassified | `AIMPRenderDumpTests`, `AIMPCorpusLoadTests` (load gate) | `aimp-skin-guide/reference/harness.md` | `tasks/AIMP_TASKS.md`, `docs/aimp/backlog-archive.md`, `aimp-skin-guide/reference/skins/` |
 
 Classic and Original are finished engines: work on any other family that moves them is a regression,
 whatever the argument (CLAUDE.md § Rules). An all-modes change the user asked for is not.
@@ -95,6 +96,7 @@ Applies always. Two questions: has this been seen, and what should it look like?
 2. **Collect every reference image**, in this order of authority:
    - the reporter's own screenshot of the intended look;
    - Audion: the FaceKit oracle render of each state;
+   - AIMP: the catalog page's `*_full.jpg` screenshot (`aimp-skin-guide/reference/harness.md` § *Corpus*);
    - images shipped in the archive — `screenshot.png`, `preview*`, `*.jpg`/`*.png` at the root,
      readme images;
    - a published screenshot the user points at.
@@ -113,7 +115,7 @@ places searched.
 
 ## Phase 2 — Headless inventory: the denominator
 
-Applies to `.wal`, `.wmz`, Audion. Classic/Original: do the static half (sprite sheets present and
+Applies to `.wal`, `.wmz`, Audion, AIMP. Classic/Original: do the static half (sprite sheets present and
 the size `SkinElements` expects; `skin.json` elements against `original-skin-guide`) and go to
 Phase 6.
 
@@ -137,6 +139,7 @@ The dump command is the family's *triage inventory dump*, kept with its flags:
 | `.wal` | `winamp-modern-skin-guide/reference/harness.md` § *Debugging a skin* |
 | `.wmz` | `wmp-skin-guide/reference/harness/probe-flags.md` § *The probe flags* |
 | Audion | `audion-face-guide/reference/harness.md` § *The harness* |
+| AIMP | `aimp-skin-guide/reference/harness.md` § *Flags* (`AIMP_RENDER_OUT`, `AIMP_RENDER_ITEMS`, `AIMP_RENDER_TARGETS`) |
 
 **Confirm it took:** an inventory table with a row per window, control and component, and the count
 of each — the denominator every later verdict is out of.
@@ -160,10 +163,11 @@ grep sweep output for them.
 | `.wal` | the interaction sweep over a folder holding only this skin (`harness.md` § *The interaction sweep*), then the click/hover and state flags in § *Debugging a skin*, and `wal_motion_sweep.sh` (§ *The motion sweep*) |
 | `.wmz` | the click/hover and state flags in `harness/probe-flags.md`; a control's corpus-wide reach by `harness/live-loop.md` § *Auditing one authored control* |
 | Audion | `audion-face-guide/reference/harness.md` § *Probe flags*; the oracle per state |
+| AIMP | `AIMP_RENDER_TARGETS`, then `AIMP_RENDER_CLICK`/`AIMP_RENDER_WHEEL`/`AIMP_RENDER_HOVER` per control, `AIMP_RENDER_PAGES`/`AIMP_RENDER_COUNTERS` per state, and `AIMP_RENDER_LIVE` for every safe control at once (`aimp-skin-guide/reference/harness.md` § *Flags*); no flag drags or right-clicks, so each slider's drag and each right-click are driven live in Phase 7 |
 
 **Test every button.** Every control in every window, layout, view, tab and drawer gets every gesture
 it can take, and **driven rows = Phase 2 control count**. Use the sweep first. Then drive whatever
-the sweep skipped with the point probes (`RENDER_CLICK`, `WMP_RENDER_CLICK`, `AUDION_RENDER_CLICK`)
+the sweep skipped with the point probes (`RENDER_CLICK`, `WMP_RENDER_CLICK`, `AUDION_RENDER_CLICK`, `AIMP_RENDER_CLICK`)
 at each control's frame centre. **Prove each instrument before the pass**: one known-good control per
 gesture (click, drag, hover, right-click) must read `works`; an instrument fixed mid-pass voids every
 verdict before it. The `.wal` sweep skips controls no script listens to (plain

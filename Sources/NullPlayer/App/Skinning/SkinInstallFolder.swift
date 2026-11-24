@@ -32,6 +32,42 @@ struct SkinInstallFolder {
         try place(incoming, at: destination)
     }
 
+    /// Several commits, all or none: every source is copied in and `validate`d as that copy, and only
+    /// once all have passed are they placed (an archive of skins: one that fails leaves every
+    /// installed skin as it was). Each installed skin a placement replaces is set aside until every
+    /// placement has succeeded, and put back if one fails. `targets` pairs each source with its
+    /// destination and staging suffix; a destination named twice is a programming error.
+    func commitAll(_ targets: [(source: URL, destination: URL, suffix: String)],
+                   validate: (URL) async throws -> Void) async throws {
+        precondition(Set(targets.map(\.destination.standardizedFileURL)).count == targets.count, "one destination per target")
+        var staged: [(incoming: URL, destination: URL)] = []
+        defer { for copy in staged { try? fileManager.removeItem(at: copy.incoming) } }
+        for target in targets {
+            staged.append((try stage(target.source, suffix: target.suffix), target.destination))
+            try await validate(staged[staged.count - 1].incoming)
+        }
+        var placed: [(destination: URL, original: URL?)] = []
+        do {
+            for copy in staged {
+                var original: URL?
+                if fileManager.fileExists(atPath: copy.destination.path) {
+                    let aside = url.appendingPathComponent(".replaced-\(UUID().uuidString)")
+                    try fileManager.moveItem(at: copy.destination, to: aside)
+                    original = aside
+                }
+                placed.append((copy.destination, original))
+                try fileManager.moveItem(at: copy.incoming, to: copy.destination)
+            }
+        } catch {
+            for entry in placed.reversed() {
+                try? fileManager.removeItem(at: entry.destination)
+                if let original = entry.original { try? fileManager.moveItem(at: original, to: entry.destination) }
+            }
+            throw error
+        }
+        for entry in placed { if let original = entry.original { try? fileManager.removeItem(at: original) } }
+    }
+
     /// The same commit for a family that validated the source already and imports synchronously.
     func commit(_ source: URL, to destination: URL, suffix: String = "") throws {
         let incoming = try stage(source, suffix: suffix)

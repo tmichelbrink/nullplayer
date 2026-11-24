@@ -8,7 +8,7 @@ before/after verdicts come from the run store (`wal_interaction_sweep.sh --rev <
 ## Report (Phase 0)
 
 - Skin file:            <name> — sha256 <hash>
-- Family:               Classic | Original | Metal | .wal | .wmz | Audion
+- Family:               Classic | Original | Metal | .wal | .wmz | Audion | AIMP
 - Reported state:       view/layout <>, theme <>, UI Size <>%, window <W>x<H>, docked <y/n>,
                         playing <local|stream|no>, first launch | relaunch
 - Reporter's steps:     1. …

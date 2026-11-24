@@ -24,6 +24,29 @@ final class BMPParserTests: XCTestCase {
         XCTAssertEqual(pixel(atX: 1, y: 0, in: image), RGBA(0, 0, 255, 255))
     }
 
+    func testHeaderReadsAnInfoOrCoreHeaderAsStored() throws {
+        var info = makeBMP(width: 3, height: 2, bitsPerPixel: 24, palette: [], rows: [[UInt8](repeating: 0, count: 12)] + [[UInt8](repeating: 0, count: 12)])
+        info.replaceSubrange(22..<26, with: [0xFE, 0xFF, 0xFF, 0xFF]) // height -2: top-down
+        let header = try XCTUnwrap(BMPParser.Header(info))
+        XCTAssertEqual([header.infoSize, header.width, header.height, header.bitsPerPixel, header.compression, header.pixelOffset],
+                       [40, 3, -2, 24, 0, 54])
+        XCTAssertFalse(header.isCore)
+
+        var core = Data([0x42, 0x4D]) + Data(count: 8)
+        appendUInt32(26, to: &core)
+        appendUInt32(12, to: &core)
+        appendUInt16(7, to: &core)
+        appendUInt16(5, to: &core)
+        appendUInt16(1, to: &core)
+        appendUInt16(8, to: &core)
+        let coreHeader = try XCTUnwrap(BMPParser.Header(core))
+        XCTAssertEqual([coreHeader.width, coreHeader.height, coreHeader.bitsPerPixel, coreHeader.colorsUsed], [7, 5, 8, 0])
+        XCTAssertTrue(coreHeader.isCore)
+
+        XCTAssertNil(BMPParser.Header(Data("BM".utf8) + Data(count: 30)), "an info header needs 54 bytes")
+        XCTAssertNil(BMPParser.Header(Data("XX".utf8) + Data(count: 60)))
+    }
+
     private func makeFourBitBMP() -> Data {
         let palette: [(r: UInt8, g: UInt8, b: UInt8)] = [
             (0, 0, 0),
