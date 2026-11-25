@@ -1,0 +1,168 @@
+import CoreGraphics
+import Foundation
+import XCTest
+@testable import NullPlayer
+
+/// Pictures without a corpus: frames cut from side-by-side and stacked strips, pixels decoded on
+/// first draw within the skin's budget and let go least recently drawn first, and AIMP 3.0's BMPs.
+final class AIMPSkinImageTests: XCTestCase {
+    func testAClickOnAKeysClearPixelsReachesTheKeyUnderIt() throws {
+        // Bento's logo: a 68-px About key, clear on its left, over its 29-px OPT key.
+        let context = try XCTUnwrap(CGContext(data: nil, width: 68, height: 39, bitsPerComponent: 8, bytesPerRow: 68 * 4,
+                                              space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.fill(CGRect(x: 39, y: 0, width: 29, height: 39))
+        let logo = try XCTUnwrap(context.makeImage())
+        let options = AIMPSkinTarget(control: .init(value: 1), name: "OPT", kind: .action(.options), rect: CGRect(x: 275, y: 127, width: 29, height: 14))
+        var about = AIMPSkinTarget(control: .init(value: 2), name: "About", kind: .action(.mainAbout), rect: CGRect(x: 273, y: 117, width: 68, height: 39))
+        about.pixels = AIMPAlphaMask(logo)
+
+        XCTAssertEqual(AIMPSkinTarget.topmost([options, about], at: CGPoint(x: 285, y: 134))?.name, "OPT")
+        XCTAssertEqual(AIMPSkinTarget.topmost([options, about], at: CGPoint(x: 330, y: 130))?.name, "About")
+        XCTAssertEqual(AIMPSkinTarget.topmost([options, about], at: CGPoint(x: 300, y: 150))?.name, "About",
+                       "clear with nothing under it: the key still takes it")
+        about.pixels = nil
+        XCTAssertEqual(AIMPSkinTarget.topmost([options, about], at: CGPoint(x: 285, y: 134))?.name, "About", "no picture: its rect")
+    }
+
+    func testTimeTemplatesLeaveOutZeroHoursWhenAsked() {
+        let host = AIMPSkinHostState()
+        XCTAssertEqual(AIMPSkinTemplate.format("%time(HMS;:;Z)", host: host, value: 159), "2:39", "M5's wave-bar times")
+        XCTAssertEqual(AIMPSkinTemplate.format("%time(HMS;:;Z)", host: host, value: 3_725), "1:02:05")
+        XCTAssertEqual(AIMPSkinTemplate.format("%time(HMS;:;)", host: host, value: 159), "0:02:39")
+        XCTAssertEqual(AIMPSkinTemplate.format("%time(MS;.;)", host: host, value: 159), "2.39")
+    }
+
+    func testIfTakesEmptyAndZeroAsFalse() {
+        let host = AIMPSkinHostState()
+        // Terran's timer: its counter reads 0 until clicked, and the track's time shows till then.
+        XCTAssertEqual(AIMPSkinTemplate.format("%IF(0,sleep,track)", host: host), "track")
+        XCTAssertEqual(AIMPSkinTemplate.format("%IF(1,sleep,track)", host: host), "sleep")
+        XCTAssertEqual(AIMPSkinTemplate.format("%IF(,a,b)", host: host), "b")
+        XCTAssertEqual(AIMPSkinTemplate.format("%IF(Artist,a,b)", host: host), "a")
+        XCTAssertEqual(AIMPSkinTemplate.format("%IF(0.00 MB,a,b)", host: host), "a", "text, not a number")
+    }
+
+    func testFileAndStatisticsFieldsReadThePlayingTrack() {
+        var host = AIMPSkinHostState()
+        host.player.title = "Song"
+        host.player.fileType = "FLAC"
+        host.player.sampleRate = 44_100
+        host.player.fileDirectory = "/Music/Album"
+        host.player.playCount = 3
+        host.player.discNumber = 2
+        XCTAssertEqual(AIMPSkinTemplate.format("%IF(%FileFormat,%FileFormat%Char(44) ,)%SampleRate", host: host), "FLAC, 44 kHz")
+        XCTAssertEqual(AIMPSkinTemplate.format("%FileName.%FileFormat", host: host), "Song.FLAC", "a stream's name is its title")
+        host.player.fileName = "01 song"
+        XCTAssertEqual(AIMPSkinTemplate.format("%FileName.%FileFormat", host: host), "01 song.FLAC")
+        XCTAssertEqual(AIMPSkinTemplate.format("%playcount/%PlayCount %FileDir %FileParentDir %DiskNumber", host: host), "3/3 /Music/Album Album 2")
+        XCTAssertEqual(AIMPSkinTemplate.format("%a|%A|%TrackGain", host: host), "||", "short fields keep their case; missing tags read empty")
+        XCTAssertEqual(AIMPSkinTemplate.format("%LastPlayDate", host: host), "-", "no statistics, as AIMP 5.40 shows them")
+        host.player.fileSize = 352_880
+        XCTAssertEqual(AIMPSkinTemplate.format("%FileSize", host: host), "344.61 KB")
+        host.player.lastPlayed = Date(timeIntervalSince1970: 0)
+        XCTAssertFalse(AIMPSkinTemplate.format("%LastPlayDate", host: host).isEmpty)
+    }
+
+    func testTextTemplatesSplitAndMeasureAsAIMPCounts() {
+        let host = AIMPSkinHostState()
+        // Soot's off and on labels, split from one language string.
+        XCTAssertEqual(AIMPSkinTemplate.format("%StrLeft(Off|On,%Dec(%StrPos(|,Off|On),1))", host: host), "Off")
+        XCTAssertEqual(AIMPSkinTemplate.format("%StrRight(Off|On,%Dec(%Length(Off|On),%StrPos(|,Off|On)))", host: host), "On")
+        XCTAssertEqual(AIMPSkinTemplate.format("%StrPos(x,abc)", host: host), "0")
+        XCTAssertEqual(AIMPSkinTemplate.format("%Copy(abcdef,2,3)", host: host), "bcd")
+        XCTAssertEqual(AIMPSkinTemplate.format("%Inc(4)", host: host), "5")
+    }
+
+    func testFramesOfASideBySideStripAreItsColumns() throws {
+        // Three 2×1 frames side by side: each pixel's blue byte is its x.
+        let image = Self.ase(width: 6, height: 1, frames: 3, stacked: false, budget: AIMPSkinPixelBudget()) { x, _ in UInt8(x) }
+        XCTAssertEqual(image.frameSize, CGSize(width: 2, height: 1))
+        XCTAssertEqual(Self.blue(image.frame(1)), [2, 3])
+        XCTAssertEqual(Self.blue(image.frame(9)), [4, 5], "clamped to the last")
+    }
+
+    func testFramesOfAStackedStripAreItsRows() throws {
+        let image = Self.ase(width: 1, height: 4, frames: 2, stacked: true, budget: AIMPSkinPixelBudget()) { _, y in UInt8(y) }
+        XCTAssertEqual(Self.blue(image.frame(0)), [0, 1])
+        XCTAssertEqual(Self.blue(image.frame(1)), [2, 3])
+    }
+
+    func testPicturesDecodeWhenDrawnAndTheLeastRecentlyDrawnGo() throws {
+        let budget = AIMPSkinPixelBudget(limit: 20)
+        var decodes = 0
+        let pictures = (0..<3).map { _ in
+            Self.ase(width: 10, height: 1, frames: 1, stacked: false, budget: budget) { _, _ in 1 } onDecode: { decodes += 1 }
+        }
+        XCTAssertEqual(budget.residentPixels, 0, "nothing decodes as the skin loads")
+        XCTAssertNotNil(pictures[0].frame(0))
+        XCTAssertNotNil(pictures[1].frame(0))
+        XCTAssertEqual(budget.residentPixels, 20)
+        XCTAssertNotNil(pictures[0].frame(0), "drawn again: resident, no decode")
+        XCTAssertEqual(decodes, 2)
+        XCTAssertNotNil(pictures[2].frame(0))
+        XCTAssertEqual(budget.residentPixels, 20, "the third pushed out the least recently drawn")
+        XCTAssertNotNil(pictures[0].frame(0))
+        XCTAssertEqual(decodes, 3, "the first stayed")
+        XCTAssertNotNil(pictures[1].frame(0))
+        XCTAssertEqual(decodes, 4, "the second decodes again")
+    }
+
+    func testCoversBlurOncePerCoverAndLevel() throws {
+        let context = try XCTUnwrap(CGContext(data: nil, width: 4, height: 4, bitsPerComponent: 8, bytesPerRow: 0,
+                                              space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let cover = try XCTUnwrap(context.makeImage()), other = try XCTUnwrap(context.makeImage())
+        let covers = AIMPSkinBlurredCovers()
+        var made = 0
+        func blur() -> CGImage? { made += 1; return cover }
+        _ = covers.image(cover, level: 40, blur: blur)
+        _ = covers.image(cover, level: 40, blur: blur)
+        XCTAssertEqual(made, 1, "the same cover at the same level is made once")
+        _ = covers.image(cover, level: 60, blur: blur)
+        _ = covers.image(other, level: 40, blur: blur)
+        XCTAssertEqual(made, 3, "another level or another cover is made anew")
+    }
+
+    func testFirstFrameBlankAndLastFrameFlatAreReadOnceWhenFirstAsked() {
+        // Frame 0 transparent, frame 1 one opaque colour over 18 pixels.
+        let budget = AIMPSkinPixelBudget()
+        var decodes = 0
+        let image = Self.ase(width: 3, height: 12, frames: 2, stacked: true, budget: budget) { _, y in y < 6 ? 0 : 200 } onDecode: { decodes += 1 }
+        XCTAssertEqual(decodes, 0, "nothing decodes until the flags are first asked")
+        XCTAssertTrue(image.firstFrameBlank)
+        XCTAssertTrue(image.lastFrameFlat)
+        XCTAssertNotNil(image.frame(1))
+        XCTAssertEqual(decodes, 1, "the first ask decodes the picture into its budget; asking or drawing after does not again")
+    }
+
+    /// An `ASEIMG32` whose blue byte at (x, y) is `blue(x, y)`, opaque where it is not 0.
+    private static func ase(width: Int, height: Int, frames: Int, stacked: Bool, budget: AIMPSkinPixelBudget,
+                            blue: (Int, Int) -> UInt8, onDecode: @escaping () -> Void = {}) -> AIMPSkinImage {
+        var header = [UInt8](repeating: 0, count: 70)
+        header.replaceSubrange(0..<8, with: Array("ASEIMG32".utf8))
+        func put(_ value: Int, at: Int) { for i in 0..<4 { header[at + i] = UInt8((value >> (8 * i)) & 0xFF) } }
+        put(frames, at: 18)
+        header[27] = stacked ? 1 : 0
+        put(width, at: 62)
+        put(height, at: 66)
+        var pixels: [UInt8] = []
+        for y in 0..<height {
+            for x in 0..<width {
+                let b = blue(x, y)
+                pixels += [b, 0, 0, b == 0 ? 0 : 255]
+            }
+        }
+        let data = Data(header + pixels)
+        return try! AIMPSkinImage(data, name: "test.myimg", budget: budget) {
+            onDecode()
+            return data
+        }
+    }
+
+    private static func blue(_ image: CGImage?) -> [UInt8] {
+        guard let image, let data = image.dataProvider?.data as Data? else { return [] }
+        return stride(from: 0, to: image.width * image.height * 4, by: 4).map { data[$0] }
+    }
+}
