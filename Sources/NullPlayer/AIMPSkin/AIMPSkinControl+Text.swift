@@ -34,40 +34,6 @@ extension AIMPSkinControl {
             /// A number (the clock, the position): through a template, else as AIMP writes it.
             case number(AIMPSkinLink, template: String?)
         }
-
-        init(_ node: AIMPNode, bindings: AIMPSkinBindings, index: AIMPSkinIndex) {
-            let props = node.properties
-            func expanded(_ text: String) -> String { AIMPSkinLanguage.expanded(text, strings: index.strings) }
-            font = AIMPSkinFont(props["Font"] ?? props["Fonts"]?.named["Normal"], resources: index.resources)
-            let template = props["Template"]?.reference
-            if let caption = props["Caption"]?.reference {
-                // A caption with a language string inside it (`Akai GX-635D - @Lng:10;`) has it filled in.
-                display = .caption(expanded(caption))
-            } else if let file = bindings.links.first(where: { $0.pin == "FileInfo" && $0.target == "DisplayValue" }) {
-                // Language strings inside it too (Red Bias's `@Lng:15; %PlayCount`: "Played: 3").
-                display = .file(expanded(template ?? file.textFormat ?? "%T"))
-            } else if let link = bindings["DisplayValue"] {
-                if let source = link.source, let provider = index.providers[source], provider.kind == .concatenator {
-                    // No `Expression`: its first input's text.
-                    display = .concatenation(inputs: provider.bindings.links,
-                                             template: expanded(provider.template ?? "%TextValue1"))
-                } else {
-                    // A template over the bound number (`%time(MS;:;)`).
-                    display = .number(link, template: (template ?? link.textFormat).map(expanded))
-                }
-            } else {
-                display = template.map { .template(expanded($0)) } ?? .none
-            }
-            running = bindings["DisplayValue"] == nil ? template.map(expanded) ?? "%IF(%R,%R - ,)%T" : nil
-            alignment = AIMPSkinTextAlign(props["Alignment"]?.reference ?? props["TextAlign"]?.reference)
-            // `.acs3`'s `TextAlign` other than left counts too: such a label is not the left-aligned
-            // one AIMP sized to its text (`AIMPSkinLayout.autoSized`).
-            declaresAlignment = props["Alignment"] != nil || AIMPSkinTextAlign(props["TextAlign"]?.reference).map { $0 != .left } == true
-            isLeftJustified = AIMPSkinTextAlign(props["Alignment"]?.reference) == .left
-            wraps = props["WordWrap"]?.reference == "True" || props["Layout"]?.reference == "MultiLine"
-            sizesHeight = props["AutoSize"]?.reference == "csHeight"
-            declaresAutoSize = props["AutoSize"] != nil
-        }
     }
 
     /// The playlist's `Resources`, in `.acs3`'s flat form (`ItemLine1FontPlaying`) or `.acs4`/`.acs5`'s
@@ -100,65 +66,6 @@ extension AIMPSkinControl {
         let marks: String?
         let switches: String?
         let headerSwitches: String?
-
-        init(_ props: [String: AIMPNode], resources ids: [String: AIMPSkinResource], dialect: AIMPSkinDialect) {
-            let resources = props["Resources"]?.named ?? [:]
-            let color = { (flat: String, nested: String, state: String) in
-                Self.color(resources, flat: flat, nested: nested, state: state, delphi: dialect.delphiColors)
-            }
-            picture = resources["Skin"]?.reference ?? resources["Background"]?.reference
-            rowPicture = resources["ItemBackground"]?.reference
-            background = color("BackgroundColor", "BackgroundColor", "")
-            let normal = Self.font(resources, "Normal", ids: ids) ?? AIMPSkinFont(name: "Tahoma", height: 13, bold: false, color: 0xFFC0_C0C0)
-            fonts = Dictionary(uniqueKeysWithValues: Row.allCases.map { ($0, Self.font(resources, $0.rawValue, ids: ids) ?? normal) })
-            // With none of its own, the second line is the first's font, smaller.
-            var small = normal
-            small.height = max(9, normal.height - 2)
-            let detail = Self.font(resources, "Normal", line: "ItemLine2", ids: ids) ?? small
-            detailFonts = Dictionary(uniqueKeysWithValues: Row.allCases.map {
-                ($0, Self.font(resources, $0.rawValue, line: "ItemLine2", ids: ids) ?? detail)
-            })
-            headerFont = Self.font(resources, "Normal", line: "Header", ids: ids) ?? normal
-            headerPicture = resources["HeaderBackground"]?.reference
-            expandButtons = resources["HeaderExpandButtons"]?.reference
-            marks = (resources["ItemMarks"] ?? resources["SkinMarks"])?.reference
-            switches = (resources["ItemSwitches"] ?? resources["SkinSwitches"])?.reference
-            headerSwitches = resources["HeaderSwitches"]?.reference ?? switches
-            var fills: [Row: AIMPSkinColor] = [:]
-            fills[.playingSelected] = color("ItemHighlightColorSelectedPlaying", "ItemBackgroundColors", "PlayingSelected")
-            fills[.playing] = color("ItemHighlightColorPlaying", "ItemBackgroundColors", "Playing")
-            fills[.selected] = color("ItemHighlightColorSelected", "ItemBackgroundColors", "Selected")
-            self.fills = fills
-        }
-
-        /// A row's font: `.acs3`'s flat `ItemLine1Font…`, else its state's (else the normal one's) in
-        /// `ItemLine1Fonts`, in `.acs3`'s one value (W10, New.VK: `Segoe UI,6842472,13,0`) or declared,
-        /// over the list's own default, Tahoma 13.
-        /// The header's and second line's likewise (`line` `Header`, `ItemLine2`).
-        private static func font(_ resources: [String: AIMPNode], _ state: String, line: String = "ItemLine1",
-                                 ids: [String: AIMPSkinResource]) -> AIMPSkinFont? {
-            if let flat = AIMPSkinFont(flat: resources[line + "Font" + (state == "Normal" ? "" : state)]?.reference) { return flat }
-            let states = (resources[line + "Fonts"]?.named ?? [:])
-            guard let node = states[state] ?? states["Normal"] else { return nil }
-            // A state's `ID` is followed, so a theme's fonts reach the rows (M5's dark text in its
-            // light theme); one that gives a clear colour keeps white: read so, Sony Media Tower
-            // Reborn's rows drew nothing.
-            let white = AIMPSkinFont(name: "Tahoma", height: 13, bold: false, color: 0xFFFF_FFFF)
-            var font = AIMPSkinFont(node, resources: ids, fallback: white)
-            if font.color >> 24 == 0, font.colorID == nil { font.color = white.color }
-            return font
-        }
-
-        /// `.acs3`'s flat Delphi colour (`delphi`), else `.acs4`'s and `.acs5`'s, flat or nested by
-        /// state, ARGB: there a flat `0` is clear, the list over its parent's picture (Arc's light
-        /// pane; W10's dark one under a clear white `16777215`), not black.
-        private static func color(_ resources: [String: AIMPNode], flat: String, nested: String, state: String, delphi: Bool) -> AIMPSkinColor? {
-            if let property = resources[flat] {
-                if delphi, let value = AIMPSkinColor.delphi(property) { return .argb(value) }
-                if !delphi, let color = AIMPSkinColor(property) { return color }
-            }
-            return AIMPSkinColor(resources[nested].flatMap { state.isEmpty ? $0 : $0.named[state] })
-        }
     }
 
     /// The colours of the library's group tree and table (`Style` in `.acs4`, `StyleContent` in
@@ -172,8 +79,8 @@ extension AIMPSkinControl {
         private(set) var rowText: UInt32?
         /// The same four as the skin gives them, a value or a colour resource (M5's theme colours),
         /// for `resolved`.
-        private var sources: Sources
-        private struct Sources: Equatable, Sendable {
+        var sources: Sources
+        struct Sources: Equatable, Sendable {
             let fill: AIMPSkinColor?, selected: AIMPSkinColor?, selectedText: AIMPSkinColor?, rowText: AIMPSkinColor?
         }
 
@@ -183,23 +90,6 @@ extension AIMPSkinControl {
             (library.fill, library.selected, library.selectedText, library.rowText) =
                 (visible(sources.fill), visible(sources.selected), visible(sources.selectedText), visible(sources.rowText))
             return library
-        }
-
-        init(_ props: [String: AIMPNode]) {
-            func style(_ name: String) -> AIMPNode? {
-                for group in ["StyleContent", "Style"] {
-                    if let node = props[group]?.named[name] { return node }
-                }
-                return nil
-            }
-            func source(_ name: String) -> AIMPSkinColor? { AIMPSkinColor(style(name)) }
-            sources = Sources(fill: source("ColorContent") ?? source("BackgroundColor"), selected: source("RowColorSelected"),
-                              selectedText: source("RowColorSelectedText"), rowText: source("RowColorText") ?? source("ColorText"))
-            // Before any theme is read, a value the skin gives outright.
-            self = resolved { color in
-                guard case .argb(let argb)? = color, argb >> 24 != 0 else { return nil }
-                return argb
-            }
         }
     }
 
@@ -220,21 +110,6 @@ extension AIMPSkinControl {
         /// `TextOffsetsActive` (l, t, r, b), and the caption centred unless `TextAlignment` says not.
         let offsets: AIMPSkinImage.Margins?
         let isCentred: Bool
-
-        init(_ node: AIMPNode, bindings: AIMPSkinBindings, resources: [String: AIMPSkinResource]) {
-            let props = node.properties
-            let options = props["TabsOptions"]?.named ?? [:]
-            source = bindings.links.first { ["prvPlaylistManager", "prvMusicLibraryManager"].contains($0.source ?? "") }?.source
-            picture = props["SkinTab"]?.reference ?? props["TabSkin"]?.reference
-            optionsPicture = options["Skin"]?.reference
-            font = AIMPSkinFont(options["FontActive"] ?? options["Font"] ?? props["FontActive"] ?? props["Font"] ?? props["Fonts"]?.named["Active"],
-                                resources: resources)
-            activeFont = AIMPSkinFont(options["FontActive"] ?? options["Font"], resources: resources)
-            playingFont = AIMPSkinFont(options["FontPlayingActive"] ?? options["Font"], resources: resources)
-            isVertical = props["VerticalLayout"]?.reference == "True"
-            offsets = AIMPSkinImage.Margins(options["TextOffsetsActive"]?.reference)
-            isCentred = options["TextAlignment"]?.reference.map { AIMPSkinTextAlign($0) == .center } ?? true
-        }
     }
 }
 
@@ -267,23 +142,6 @@ extension AIMPSkinFont {
     /// the skins are measured against (RealPlayer 11's "M.Library" key).
     static let standard = AIMPSkinFont(name: "Tahoma", height: 11, bold: false, color: 0xFFFF_FFFF)
 
-    /// A font property, read one way wherever a skin gives one: a `Schema.xml` font (`TASEFont`) by
-    /// `ID`, `.acs3`'s one value (`Tahoma,13952279,12,2`), or declared inline (`Name`, `Height`,
-    /// `Style`, `Color`), each over the last; what none says is `fallback`'s.
-    init(_ property: AIMPNode?, resources: [String: AIMPSkinResource], fallback: AIMPSkinFont = .standard) {
-        var font = fallback
-        // A `TASEFont` is a whole font: what it leaves out is AIMP's for a resource (12 px), and its
-        // colour is ARGB, clear included (Lumin's tab caption font).
-        if let id = property?.named["ID"]?["value"], let chain = AIMPSkin.resource(id, in: resources)?.chain, !chain.isEmpty {
-            font = AIMPSkinFont(resource: chain)
-            font.resource = Resource(id: id, name: font.name, height: font.height, bold: font.bold, color: font.color)
-        }
-        if let whole = AIMPSkinFont(flat: property?.reference) { font = whole }
-        self = property.map { AIMPSkinFont(declared: Declaration($0), over: font, clearIsDelphi: true) } ?? font
-        // A face named empty (`.acs3`'s `,0,12,0`) is AIMP's default.
-        if name.isEmpty { name = Self.standard.name }
-    }
-
     /// A font resource from its `chain` (`AIMPSkin.resource`): each `Resource` over the one it names,
     /// and what none says AIMP's for a resource.
     init(resource chain: [AIMPSkinResource.Entry]) {
@@ -296,7 +154,7 @@ extension AIMPSkinFont {
     /// `Name`, `Height`, `Style` and `Color` where `node` declares them, over `base`; a colour is
     /// ARGB, or, `clearIsDelphi` (a form's own fonts), with no alpha a Delphi colour (`66051`: near
     /// black), opaque.
-    private init(declared declaration: Declaration, over base: AIMPSkinFont, clearIsDelphi: Bool) {
+    init(declared declaration: Declaration, over base: AIMPSkinFont, clearIsDelphi: Bool) {
         self = base
         let declared = declaration.values
         if let name = declared["Name"], !name.isEmpty { self.name = name }

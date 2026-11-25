@@ -50,15 +50,30 @@ extension AIMPSkinControl {
             case volume(String)
         }
 
-        init(_ node: AIMPNode, bindings: AIMPSkinBindings, index: AIMPSkinIndex) {
-            let props = node.properties
-            let pressed = Self.press(bindings, props: props, index: index)
+        /// The script handlers and texts a control names, which what it does is worked out from with
+        /// its bindings (`press`).
+        struct Handlers: Sendable {
+            var onClick: String?
+            var onMouseDown: String?
+            var onMouseUp: String?
+            var onMouseEnter: String?
+            var onMouseMove: String?
+            var onMouseLeave: String?
+            /// `PopupMenu`: a menu of AIMP's (`AIMPSkinPopup`) or one the skin builds.
+            var popupMenu: String?
+            /// `Hint`: a tooltip's text.
+            var hint: String?
+        }
+
+        /// `className`: a `SliderMasked` with press handlers is a key the wheel turns.
+        init(className: String?, handlers: Handlers, bindings: AIMPSkinBindings, index: AIMPSkinIndex) {
+            let pressed = Self.press(bindings, handlers: handlers, index: index)
             // A filmstrip selector with its own press handlers is a button the wheel turns: Soot's
             // big play/pause, prev and next (`cmfSbtn…`) play, pause or skip on a click and stop on
             // a long press through `SbtnOnDown` and `SbtnOnUp`, while the wheel steps
             // `SbtnVolumeRelay`, whose script turns the volume up or down.
-            if node["class"] == "SliderMasked", case .counter? = pressed, let down = props["OnMouseDown"]?.reference {
-                press = .hold(down: down, up: props["OnMouseUp"]?.reference)
+            if className == "SliderMasked", case .counter? = pressed, let down = handlers.onMouseDown {
+                press = .hold(down: down, up: handlers.onMouseUp)
                 wheel = pressed
             } else {
                 press = pressed
@@ -69,11 +84,11 @@ extension AIMPSkinControl {
             longClick = bindings["ActionOnLongClick"].flatMap { long in
                 long.source.flatMap { index.counterModule($0) != nil ? AIMPSkinTarget.LongClick(counter: $0, value: Int(long.expression ?? "") ?? 1) : nil }
             }
-            onMouseUp = props["OnMouseUp"]?.reference
-            onMouseEnter = props["OnMouseEnter"]?.reference
-            onMouseMove = props["OnMouseMove"]?.reference
-            onMouseLeave = props["OnMouseLeave"]?.reference
-            hint = Self.hint(bindings, props: props, strings: index.strings) ?? Self.actionHint(bindings)
+            onMouseUp = handlers.onMouseUp
+            onMouseEnter = handlers.onMouseEnter
+            onMouseMove = handlers.onMouseMove
+            onMouseLeave = handlers.onMouseLeave
+            hint = Self.hint(bindings, text: handlers.hint, strings: index.strings) ?? Self.actionHint(bindings)
             let action = bindings["Action"]
             source = action?.source
             if let action, let source = action.source {
@@ -112,7 +127,7 @@ extension AIMPSkinControl {
         /// A button a script drives names its action on its `Hint` binding instead (Vega MP-120's
         /// transport); a `PopupMenu` opens the menu it names: one the skin builds (`AIMPSkinCustomMenu`),
         /// NullPlayer's like it, else the player menu.
-        static func press(_ bindings: AIMPSkinBindings, props: [String: AIMPNode], index: AIMPSkinIndex) -> AIMPSkinTarget.Kind? {
+        static func press(_ bindings: AIMPSkinBindings, handlers: Handlers, index: AIMPSkinIndex) -> AIMPSkinTarget.Kind? {
             if let link = bindings["Action"], let source = link.source {
                 // What the skin declares under a name comes first: its own counter `acMode`, its page
                 // group `prvPages`, are not AIMP's action or player value of that name.
@@ -151,9 +166,9 @@ extension AIMPSkinControl {
             if let hint = bindings.all("Hint").lazy.compactMap({ $0.source.flatMap(AIMPAction.init) }).first {
                 return .action(hint)
             }
-            if let handler = props["OnClick"]?.reference { return .handler(handler) }
-            if let down = props["OnMouseDown"]?.reference { return .hold(down: down, up: props["OnMouseUp"]?.reference) }
-            return props["PopupMenu"]?.reference.map { .menu(index.menuNames.contains($0) ? .custom($0) : AIMPSkinPopup($0)) }
+            if let handler = handlers.onClick { return .handler(handler) }
+            if let down = handlers.onMouseDown { return .hold(down: down, up: handlers.onMouseUp) }
+            return handlers.popupMenu.map { .menu(index.menuNames.contains($0) ? .custom($0) : AIMPSkinPopup($0)) }
         }
 
         /// A link's fixed `Expression` for a player value, AIMP's 0–100 as 0–1: nil for none or one
@@ -194,7 +209,7 @@ extension AIMPSkinControl {
             "prvChorus": "Chorus", "prvTrueBass": "Bass", "prvEnhancer": "Enhancer",
         ]
 
-        private static func hint(_ bindings: AIMPSkinBindings, props: [String: AIMPNode], strings: [String: String]) -> Hint? {
+        private static func hint(_ bindings: AIMPSkinBindings, text: String?, strings: [String: String]) -> Hint? {
             if let link = bindings["Hint"], let source = link.source {
                 if let name = AIMPAction(source)?.title { return .text(name) }
                 if source == "prvPlayingFileInfo" || source == "prvQFI" { return .playingTrack }
@@ -206,7 +221,7 @@ extension AIMPSkinControl {
                 // naming the value it picks: Balance, Echo … Pitch), not the playing track.
                 if let name = Self.valueNames[source] { return .text(name) }
             }
-            return props["Hint"]?.reference.map { .text(AIMPSkinLanguage.expanded($0, strings: strings)) }
+            return text.map { .text(AIMPSkinLanguage.expanded($0, strings: strings)) }
         }
     }
 }

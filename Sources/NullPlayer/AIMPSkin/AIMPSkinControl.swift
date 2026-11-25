@@ -20,7 +20,6 @@ final class AIMPSkinControl: AIMPSkinElement, Sendable {
     }
 
     let id: ID
-    let node: AIMPNode
     let name: String?
     /// Its `class` (`StateDisplay`, `Button`), and its `Tag` and `PlaceInfo` margins as the skin
     /// wrote them, which a script reads (`AIMPSkinIndex.Element`).
@@ -56,39 +55,36 @@ final class AIMPSkinControl: AIMPSkinElement, Sendable {
     let text: Text
     let input: Input
 
-    /// `controls`: the controls it holds, read (`AIMPSkinIndex` numbers them all).
-    init(_ node: AIMPNode, id: ID, index: AIMPSkinIndex, controls: [AIMPSkinControl]) {
-        let props = node.properties
+    /// The skin's own markup for it, which a script's restyle is read again over (`restyled`); nil
+    /// for a control read from a format scripts do not restyle.
+    let markup: Markup?
+
+    init(id: ID, name: String?, className: String?, styleKey: String?, kind: AIMPControlClass, bindings: AIMPSkinBindings,
+         savedShown: Bool = true, placement: AIMPPlacement.Info?, controls: [AIMPSkinControl] = [],
+         picture: String?, maskFrame: Int? = nil, opacity: Double? = nil, blend: CGBlendMode? = nil,
+         flipX: Bool = false, flipY: Bool = false, text: Text, input: Input,
+         tag: String? = nil, writtenMargins: [Double] = [], markup: Markup? = nil) {
         self.id = id
-        self.node = node
-        name = node["name"]
-        className = node["class"]
-        tag = props["Tag"]?["value"]
-        writtenMargins = AIMPNode.writtenNumbers(props["PlaceInfo"]?["margins"])
-        styleKey = node["name"].flatMap { $0.isEmpty ? nil : $0 } ?? node["link"]
-        bindings = AIMPSkinBindings(node, names: index.names)
-        kind = AIMPControlClass(node, bindings: bindings, resources: index.resources, dialect: index.dialect)
+        self.name = name
+        self.className = className
+        self.styleKey = styleKey
+        self.kind = kind
+        self.bindings = bindings
         gates = bindings.all("Visibility")
-        savedShown = AIMPSkinItem.Layout(node).savedShown
-        placement = props["PlaceInfo"].map(AIMPPlacement.Info.init)
+        self.savedShown = savedShown
+        self.placement = placement
         self.controls = controls
-
-        picture = props["Skin"]?.reference
-        maskFrame = (props["Skin"]?["MaskFrame"].flatMap { Int($0) }
-            ?? picture.flatMap { index.resources[$0]?.entry?.maskFrame }.flatMap { Int($0) })
-            .flatMap { $0 >= 0 ? $0 : nil }
-        opacity = Double(props["BlendingModeOpacity"]?.reference ?? "").flatMap { $0 < 255 ? $0 : nil }
-        blend = Self.blendMode(props["BlendingMode"]?.reference)
-        flipX = props["FlipHorizontally"]?.reference == "True"
-        flipY = props["FlipVertically"]?.reference == "True"
-        text = Text(node, bindings: bindings, index: index)
-        input = Input(node, bindings: bindings, index: index)
-    }
-
-    /// This control with properties a script set over its own (`AIMPNode.overriding`), read again;
-    /// the controls it holds stay as they are.
-    func restyled(_ sets: [String: String], index: AIMPSkinIndex) -> AIMPSkinControl {
-        AIMPSkinControl(node.overriding(sets), id: id, index: index, controls: controls)
+        self.picture = picture
+        self.maskFrame = maskFrame
+        self.opacity = opacity
+        self.blend = blend
+        self.flipX = flipX
+        self.flipY = flipY
+        self.text = text
+        self.input = input
+        self.tag = tag
+        self.writtenMargins = writtenMargins
+        self.markup = markup
     }
 
     /// An animator's settings; nil for any other control.
@@ -123,13 +119,6 @@ extension AIMPPlacement {
         let margins: [Int]
         /// Nil when it is not two numbers: the control then has no room.
         let size: CGSize?
-
-        init(_ property: AIMPNode) {
-            anchors = AIMPNode.numbers(property["anchors"] ?? "1,1,0,0")
-            margins = AIMPNode.numbers(property["margins"] ?? "0,0,0,0")
-            let sizes = AIMPNode.numbers(property["Size"] ?? "0,0")
-            size = sizes.count == 2 ? CGSize(width: sizes[0], height: sizes[1]) : nil
-        }
 
         /// Where it sits in `parent`, with the margins a script `moved` (0 left … 3 bottom).
         func rect(in parent: CGRect, moved: [Int: Double] = [:]) -> CGRect {

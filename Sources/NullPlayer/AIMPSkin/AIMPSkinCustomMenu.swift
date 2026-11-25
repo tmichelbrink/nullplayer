@@ -43,7 +43,7 @@ struct AIMPSkinCustomMenu: Sendable {
             let props = item.properties
             let bindings = AIMPSkinBindings(item, names: index.names)
             return Item(caption: AIMPSkinLanguage.expanded(props["Caption"]?.reference ?? "", strings: index.strings),
-                        press: AIMPSkinControl.Input.press(bindings, props: props, index: index),
+                        press: AIMPSkinControl.Input.press(bindings, handlers: .init(props), index: index),
                         state: bindings["State"],
                         items: items(item, index: index, depth: depth + 1))
         }

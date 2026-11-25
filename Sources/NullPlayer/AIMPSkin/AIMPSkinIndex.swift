@@ -384,7 +384,7 @@ struct AIMPSkinIndex: Sendable {
     /// A control as a script restyled it (`AIMPSkinState.Object.properties`), read again; as it loaded
     /// when none did.
     func control(_ control: AIMPSkinControl, restyledBy script: AIMPSkinState.Script) -> AIMPSkinControl {
-        guard let key = control.styleKey, case let set = script[key].properties, !set.isEmpty else { return control }
+        guard control.markup != nil, let key = control.styleKey, case let set = script[key].properties, !set.isEmpty else { return control }
         return restyled.value(Restyle(control: control.id, set: set)) { control.restyled(set, index: self) }
     }
 
