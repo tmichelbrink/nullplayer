@@ -367,9 +367,9 @@ final class AIMPSkinModelTests: XCTestCase {
           <provider name="Scale" class="Calculator"><properties><property name="Expression" value="value*2"/></properties></provider>
         </providers></schema>
         """)
-        let speakers = AIMPSkin.Companion(name: "Speakers", title: "Speakers", form: try Self.node("<form name=\"Speakers\"/>"),
-                                          initiallyVisible: false, role: .other)
-        let index = AIMPSkinIndex(main: form, companions: [speakers], schema: schema)
+        let speakers = AIMPSkin.Companion(name: "Speakers", title: "Speakers", initiallyVisible: false, role: .other)
+        let index = AIMPSkinIndex(main: form, companions: [speakers], forms: ["Speakers": try Self.node("<form name=\"Speakers\"/>")],
+                                  schema: schema)
 
         XCTAssertEqual(index.groups["Pages"], ["PageA", "PageB"])
         XCTAssertEqual(index.tabOf["PageB"]?.group, "Pages")
@@ -504,10 +504,9 @@ final class AIMPSkinModelTests: XCTestCase {
     }
 
     func testCompanionsOpenBesideTheDeck() throws {
-        let form = try Self.node("<layout/>")
         let deck = CGRect(x: 100, y: 500, width: 400, height: 200)
         func origin(_ name: String, _ size: CGSize) -> CGPoint {
-            AIMPSkin.Companion(name: name, title: name, form: form, initiallyVisible: true, role: .other)
+            AIMPSkin.Companion(name: name, title: name, initiallyVisible: true, role: .other)
                 .origin(size: size, beside: deck, scale: 2)
         }
         XCTAssertEqual(origin("LSpeaker", CGSize(width: 80, height: 100)), CGPoint(x: 20, y: 600), "left, tops level")
@@ -515,7 +514,7 @@ final class AIMPSkinModelTests: XCTestCase {
                        "a speaker taller than the deck stands level with its bottom")
         XCTAssertEqual(origin("Amplifier", CGSize(width: 300, height: 50)), CGPoint(x: 100, y: 450), "below, at its left edge")
         let lid = try Self.node(#"<property name="Placement" value="1" margins="0,0,0,7"/>"#)
-        var k2 = AIMPSkin.Companion(name: "Lid", title: "Lid", form: form, initiallyVisible: true, role: .other)
+        var k2 = AIMPSkin.Companion(name: "Lid", title: "Lid", initiallyVisible: true, role: .other)
         k2.declaredPlacement = .init(lid)
         XCTAssertEqual(k2.origin(size: CGSize(width: 200, height: 40), beside: deck, scale: 2), CGPoint(x: 200, y: 714),
                        "declared above: centred, its offset scaled")
@@ -556,10 +555,11 @@ final class AIMPSkinModelTests: XCTestCase {
         XCTAssertEqual(holder?.properties["AlignmentMargins"]?["value"], "-6,-6,-6,-6", "ContentExtends lays it out past the site")
         XCTAssertEqual(holder?.child("items")?.children("item").first?["name"], "PlaylistClient")
 
-        let companions = [("PlaylistFrame", playlist), ("MusicLibraryFrame", library)].map {
-            AIMPSkin.Companion(name: $0.0, title: $0.0, form: $0.1, initiallyVisible: true, role: .other)
+        let forms = ["PlaylistFrame": playlist, "MusicLibraryFrame": library]
+        let companions = ["PlaylistFrame", "MusicLibraryFrame"].map {
+            AIMPSkin.Companion(name: $0, title: $0, initiallyVisible: true, role: .other)
         }
-        let index = AIMPSkinIndex(main: main, companions: companions, schema: nil, sites: sites)
+        let index = AIMPSkinIndex(main: main, companions: companions, forms: forms, schema: nil, sites: sites)
         XCTAssertEqual(index.siteOf["PlaylistFrame"], "PlaylistSite")
         XCTAssertEqual(index.parentOf["PlaylistSite"], nil, "a top-level item sits in the form")
         XCTAssertNotNil(index.byName["PlaylistClient"])

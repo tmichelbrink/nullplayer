@@ -170,6 +170,9 @@ final class AIMPCorpusLoadTests: XCTestCase {
 }
 
 extension AIMPSkin {
-    /// The main form and every companion's.
-    var allForms: [AIMPNode] { [mainForm] + companions.map(\.form) }
+    /// The main form and every companion's, read again from the archive.
+    var allForms: [AIMPNode] {
+        let documents = AIMPSkinDocuments(archive)
+        return (["AIMPMainForm"] + companions.map(\.name)).compactMap { documents.node($0 + ".xml") }
+    }
 }

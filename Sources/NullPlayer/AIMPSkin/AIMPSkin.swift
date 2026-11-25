@@ -15,7 +15,6 @@ struct AIMPSkin: Sendable {
         let name: String
         /// `DisplayName`, through the language strings.
         let title: String
-        let form: AIMPNode
         let initiallyVisible: Bool
         /// What the window holds, by its lists rather than its name (Akai GX-77's notepad playlist
         /// is `Win_1`).
@@ -30,10 +29,9 @@ struct AIMPSkin: Sendable {
         /// `SpeakerRightWindow`).
         let placement: Placement
 
-        init(name: String, title: String, form: AIMPNode, initiallyVisible: Bool, role: Role, placement: Placement? = nil) {
+        init(name: String, title: String, initiallyVisible: Bool, role: Role, placement: Placement? = nil) {
             self.name = name
             self.title = title
-            self.form = form
             self.initiallyVisible = initiallyVisible
             self.role = role
             self.placement = placement ?? AIMPFormRole.side(ofForm: name)
@@ -96,8 +94,6 @@ struct AIMPSkin: Sendable {
     }
 
     let archive: AIMPSkinArchive
-    let schema: AIMPNode?
-    let mainForm: AIMPNode
     let companions: [Companion]
     /// `Schema.xml`'s resources by `ID`.
     let resources: [String: AIMPSkinResource]
@@ -126,12 +122,6 @@ struct AIMPSkin: Sendable {
 
     /// The companions that hold `role`'s list (or none of them, for `.other`), docked or not.
     func companions(_ role: Companion.Role) -> [Companion] { companions.filter { $0.role == role } }
-
-    /// The form called `name`; the main form for nil.
-    func form(_ name: String?) -> AIMPNode? {
-        guard let name else { return mainForm }
-        return companions.first { $0.name == name }?.form
-    }
 
     /// The resource `reference` names, through its aliases: `links` a script repointed, read before
     /// the skin's own, and a `Resource` holding no value that names another resource, by `link`
@@ -417,6 +407,8 @@ enum AIMPSkinLoader {
         }
 
         var companions: [AIMPSkin.Companion] = []
+        // Each companion's form, the first of a name.
+        var forms: [String: AIMPNode] = [:]
         var scriptFindings: [AIMPSkinFinding] = []
         let scripts = AIMPSkinScript.Library(archive, findings: &scriptFindings)
         scriptFindings.forEach(documents.record)
@@ -433,34 +425,35 @@ enum AIMPSkinLoader {
             let role: AIMPSkin.Companion.Role = links.contains("MLTable") || links.contains("MLGroupingTree") ? .library
                 : links.contains("Playlist") ? .playlist : .other
             let title = props["DisplayName"].map { AIMPSkinLanguage.expanded($0, strings: strings) } ?? AIMPFormRole.title(ofForm: name, role: role)
-            var companion = AIMPSkin.Companion(name: name, title: title, form: form,
-                                               initiallyVisible: props["InitialVisible"] != "False", role: role)
+            var companion = AIMPSkin.Companion(name: name, title: title, initiallyVisible: props["InitialVisible"] != "False", role: role)
             companion.declaredPlacement = .init(entry.properties["Placement"])
             companions.append(companion)
+            if forms[name] == nil { forms[name] = form }
         }
         // A dock site may hold one of the forms NullPlayer has its own window for (Acubens'
         // visualization and file info): it joins the companions, shown only while docked.
         let sites = AIMPSkinDockSites.sites(in: mainForm) { name in
-            if let companion = companions.first(where: { $0.name == name }) { return companion.form }
+            if let form = forms[name] { return form }
             guard let form = documents.node(name + ".xml") else { return nil }
-            var companion = AIMPSkin.Companion(name: name, title: AIMPFormRole.title(ofForm: name, role: .other), form: form,
+            var companion = AIMPSkin.Companion(name: name, title: AIMPFormRole.title(ofForm: name, role: .other),
                                                initiallyVisible: true, role: .other)
             companion.opensWindow = false
             companions.append(companion)
+            forms[name] = form
             return form
         }
         let unopened = (schema?.child("forms")?.children("form") ?? []).compactMap { entry -> (name: String, form: AIMPNode?)? in
             guard let name = entry["name"], name != "AIMPMainForm", !companions.contains(where: { $0.name == name }) else { return nil }
             return (name, documents.node(name + ".xml"))
         }
-        var index = AIMPSkinIndex(main: mainForm, companions: companions, schema: schema, sites: sites,
+        var index = AIMPSkinIndex(main: mainForm, companions: companions, forms: forms, schema: schema, sites: sites,
                                   resources: resources, strings: strings, unopened: unopened.compactMap(\.form),
                                   dialect: AIMPSkinDialect(archive))
         // What the forms NullPlayer does not open hold (M5's tray mini player, its lyrics window): a
         // key wired into one of them asks for what NullPlayer does not have. Not a tabbed group whose
         // pages the shown windows read: turning it changes what they show (AIMP Modern's visualizer
         // modes, kept in its hidden `QFI` form).
-        let read = Set(([mainForm] + companions.map(\.form)).flatMap { $0.descendants() }.filter { $0.tag == "link" }.compactMap { $0["Source"] })
+        let read = Set(([mainForm] + companions.compactMap { forms[$0.name] }).flatMap { $0.descendants() }.filter { $0.tag == "link" }.compactMap { $0["Source"] })
         for (name, form) in unopened {
             index.elsewhere.insert(name)
             index.elsewhere.formUnion(form?.descendants().compactMap { $0["name"] } ?? [])
@@ -468,7 +461,7 @@ enum AIMPSkinLoader {
         for (group, pages) in index.groups where index.elsewhere.contains(group) && pages.contains(where: read.contains) {
             index.elsewhere.subtract([group] + pages)
         }
-        var skin = AIMPSkin(archive: archive, schema: schema, mainForm: mainForm, companions: companions, resources: resources,
+        var skin = AIMPSkin(archive: archive, companions: companions, resources: resources,
                         strings: strings, images: images, findings: documents.findings, scripts: scripts, index: index)
         skin.fontShelf = fontShelf
         // Each window's natural size, measured with trial frames here, off the main thread, rather

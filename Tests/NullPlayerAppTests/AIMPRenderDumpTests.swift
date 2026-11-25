@@ -289,7 +289,7 @@ enum AIMPSkinProbe {
             let drawn = skin.images.values.filter(\.hasPixels).count
             emit("  ENTRIES \(skin.archive.entries.count) IMAGES \(skin.images.count) WITH_PIXELS \(drawn) RESOURCES \(skin.resources.count) "
                  + "LOAD_MS \(Int(Date().timeIntervalSince(started) * 1_000))")
-            let nodes = skin.mainForm.descendants()
+            let nodes = skin.allForms.first?.descendants() ?? []
             emit("  FORM items=\(nodes.filter { $0.tag == "item" }.count) controls=\(nodes.filter { $0.tag == "control" }.count)")
             for finding in skin.findings { emit("  WARN \(finding)") }
             if env["AIMP_RENDER_SCRIPTS"] == "1" {

@@ -48,8 +48,7 @@ extension AIMPSkinScript {
             for form in ["AIMPMainForm"] + skin.companions.map(\.name) where program(form) != nil {
                 handle(form, sender: form)
             }
-            if let onLoaded = skin.schema?.descendants().first(where: { $0.tag == "form" && $0["name"] == "AIMPMainForm" })?
-                .properties["OnLoaded"]?["value"] {
+            if let onLoaded = skin.index.onLoaded {
                 handle(onLoaded, sender: "AIMPMainForm")
             }
         }

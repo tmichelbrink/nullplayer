@@ -45,6 +45,8 @@ struct AIMPSkinIndex: Sendable {
     /// `Expression`) and nothing reads: commands, run on the press alone (Sony Media Tower Reborn's
     /// `S0` and `S1` set its source to the player or the tape; `bREW` shows it rewinding).
     var commandCounters: Set<String> = []
+    /// The main form's `OnLoaded` handler, run once the forms' own scripts have (Nakamichi BX's).
+    var onLoaded: String?
     /// The menus the skin builds itself (`CustomContextMenu` providers), by name, read once the rest
     /// of the index is (`AIMPSkinCustomMenu`); their names are known before any key that opens one.
     var menuNames: Set<String> = []
