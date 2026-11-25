@@ -75,7 +75,7 @@ final class AIMPSkinControl: AIMPSkinElement, Sendable {
 
         picture = props["Skin"]?.reference
         maskFrame = (props["Skin"]?["MaskFrame"].flatMap { Int($0) }
-            ?? picture.flatMap { index.resources[$0]?["Resource"]?["MaskFrame"] }.flatMap { Int($0) })
+            ?? picture.flatMap { index.resources[$0]?.entry?.maskFrame }.flatMap { Int($0) })
             .flatMap { $0 >= 0 ? $0 : nil }
         opacity = Double(props["BlendingModeOpacity"]?.reference ?? "").flatMap { $0 < 255 ? $0 : nil }
         blend = Self.blendMode(props["BlendingMode"]?.reference)

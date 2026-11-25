@@ -99,8 +99,8 @@ struct AIMPSkin: Sendable {
     let schema: AIMPNode?
     let mainForm: AIMPNode
     let companions: [Companion]
-    /// `Schema.xml`'s resources by `ID`: each item's `property` children by name.
-    let resources: [String: [String: AIMPNode]]
+    /// `Schema.xml`'s resources by `ID`.
+    let resources: [String: AIMPSkinResource]
     /// The `.lng` strings for `@Lng:N;` captions: the user's language over English (`AIMPSkinLanguage`).
     let strings: [String: String]
     /// Decoded images by lowercased entry name; DPI variants (`-120`, `-144`…) are left out.
@@ -141,21 +141,19 @@ struct AIMPSkin: Sendable {
     /// `Resource` passed on the way, the last first-named (a font's own settings override the one
     /// it names: Tascam Fireone's `Skin.Fonts.Header.SelectedFocused`, `Skin.Fonts.Common.Title` in
     /// white). One resolver for images, colours and fonts.
-    static func resource(_ reference: String?, in resources: [String: [String: AIMPNode]], links: [String: String] = [:])
-        -> (id: String, node: AIMPNode?, chain: [AIMPNode])? {
+    static func resource(_ reference: String?, in resources: [String: AIMPSkinResource], links: [String: String] = [:])
+        -> (id: String, entry: AIMPSkinResource.Entry?, chain: [AIMPSkinResource.Entry])? {
         guard var name = reference, !name.isEmpty else { return nil }
-        var chain: [AIMPNode] = []
+        var chain: [AIMPSkinResource.Entry] = []
         for _ in 0..<8 {
             if let link = links[name] {
                 name = link
                 continue
             }
-            guard let node = resources[name]?["Resource"] else { return (name, nil, chain) }
-            chain.insert(node, at: 0)
-            let holdsValue = !(node["value"] ?? "").isEmpty || node.named["Value"] != nil
+            guard let entry = resources[name]?.entry else { return (name, nil, chain) }
+            chain.insert(entry, at: 0)
             // One naming itself is itself (M5's `Skin.Fonts.Buttons.Dark`).
-            guard !holdsValue, let alias = node["link"] ?? node.named["ID"]?["value"], !alias.isEmpty, alias != name
-            else { return (name, node, chain) }
+            guard !entry.holdsValue, let alias = entry.alias, alias != name else { return (name, entry, chain) }
             name = alias
         }
         return nil
@@ -165,12 +163,12 @@ struct AIMPSkin: Sendable {
     /// is the resource's `value`, else the name itself, as `<name>.img` or `<name>Resource.img`
     /// (`.acs4`'s naming). `links` are aliases a script repointed.
     func image(_ reference: String?, links: [String: String] = [:]) -> AIMPSkinImage? {
-        guard let (id, node, _) = Self.resource(reference, in: resources, links: links) else { return nil }
-        let name = node?["value"].flatMap { $0.isEmpty ? nil : $0 } ?? id
+        guard let (id, entry, _) = Self.resource(reference, in: resources, links: links) else { return nil }
+        let name = entry?.value.flatMap { $0.isEmpty ? nil : $0 } ?? id
         guard let image = images[(name + ".img").lowercased()] ?? images[(name + "Resource.img").lowercased()] else { return nil }
         // A texture resource coloured by a colour resource (`AllowColoration`, `ColorID`), through
         // the theme's aliases: M5's panels and windows, light or dark.
-        if node?["AllowColoration"] == "1", let id = node?["ColorID"], let argb = Self.color(id, in: resources, links: links) {
+        if entry?.allowsColoration == true, let id = entry?.colorID, let argb = Self.color(id, in: resources, links: links) {
             return image.tinted(argb)
         }
         return image
@@ -178,10 +176,8 @@ struct AIMPSkin: Sendable {
 
     /// A `TACLResourceColor` by `ID`, as ARGB, through its aliases (`resource(_:in:links:)`).
     /// `clrNone` and unknown IDs are nil.
-    static func color(_ reference: String?, in resources: [String: [String: AIMPNode]], links: [String: String] = [:]) -> UInt32? {
-        guard let resource = Self.resource(reference, in: resources, links: links)?.node,
-              let argb = (resource.named["Value"] ?? resource.child("property")).flatMap({ $0["value"] }).flatMap({ Int64($0) })
-        else { return nil }
+    static func color(_ reference: String?, in resources: [String: AIMPSkinResource], links: [String: String] = [:]) -> UInt32? {
+        guard let argb = Self.resource(reference, in: resources, links: links)?.entry?.number else { return nil }
         return UInt32(truncatingIfNeeded: argb)
     }
 
@@ -243,7 +239,7 @@ struct AIMPSkinFont: Equatable, Sendable {
 
     /// As drawn, through the resource aliases a script repointed (M5's and Soot's themes): what the
     /// resource gave comes from the one it now names; what the skin set over it stays.
-    func resolved(in resources: [String: [String: AIMPNode]], links: [String: String]) -> AIMPSkinFont {
+    func resolved(in resources: [String: AIMPSkinResource], links: [String: String]) -> AIMPSkinFont {
         var font = self
         if let resource, !links.isEmpty, let chain = AIMPSkin.resource(resource.id, in: resources, links: links)?.chain, !chain.isEmpty {
             let now = AIMPSkinFont(resource: chain)
@@ -371,10 +367,10 @@ enum AIMPSkinLoader {
         let mainForm = try documents.throwing("AIMPMainForm.xml", missing: "The skin has no AIMPMainForm.", documents.node)
         let schema = documents.node("Schema.xml")
 
-        var resources: [String: [String: AIMPNode]] = [:]
+        var resources: [String: AIMPSkinResource] = [:]
         for item in schema?.child("properties")?.child("resources")?.children("item") ?? [] {
             let properties = item.named
-            if let id = properties["ID"]?["value"] { resources[id] = properties }
+            if let id = properties["ID"]?["value"] { resources[id] = AIMPSkinResource(properties) }
         }
 
         let strings = AIMPSkinLanguage.strings(in: documents, preferred: languages)

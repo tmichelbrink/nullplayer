@@ -119,7 +119,7 @@ enum AIMPControlClass: Sendable {
 
     /// A control's class, by its `link` to one of NullPlayer's lists, else by its `class`, a scroll
     /// bar or search box bound to a list being that list's.
-    init(_ node: AIMPNode, bindings: AIMPSkinBindings, resources: [String: [String: AIMPNode]], dialect: AIMPSkinDialect) {
+    init(_ node: AIMPNode, bindings: AIMPSkinBindings, resources: [String: AIMPSkinResource], dialect: AIMPSkinDialect) {
         let props = node.properties
         func number(_ name: String) -> Double? { Double(props[name]?.reference ?? "") }
         func integer(_ name: String) -> Int? { Int(props[name]?.reference ?? "") }
@@ -143,7 +143,7 @@ enum AIMPControlClass: Sendable {
                                 peakSegment: CGFloat(max(1, integer("PeakColumnsSegmentation") ?? 1)))
         // Read as `AIMPSkinControl.maskFrame` is: the `Skin`'s, else its resource's (Windows Media
         // Player 11's gloss, frame 2, over its cover).
-        let coverFrame = (props["Skin"]?["CoverFrame"] ?? props["Skin"]?.reference.flatMap { resources[$0]?["Resource"]?["CoverFrame"] })
+        let coverFrame = (props["Skin"]?["CoverFrame"] ?? props["Skin"]?.reference.flatMap { resources[$0]?.entry?.coverFrame })
             .flatMap { Int($0) }
         switch node["link"] {
         case "PlaylistSearch"?: self = .search(.playlist); return

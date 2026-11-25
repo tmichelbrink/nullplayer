@@ -704,7 +704,7 @@ final class AIMPSkinModelTests: XCTestCase {
     }
 
     func testColoursFollowResourcesAndLinks() throws {
-        func resource(_ xml: String) throws -> [String: AIMPNode] { ["Resource": try Self.node(xml)] }
+        func resource(_ xml: String) throws -> AIMPSkinResource { AIMPSkinResource(["Resource": try Self.node(xml)]) }
         let resources = [
             "Content.Background": try resource(#"<property name="Resource"><property name="ID" value="Content.Background.Dark"/></property>"#),
             "Content.Background.Dark": try resource(#"<property name="Resource"><property name="Value" value="4282137660"/></property>"#),
@@ -719,7 +719,7 @@ final class AIMPSkinModelTests: XCTestCase {
     /// Images, colours and fonts resolve through one resolver: a `link` or an `ID` naming another
     /// resource, and a script's repointing first.
     func testResourcesResolveOneWayForImagesColoursAndFonts() throws {
-        func resource(_ xml: String) throws -> [String: AIMPNode] { ["Resource": try Self.node(xml)] }
+        func resource(_ xml: String) throws -> AIMPSkinResource { AIMPSkinResource(["Resource": try Self.node(xml)]) }
         let resources = [
             "Bobina": try resource(#"<property name="Resource" link="Bob"/>"#),
             "Bob": try resource(#"<property name="Resource" value="BobResource"/>"#),
@@ -729,7 +729,7 @@ final class AIMPSkinModelTests: XCTestCase {
         ]
         let bob = AIMPSkin.resource("Bobina", in: resources)
         XCTAssertEqual(bob?.id, "Bob")
-        XCTAssertEqual(bob?.node?["value"], "BobResource")
+        XCTAssertEqual(bob?.entry?.value, "BobResource")
         XCTAssertEqual(AIMPSkin.resource("Picture", in: resources)?.id, "Picture", "an entry named directly")
         XCTAssertEqual(AIMPSkin.resource("Self", in: ["Self": try resource(#"<property name="Resource" link="Self"/>"#)])?.id, "Self",
                        "one naming itself is itself")

@@ -101,7 +101,7 @@ extension AIMPSkinControl {
         let switches: String?
         let headerSwitches: String?
 
-        init(_ props: [String: AIMPNode], resources ids: [String: [String: AIMPNode]], dialect: AIMPSkinDialect) {
+        init(_ props: [String: AIMPNode], resources ids: [String: AIMPSkinResource], dialect: AIMPSkinDialect) {
             let resources = props["Resources"]?.named ?? [:]
             let color = { (flat: String, nested: String, state: String) in
                 Self.color(resources, flat: flat, nested: nested, state: state, delphi: dialect.delphiColors)
@@ -136,7 +136,7 @@ extension AIMPSkinControl {
         /// over the list's own default, Tahoma 13.
         /// The header's and second line's likewise (`line` `Header`, `ItemLine2`).
         private static func font(_ resources: [String: AIMPNode], _ state: String, line: String = "ItemLine1",
-                                 ids: [String: [String: AIMPNode]]) -> AIMPSkinFont? {
+                                 ids: [String: AIMPSkinResource]) -> AIMPSkinFont? {
             if let flat = AIMPSkinFont(flat: resources[line + "Font" + (state == "Normal" ? "" : state)]?.reference) { return flat }
             let states = (resources[line + "Fonts"]?.named ?? [:])
             guard let node = states[state] ?? states["Normal"] else { return nil }
@@ -221,7 +221,7 @@ extension AIMPSkinControl {
         let offsets: AIMPSkinImage.Margins?
         let isCentred: Bool
 
-        init(_ node: AIMPNode, bindings: AIMPSkinBindings, resources: [String: [String: AIMPNode]]) {
+        init(_ node: AIMPNode, bindings: AIMPSkinBindings, resources: [String: AIMPSkinResource]) {
             let props = node.properties
             let options = props["TabsOptions"]?.named ?? [:]
             source = bindings.links.first { ["prvPlaylistManager", "prvMusicLibraryManager"].contains($0.source ?? "") }?.source
@@ -270,7 +270,7 @@ extension AIMPSkinFont {
     /// A font property, read one way wherever a skin gives one: a `Schema.xml` font (`TASEFont`) by
     /// `ID`, `.acs3`'s one value (`Tahoma,13952279,12,2`), or declared inline (`Name`, `Height`,
     /// `Style`, `Color`), each over the last; what none says is `fallback`'s.
-    init(_ property: AIMPNode?, resources: [String: [String: AIMPNode]], fallback: AIMPSkinFont = .standard) {
+    init(_ property: AIMPNode?, resources: [String: AIMPSkinResource], fallback: AIMPSkinFont = .standard) {
         var font = fallback
         // A `TASEFont` is a whole font: what it leaves out is AIMP's for a resource (12 px), and its
         // colour is ARGB, clear included (Lumin's tab caption font).
@@ -279,16 +279,16 @@ extension AIMPSkinFont {
             font.resource = Resource(id: id, name: font.name, height: font.height, bold: font.bold, color: font.color)
         }
         if let whole = AIMPSkinFont(flat: property?.reference) { font = whole }
-        self = property.map { AIMPSkinFont(declared: $0, over: font, clearIsDelphi: true) } ?? font
+        self = property.map { AIMPSkinFont(declared: Declaration($0), over: font, clearIsDelphi: true) } ?? font
         // A face named empty (`.acs3`'s `,0,12,0`) is AIMP's default.
         if name.isEmpty { name = Self.standard.name }
     }
 
     /// A font resource from its `chain` (`AIMPSkin.resource`): each `Resource` over the one it names,
     /// and what none says AIMP's for a resource.
-    init(resource chain: [AIMPNode]) {
+    init(resource chain: [AIMPSkinResource.Entry]) {
         self = chain.reduce(AIMPSkinFont(name: "", height: 12, bold: false, color: 0xFFFF_FFFF)) {
-            AIMPSkinFont(declared: $1, over: $0, clearIsDelphi: false)
+            AIMPSkinFont(declared: $1.font, over: $0, clearIsDelphi: false)
         }
         if name.isEmpty { name = Self.standard.name }
     }
@@ -296,9 +296,9 @@ extension AIMPSkinFont {
     /// `Name`, `Height`, `Style` and `Color` where `node` declares them, over `base`; a colour is
     /// ARGB, or, `clearIsDelphi` (a form's own fonts), with no alpha a Delphi colour (`66051`: near
     /// black), opaque.
-    private init(declared node: AIMPNode, over base: AIMPSkinFont, clearIsDelphi: Bool) {
+    private init(declared declaration: Declaration, over base: AIMPSkinFont, clearIsDelphi: Bool) {
         self = base
-        let declared = node.named.mapValues { $0["value"] ?? "" }
+        let declared = declaration.values
         if let name = declared["Name"], !name.isEmpty { self.name = name }
         // `Int.min` has no magnitude `abs` can give.
         if let height = declared["Height"].flatMap(Int.init), height != .min {
@@ -306,7 +306,7 @@ extension AIMPSkinFont {
             emHeight = height < 0
         }
         if let style = declared["Style"] { bold = style.contains("fsBold") }
-        if let id = node.named["ColorID"]?["value"], !id.isEmpty { colorID = id }
+        if let id = declaration.colorID, !id.isEmpty { colorID = id }
         if let number = declared["Color"].flatMap({ Int64($0) }) {
             let argb = UInt32(truncatingIfNeeded: number)
             color = clearIsDelphi && argb >> 24 == 0 ? AIMPSkinColor.argb(delphi: number) : argb

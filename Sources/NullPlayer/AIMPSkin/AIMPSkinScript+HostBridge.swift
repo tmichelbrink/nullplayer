@@ -162,8 +162,7 @@ extension AIMPSkinScript.Run {
         case (.resource(let id), .get) where args.count == 1:
             if args[0].string == "ID" { return .string(engine.state.script.resourceLinks[id] ?? id) }
             // A resource's own setting (`FindResource('Skin.Default').Get('Value')`: a theme colour).
-            let property = skin.resources[engine.state.script.resourceLinks[id] ?? id]?[args[0].string]
-            let text = property?["value"] ?? property?.named["Value"]?["value"] ?? ""
+            let text = skin.resources[engine.state.script.resourceLinks[id] ?? id]?.settings[args[0].string] ?? ""
             return Double(text).map(Value.number) ?? .string(text)
         case (.object(let object), .set) where args.count == 2:
             try set(object, args[0].string, to: args[1])

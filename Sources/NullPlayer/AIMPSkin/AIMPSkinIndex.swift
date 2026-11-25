@@ -82,7 +82,7 @@ struct AIMPSkinIndex: Sendable {
 
     /// `Schema.xml`'s resources by `ID`, and the `.lng` strings, which controls' fonts and texts
     /// are read through.
-    var resources: [String: [String: AIMPNode]] = [:]
+    var resources: [String: AIMPSkinResource] = [:]
     /// What the skin's file format decides (`AIMPSkinDialect`).
     var dialect = AIMPSkinDialect.modern
     var strings: [String: String] = [:]
@@ -202,7 +202,7 @@ struct AIMPSkinIndex: Sendable {
     /// known, though never laid out: what they hold still reads as AIMP keeps it (AIMP Modern v3.63's
     /// visualizer modes are the pages of a tabbed group in its hidden `QFI` form, the first shown).
     init(main: AIMPNode, companions: [AIMPSkin.Companion], schema: AIMPNode?, sites: [String: AIMPSkinDockSites.Site] = [:],
-         resources: [String: [String: AIMPNode]] = [:], strings: [String: String] = [:], unopened: [AIMPNode] = [],
+         resources: [String: AIMPSkinResource] = [:], strings: [String: String] = [:], unopened: [AIMPNode] = [],
          dialect: AIMPSkinDialect = .modern) {
         self.resources = resources
         self.dialect = dialect
