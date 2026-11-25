@@ -24,7 +24,7 @@ header checked), every `.lng` through `INIFile` (`INIFile+AIMP`).
 | `AM0008` | **no** | an entry does not inflate, is truncated, or is not an image; or a compiled script (`FSXMLBIN`) does not decode, or has a tree the script compiler does not take: it is skipped |
 | `AM0009` | if the main form | malformed or over-deep XML (`xmlDepth` 256, `xmlNodes` 1,000,000) |
 | `AM0010` | yes | no `AIMPMainForm.xml` |
-| `AM0011` | yes | a container this engine does not read yet: AIMP 3.0's `.acs3` (kinds 1 and 2, or any whose form is a `main.ini`), AIMP 2's `.acs` (`ACSP`), or an unknown header kind |
+| `AM0011` | yes | a container this engine does not read yet: AIMP 2's `.acs` (`ACSP`), or an unknown header kind |
 | `AM0012` | yes (import) | a `.zip` import past `SkinZipLimits.aimpSkins` (`SkinZipExtraction`; entries, total bytes, a ratio past 200:1 above 1 MiB), or a skin in it failing its CRC or size. A skin over the file limit in a zip is `AM0002` |
 
 ## Tolerated
@@ -37,7 +37,7 @@ header checked), every `.lng` through `INIFile` (`INIFile+AIMP`).
 | DPI variants (`-120`, `-144`, `-168`, `-192`) | never decoded; the 96-DPI image is used |
 | `.myimg` (older skins, Sony TC-MR2) | filed as `.img`; an `.img` of the same name wins |
 | `.lng` files | `@Lng:N;` captions read the Mac's first preferred language the skin has a file for (`AIMPSkinLanguage`, AIMP's file names), then `English.lng` caption by caption; a key neither has reads as empty (Delphi's `ReadString` default), never as raw `@Lng:` text |
-| No form documents, a `main.ini` (AIMP 3.0, AIMP 2) | refused as `AM0011` until they have a reader of their own (`format.md` keeps what was decoded of them) |
+| No form documents, a `main.ini` (AIMP 3.0) | read by `AIMPSkinAIMP3` from `MainFrame.xml` and `main.ini`; no `MainFrame.xml` is `AM0010` |
 | A compiled script that does not decode or compile | left out with `AM0008`; `AIMP_RENDER_SCRIPTS` counts it as one that stops (`skin.scripts.unreadable`) |
 | A script stored as Pascal source (some `.acs4` `.script`s) | not run, and not counted: the engine runs FastScript's compiled tree only |
 | A dock site's frame document (`PlaylistFrame.xml`) malformed | an `AM0009` warning; the site is built as if it had none |

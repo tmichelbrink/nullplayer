@@ -6,11 +6,12 @@ import Foundation
 ///   of entries, each compressed on its own. Entries are decoded on demand.
 /// - `.acs4` (AIMP 4): XORed with a 4-byte key that a scrambled `3SCA` in the header gives away,
 ///   then one zlib body holding a table of contents and a blob.
-/// - `.acs3` (AIMP 3.x): the `.acs4` layout under three header variants, holding an AIMP 4 form.
+/// - `.acs3` (AIMP 3.x): the `.acs4` layout under four header variants. Kinds 3, 5 and 6 hold an
+///   AIMP 4 form; kinds 1 and 2 are AIMP 3.0's, a `main.ini` and pictures with no form documents
+///   (`mainINI`, read by `AIMPSkinAIMP3`).
 /// - `.acs4proj` (the skin editor's project): the `.acs4` layout uncompressed and unscrambled.
 ///
-/// AIMP 3.0's `.acs3` (a `main.ini` and bitmaps) and AIMP 2's `.acs` (`ACSP`) are refused as not
-/// supported yet.
+/// AIMP 2's `.acs` (`ACSP`) is refused as not supported yet.
 ///
 /// Every entry is named as `.acs4` names it, with an extension: `.acs5` names carry none, so one is
 /// added from the entry's kind (`AIMPMainForm` → `AIMPMainForm.xml`).
@@ -46,6 +47,9 @@ struct AIMPSkinArchive: Sendable {
     private(set) var about: String
     /// The skin's own preview, a Windows BMP.
     private(set) var preview: Data?
+    /// An AIMP 3.0 skin's `main.ini`, read once: its credits, its pictures' layout and its form all
+    /// come from it (`AIMPSkinAIMP3`). Nil for a skin with form documents.
+    private(set) var mainINI: INIFile?
     /// Keyed by lowercased name: AIMP resolves names case-insensitively.
     let entries: [String: Entry]
     private let storage: Data
@@ -66,15 +70,24 @@ struct AIMPSkinArchive: Sendable {
         }
     }
 
-    /// AIMP 3.0's skins, a `main.ini` and its bitmaps with no form documents, are not read yet.
+    /// `meta` nil for a container with no metadata block (AIMP 3.0's `.acs3`): its credits are
+    /// `main.ini`'s, its preview `preview.bmp`.
     private init(format: Format, meta: Meta?, entries: [String: Entry], storage: Data, key: [UInt8]) throws {
         self.format = format
         self.entries = entries
         self.storage = storage
         self.key = key
         (name, author, about, preview) = (meta?.name ?? "", meta?.author ?? "", meta?.about ?? "", meta?.preview)
-        if entry("AIMPMainForm.xml") == nil, entry("main.ini") != nil {
-            throw AIMPSkinFinding(.unsupportedFormat, "AIMP 3.0 skins (main.ini) are not supported yet.")
+        if entry("AIMPMainForm.xml") == nil, let ini = entry("main.ini") {
+            do {
+                mainINI = try INIFile(aimpUTF16: payload(ini), name: ini.name)
+            } catch let finding as AIMPSkinFinding {
+                throw AIMPSkinFinding(.noMainForm, "No form: \(finding.message)")
+            }
+        }
+        if meta == nil {
+            (name, author) = (mainINI?["FILE", "SkinName"] ?? "", mainINI?["FILE", "Author"] ?? "")
+            preview = try entry("preview.bmp").map(payload)
         }
     }
 
@@ -146,30 +159,35 @@ struct AIMPSkinArchive: Sendable {
     /// first; one XORed zlib stream `{ u32 count, count × { name, u32 offset, u32 size }, blob }`.
     ///
     /// The header is magic and a u8 kind: `.acs4` 0, a u32 engine version (450) and the marker at 9;
-    /// `.acs3` 6 the same (350); `.acs3` 3 and 5 the marker at 5. `.acs3` 1 and 2 are AIMP 3.0's, whose
-    /// metadata and form are a `main.ini`: not read yet.
+    /// `.acs3` 6 the same (350); `.acs3` 3 and 5 the marker at 5; `.acs3` 1 and 2 (AIMP 3.0) the marker
+    /// at 5 with the body right after it, and the metadata in `main.ini` and `preview.bmp`.
     private static func readZlibBody(_ data: Data, format: Format) throws -> AIMPSkinArchive {
         let head = AIMPSkinBytes(data, code: .notAnArchive)
         let kind = try head.u8(at: 4)
         let marker: Int
+        let hasMeta: Bool
         switch (format, kind) {
-        case (.acs4, _), (.acs3, 6): marker = 9
-        case (.acs3, 3), (.acs3, 5): marker = 5
-        case (.acs3, 1), (.acs3, 2): throw AIMPSkinFinding(.unsupportedFormat, "AIMP 3.0 skins are not supported yet.")
+        case (.acs4, _), (.acs3, 6): (marker, hasMeta) = (9, true)
+        case (.acs3, 3), (.acs3, 5): (marker, hasMeta) = (5, true)
+        case (.acs3, 1), (.acs3, 2): (marker, hasMeta) = (5, false)
         default: throw AIMPSkinFinding(.unsupportedFormat, "An .\(format.rawValue) header of kind \(kind) is not supported.")
         }
         var key = [UInt8](repeating: 0, count: 4)
         for (i, c) in "3SCA".utf8.enumerated() {
             key[(marker + i) % 4] = try head.u8(at: marker + i) ^ c
         }
-        var reader = AIMPSkinBytes(data, code: .entryOutOfBounds, key: key, plainBefore: marker + 8)
-        reader.offset = marker + 4
-        let meta = try readMeta(&reader)
-        var body = reader.offset
+        var meta: Meta?
+        var body = marker + 4
         var inflatedSize: Int?
-        if format == .acs4 {
-            inflatedSize = try AIMPSkinBytes(data, code: .entryOutOfBounds).u32(at: body)
-            body += 4
+        if hasMeta {
+            var reader = AIMPSkinBytes(data, code: .entryOutOfBounds, key: key, plainBefore: body + 4)
+            reader.offset = body
+            meta = try readMeta(&reader)
+            body = reader.offset
+            if format == .acs4 {
+                inflatedSize = try AIMPSkinBytes(data, code: .entryOutOfBounds).u32(at: body)
+                body += 4
+            }
         }
         guard body + 2 < data.count else {
             throw AIMPSkinFinding(.notAnArchive, "The .\(format.rawValue) body is missing.")

@@ -502,9 +502,10 @@ final class AIMPSkinLayout {
     /// an 870×1100 window, its bottom half empty. Messa's dock area (`mwDockSites`) shows while its
     /// playlist site does, through a commutator; AIMP opens the 562×247 player alone. Bindings to the
     /// player (its state, the track) are not read here: they change as it plays, and the window is
-    /// sized for them.
+    /// sized for them. Nor are any in a skin whose format sizes without them (`AIMPSkinDialect`).
     private func hiddenBySkinState(_ item: AIMPSkinItem) -> Bool {
-        item.gates.contains { gate in
+        guard skin.index.dialect.sizesBySkinState else { return false }
+        return item.gates.contains { gate in
             guard let source = gate.source, isSkinState(source, pin: gate.pin) else { return false }
             return flow.value(of: gate) == 0
         }

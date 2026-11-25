@@ -191,6 +191,13 @@ struct AIMPSkinImage: Sendable {
                   source: decode.map { decode in AIMPSkinPixels.Source(budget: budget) { try decode(source()) } })
     }
 
+    /// A Windows bitmap (AIMP 3.0's BMP skins), laid out as its `main.ini` says.
+    init(bitmap data: Data, name: String, layout: Layout, budget: AIMPSkinPixelBudget, source: @escaping () throws -> Data) throws {
+        let header = try AIMPSkinBitmap.header(data, name: name)
+        self.init(width: header.width, height: header.height, layout: layout,
+                  source: AIMPSkinPixels.Source(budget: budget) { try AIMPSkinBitmap.pixels(source(), name: name) })
+    }
+
     // MARK: - Formats
 
     /// What a format's header gives: the size, the layout, and how the pixels are cut from the

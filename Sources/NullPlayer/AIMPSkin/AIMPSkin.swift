@@ -354,14 +354,10 @@ enum AIMPSkinLoader {
         // Every document is read through one reader, which keeps what does not read as a finding.
         let documents = AIMPSkinDocuments(archive)
 
-        let mainForm = try documents.throwing("AIMPMainForm.xml", missing: "The skin has no AIMPMainForm.", documents.node)
-        let schema = documents.node("Schema.xml")
-
-        var resources: [String: AIMPSkinResource] = [:]
-        for item in schema?.child("properties")?.child("resources")?.children("item") ?? [] {
-            let properties = item.named
-            if let id = properties["ID"]?["value"] { resources[id] = AIMPSkinResource(properties) }
-        }
+        // An AIMP 3.0 skin has no form documents: its form is read from its layout and `main.ini` once
+        // the pictures it is sized by are read (`AIMPSkinAIMP3`).
+        let mainForm = archive.mainINI == nil
+            ? try documents.throwing("AIMPMainForm.xml", missing: "The skin has no AIMPMainForm.", documents.node) : nil
 
         let strings = AIMPSkinLanguage.strings(in: documents, preferred: languages)
 
@@ -379,19 +375,23 @@ enum AIMPSkinLoader {
 
         // Pictures are read from their headers here and decode when first drawn, within one
         // budget of resident pixels (`AIMPSkinPixelBudget`). DPI variants end in -120, -144, -168,
-        // -192. Older skins name the same pictures `.myimg` (Sony TC-MR2); each is filed as `.img`,
-        // which wins.
+        // -192. Older skins name the same pictures `.myimg` (Sony TC-MR2), AIMP 3.0's BMP skins `.bmp`,
+        // cut as `main.ini` says; each is filed as `.img`, which wins, then `.myimg`.
         let budget = AIMPSkinPixelBudget()
+        let layouts = archive.mainINI.map(AIMPSkinAIMP3.bitmapLayouts) ?? [:]
         var images: [String: AIMPSkinImage] = [:]
         for (name, entry) in archive.entries.sorted(by: { $0.key < $1.key }) {
-            guard let ext = [".img", ".myimg"].first(where: name.hasSuffix) else { continue }
+            guard let ext = [".img", ".myimg", ".bmp"].first(where: name.hasSuffix), archive.mainINI != nil || ext != ".bmp" else { continue }
             let stem = String(name.dropLast(ext.count))
             if ext != ".img", archive.entries[stem + ".img"] != nil { continue }
+            if ext == ".bmp", archive.entries[stem + ".myimg"] != nil { continue }
             if let dash = stem.lastIndex(of: "-"), Int(stem[stem.index(after: dash)...]) != nil { continue }
             do {
                 let payload = try archive.payload(entry)
                 let source = { try archive.payload(entry) }
-                let image = try AIMPSkinImage(payload, name: entry.name, budget: budget, source: source)
+                let image = ext == ".bmp"
+                    ? try AIMPSkinImage(bitmap: payload, name: entry.name, layout: layouts[stem] ?? .init(), budget: budget, source: source)
+                    : try AIMPSkinImage(payload, name: entry.name, budget: budget, source: source)
                 let frame = image.frameSize
                 guard frame.width <= CGFloat(AIMPSkinPolicy.imageSide), frame.height <= CGFloat(AIMPSkinPolicy.imageSide) else {
                     throw AIMPSkinFinding(.imageTooLarge, "\(entry.name) has \(Int(frame.width))×\(Int(frame.height)) frames.")
@@ -406,12 +406,44 @@ enum AIMPSkinLoader {
             }
         }
 
-        var companions: [AIMPSkin.Companion] = []
-        // Each companion's form, the first of a name.
-        var forms: [String: AIMPNode] = [:]
         var scriptFindings: [AIMPSkinFinding] = []
         let scripts = AIMPSkinScript.Library(archive, findings: &scriptFindings)
         scriptFindings.forEach(documents.record)
+        let companions: [AIMPSkin.Companion], resources: [String: AIMPSkinResource], index: AIMPSkinIndex
+        if let mainForm {
+            (companions, resources, index) = Self.markupForms(mainForm, documents: documents, strings: strings)
+        } else if let ini = archive.mainINI {
+            (companions, resources) = ([], [:])
+            index = try AIMPSkinAIMP3.read(documents, ini: ini, images: images, dialect: AIMPSkinDialect(archive))
+        } else {
+            throw AIMPSkinFinding(.noMainForm, "The skin has no AIMPMainForm.")
+        }
+        var skin = AIMPSkin(archive: archive, companions: companions, resources: resources,
+                        strings: strings, images: images, findings: documents.findings, scripts: scripts, index: index)
+        skin.fontShelf = fontShelf
+        // Each window's natural size, measured with trial frames here, off the main thread, rather
+        // than when the window shows the skin.
+        // A schema listing one form twice must not trap here: the first measure is kept.
+        skin.naturalSizes = Dictionary(([nil] + companions.map(\.name)).compactMap { form in
+            AIMPSkinRenderer.naturalSize(skin, form: form).map { (form ?? "", $0) }
+        }, uniquingKeysWith: { first, _ in first })
+        return skin
+    }
+
+    /// A skin's XML forms and `Schema.xml`: the windows beside the main form, the resources, and the
+    /// index of them all.
+    private static func markupForms(_ mainForm: AIMPNode, documents: AIMPSkinDocuments, strings: [String: String])
+        -> (companions: [AIMPSkin.Companion], resources: [String: AIMPSkinResource], index: AIMPSkinIndex) {
+        let archive = documents.archive
+        let schema = documents.node("Schema.xml")
+        var resources: [String: AIMPSkinResource] = [:]
+        for item in schema?.child("properties")?.child("resources")?.children("item") ?? [] {
+            let properties = item.named
+            if let id = properties["ID"]?["value"] { resources[id] = AIMPSkinResource(properties) }
+        }
+        var companions: [AIMPSkin.Companion] = []
+        // Each companion's form, the first of a name.
+        var forms: [String: AIMPNode] = [:]
         // `Schema.xml` lists the forms; the ones NullPlayer has its own window for stay out, and so
         // does TC-MR2's `Menu`, a popup its MENU key stands in for with NullPlayer's. The skin's own
         // playlist and library windows open, over NullPlayer's playlist and library.
@@ -461,15 +493,6 @@ enum AIMPSkinLoader {
         for (group, pages) in index.groups where index.elsewhere.contains(group) && pages.contains(where: read.contains) {
             index.elsewhere.subtract([group] + pages)
         }
-        var skin = AIMPSkin(archive: archive, companions: companions, resources: resources,
-                        strings: strings, images: images, findings: documents.findings, scripts: scripts, index: index)
-        skin.fontShelf = fontShelf
-        // Each window's natural size, measured with trial frames here, off the main thread, rather
-        // than when the window shows the skin.
-        // A schema listing one form twice must not trap here: the first measure is kept.
-        skin.naturalSizes = Dictionary(([nil] + companions.map(\.name)).compactMap { form in
-            AIMPSkinRenderer.naturalSize(skin, form: form).map { (form ?? "", $0) }
-        }, uniquingKeysWith: { first, _ in first })
-        return skin
+        return (companions, resources, index)
     }
 }

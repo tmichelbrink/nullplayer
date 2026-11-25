@@ -89,13 +89,11 @@ AIMP 2's: magenta `FF00FF` is clear in both (`AIMP 2 (.acs)` below).
 
 ## AIMP 3.0 forms
 
-> Decoded, not read by NullPlayer yet: such skins are refused (`AM0011`) until a reader of their own
-> builds their forms directly (the earlier translation to AIMP 4 XML was removed).
-
-the earlier reader reads them into the later formats' tree, so the renderer takes them unchanged:
-each reader (AIMP 3.0's, AIMP 2's) turns `main.ini` into typed the earlier readers (a `Kind`:
-text, time, status, spectrum, AIMP's own object…) and `Settings`, which one `Translator` builds the
-form from.
+`AIMPSkinAIMP3` reads them straight into the model, no AIMP 4 XML between: `main.ini`'s objects
+become typed `Object`s (a `Kind`: text, time, status, spectrum, AIMP's own object…), the layout
+documents a tree of `Shaped` items holding a `Spec` per control, and `Build` reads those into
+`AIMPSkinItem`s and `AIMPSkinControl`s, numbered as an AIMP 4 form's are. What the format decides
+of layout is `AIMPSkinDialect`'s (`sizesBySkinState`, `listKeepsRoom`, `controlsOutliveItems`).
 
 - `MainFrame.xml` is the item tree, attribute style: `<item Class=… Name=… Align=… AlignLevel=…
   AlignMargins=…/>`. `TAIMPLayoutContainerItem` has a picture named after it,

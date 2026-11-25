@@ -96,6 +96,8 @@ enum AIMPSkinRenderer {
                 // Only a list the main form holds itself: one in a form docked in a site gets the
                 // site's `SizeMinimal` and no more, as AIMP opens it (Euphoria Lux's 100-px
                 // playlist in its 216-px site, Kriterya's, W8 Vanilla's).
+                // Not in every format (`AIMPSkinDialect.listKeepsRoom`).
+                guard skin.index.dialect.listKeepsRoom else { return sites }
                 let siteRects = skin.index.sites.keys.compactMap { offers.namedRects[$0] }
                 let list = offers.targets.first { target in
                     target.name == AIMPSkinList.playlist.rawValue && !siteRects.contains { $0.contains(target.rect) }

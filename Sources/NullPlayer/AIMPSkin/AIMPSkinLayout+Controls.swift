@@ -10,9 +10,10 @@ extension AIMPSkinLayout {
         let held = heldControls(item, own: item.controls)
         // A control wholly outside its item does not show: AIMP 4 and 5's controls are windows inside
         // their item's (RealPlayer 11's equalizer sliders sit below its 65-px panel until the window
-        // grows).
+        // grows). Not in every format (`AIMPSkinDialect.controlsOutliveItems`).
+        let outlives = skin.index.dialect.controlsOutliveItems
         func inside(_ control: AIMPSkinControl) -> Bool {
-            guard let placement = control.placement else { return true }
+            guard !outlives, let placement = control.placement else { return true }
             return placement.rect(in: rect, moved: control.name.map { flow.state.script[$0].margins } ?? [:]).intersects(rect)
         }
         func isPlaylist(_ control: AIMPSkinControl) -> Bool { if case .playlist = control.kind { true } else { false } }
@@ -22,17 +23,19 @@ extension AIMPSkinLayout {
             // Its window cuts a cover at the item's edge (W10's 136-px cover strip in its 50-px icon
             // bar lay over the big cover beside it).
             let cut: Bool
-            if case .coverArt = control.kind { cut = true } else { cut = false }
+            if case .coverArt = control.kind { cut = !outlives } else { cut = false }
             guard var made = place(control, in: rect, cut: cut ? rect : nil) else { continue }
             // Clicks too stop at the item's edge, a window's: Soot's play/pause, prev and next are
             // 400-px squares over their panels, each taking clicks only within its own.
-            made.targets = made.targets.compactMap { target in
-                guard !rect.contains(target.rect) else { return target }
-                let shown = target.rect.intersection(rect)
-                guard !shown.isNull, !shown.isEmpty else { return nil }
-                var target = target
-                target.visibleRect = shown
-                return target
+            if !outlives {
+                made.targets = made.targets.compactMap { target in
+                    guard !rect.contains(target.rect) else { return target }
+                    let shown = target.rect.intersection(rect)
+                    guard !shown.isNull, !shown.isEmpty else { return nil }
+                    var target = target
+                    target.visibleRect = shown
+                    return target
+                }
             }
             placed.append(made)
         }

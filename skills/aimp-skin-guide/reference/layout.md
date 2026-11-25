@@ -72,7 +72,7 @@ nested `items/item` (`LayoutContainer`, `LayoutItem`, `LayoutTexture`, `LayoutTa
    lays out and measures by them, a frame's size (`size`) and the least (`leastSize`) by one rule
    (`AIMPSkinLayout.Measure`: what the item holds, each child in its slot with its margins, as
    `AIMPSkinAlignment.content` adds it up, no smaller than its `SizeMinimal`); the renderer's
-   natural size and AIMP 3.0's translator measure by them too.
+   natural size and AIMP 3.0's reader (`AIMPSkinAIMP3.Shape`) measure by them too.
 5. An item paints its `Color`, then its `Texture` as the picture fills (`format.md` § ACLIMG32:
    nine-sliced, tiled or centred). A colour is a number (the property's `value`, LX-tix; a nested `Value`, Unsquareable) or a
    `TACLResourceColor` by `ID`, which may name another (`Skin.Color.Content.Background` →

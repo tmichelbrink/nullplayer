@@ -49,16 +49,40 @@ final class AIMPSkinArchiveTests: XCTestCase {
         }
     }
 
-    /// AIMP 3.0's `.acs3` (kinds 1 and 2) and AIMP 2's `.acs` are refused as not supported yet.
-    func testAIMP30AndAIMP2SkinsAreRefusedAsNotSupportedYet() throws {
-        let ini = Data([0xFF, 0xFE]) + Data("[FILE]\r\nSkinName=Vega AIO\r\n".utf16.flatMap { [UInt8($0 & 0xFF), UInt8($0 >> 8)] })
+    func testAIMP30ACS3ReadsItsNameFromMainIni() throws {
+        let ini = Data("[FILE]\r\nSkinName=Vega AIO\r\nAuthor=Someone\r\n".utf16.flatMap { [UInt8($0 & 0xFF), UInt8($0 >> 8)] })
+        let body = Self.toc(["main.ini": Data([0xFF, 0xFE]) + ini])
+        // Kinds 1 and 2: the marker at 5, then the zlib body; no metadata block.
         for kind: UInt8 in [1, 2] {
             var file = Array("ACS3".utf8) + [kind] + Self.scrambledMarker(at: 5)
-            file += Self.scrambled(Self.zlib(Self.toc(["main.ini": ini])), at: file.count)
-            XCTAssertThrowsError(try AIMPSkinArchive.read(Data(file))) {
-                XCTAssertEqual(($0 as? AIMPSkinFinding)?.code, .unsupportedFormat, "kind \(kind)")
-            }
+            file += Self.scrambled(Self.zlib(body), at: file.count)
+            let archive = try AIMPSkinArchive.read(Data(file))
+            XCTAssertEqual(archive.name, "Vega AIO")
+            XCTAssertEqual(archive.author, "Someone")
+            XCTAssertNotNil(archive.mainINI)
         }
+    }
+
+    /// What does not read is said, not swallowed: a malformed form is its parse finding, and a script
+    /// that does not parse rides on the skin as one.
+    func testAIMP30FormsAndScriptsReportWhatDoesNotRead() throws {
+        let ini = Data([0xFF, 0xFE]) + Data("[FILE]\r\nSkinName=Vega AIO\r\n".utf16.flatMap { [UInt8($0 & 0xFF), UInt8($0 >> 8)] })
+        func skin(_ entries: [String: Data]) throws -> AIMPSkin {
+            var file = Array("ACS3".utf8) + [1] + Self.scrambledMarker(at: 5)
+            file += Self.scrambled(Self.zlib(Self.toc(entries.merging(["main.ini": ini]) { a, _ in a })), at: file.count)
+            return try AIMPSkinLoader.load(data: Data(file))
+        }
+        XCTAssertThrowsError(try skin(["MainFrame.xml": Data("<item Name=".utf8)])) {
+            XCTAssertEqual(($0 as? AIMPSkinFinding)?.code, .xmlMalformed, "not AM0010: the form is there and does not read")
+        }
+        let loaded = try skin(["MainFrame.xml": Data("<item Name=\"Main\"/>".utf8), "Broken.fsxml": Data("FSXMLBIN".utf8)])
+        XCTAssertNil(loaded.scripts.programs["broken"])
+        XCTAssertEqual(loaded.findings.map(\.code), [.entryUnreadable])
+        XCTAssertTrue(loaded.findings.first?.message.contains("Broken.fsxml") == true)
+    }
+
+    /// AIMP 2's `.acs` is refused as not supported yet.
+    func testAIMP2SkinsAreRefusedAsNotSupportedYet() {
         XCTAssertThrowsError(try AIMPSkinArchive.read(Data("ACSP".utf8) + Data(count: 40))) {
             XCTAssertEqual(($0 as? AIMPSkinFinding)?.code, .unsupportedFormat)
         }
