@@ -191,11 +191,52 @@ struct AIMPSkinImage: Sendable {
                   source: decode.map { decode in AIMPSkinPixels.Source(budget: budget) { try decode(source()) } })
     }
 
-    /// A Windows bitmap (AIMP 3.0's BMP skins), laid out as its `main.ini` says.
+    /// A Windows bitmap (AIMP 3.0's BMP skins, AIMP 2's), laid out as its `main.ini` says.
     init(bitmap data: Data, name: String, layout: Layout, budget: AIMPSkinPixelBudget, source: @escaping () throws -> Data) throws {
         let header = try AIMPSkinBitmap.header(data, name: name)
         self.init(width: header.width, height: header.height, layout: layout,
                   source: AIMPSkinPixels.Source(budget: budget) { try AIMPSkinBitmap.pixels(source(), name: name) })
+    }
+
+    /// The same picture cut and stretched as `layout` says (AIMP 2's, once its `main.ini` is read).
+    func laidOut(_ layout: Layout) -> AIMPSkinImage {
+        guard let pixels else { return self }
+        return AIMPSkinImage(width: width, height: height, layout: layout, source: pixels.source)
+    }
+
+    /// Frame `index` of `frames` stacked ones, as a picture of its own.
+    func stackedFrame(_ index: Int, of frames: Int) -> AIMPSkinImage? {
+        guard let pixels, frames > 0, height % frames == 0 else { return nil }
+        let rows = height / frames
+        return AIMPSkinImage(width: width, height: rows, layout: Layout(),
+                             source: pixels.source.rows((index * rows)..<((index + 1) * rows), width: width))
+    }
+
+    /// The picture's left `columns`, its other columns cut off (an AIMP 2 `BottomDock` wider than the
+    /// player it docks under); itself when it is no wider.
+    func clipped(toWidth columns: Int) -> AIMPSkinImage {
+        guard let pixels, columns > 0, columns < width else { return self }
+        return AIMPSkinImage(width: columns, height: height, layout: Layout(),
+                             source: pixels.source.padded(width: width, height: height, toWidth: columns, toHeight: height))
+    }
+
+    /// Pictures each below the last, as the frames of one, at the first one's size; nil when a later
+    /// one is larger, or the strip would pass `AIMPSkinPolicy.decodedPixels` (the caller keeps the
+    /// first: an AIMP 2 slider's plain track).
+    static func stacking(_ images: [AIMPSkinImage]) -> AIMPSkinImage? {
+        let parts = images.compactMap(\.pixels)
+        // A later picture smaller than the first sits at its top-left (Hameleon's lit tracks are a
+        // pixel short of their tracks); a larger one does not stack.
+        // Nor does one past the decoded-pixel limit, which each part alone was checked against.
+        guard let first = parts.first, parts.count == images.count,
+              parts.allSatisfy({ $0.width <= first.width && $0.height <= first.height }),
+              first.width * first.height * parts.count <= AIMPSkinPolicy.decodedPixels,
+              let source = AIMPSkinPixels.Source.stacking(parts.map {
+                  $0.width == first.width && $0.height == first.height ? $0.source
+                      : $0.source.padded(width: $0.width, height: $0.height, toWidth: first.width, toHeight: first.height)
+              }, length: first.width * first.height * 4) else { return nil }
+        return AIMPSkinImage(width: first.width, height: first.height * parts.count,
+                             layout: Layout(frames: parts.count, stacked: true), source: source)
     }
 
     // MARK: - Formats

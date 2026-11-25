@@ -8,9 +8,16 @@ extension AIMPSkinAIMP3 {
         let shape: Shape
         let dialect: AIMPSkinDialect
 
-        func index(_ form: (root: Shaped, sizingEdge: String?)) -> AIMPSkinIndex {
+        /// `companions`: the windows beside the main form, each with its own form (AIMP 2's equalizer).
+        func index(_ form: (root: Shaped, sizingEdge: String?), companions: [(companion: AIMPSkin.Companion, root: Shaped)] = [])
+            -> AIMPSkinIndex {
             var names = AIMPSkinIndex.Names()
             var hidden = Set<String>()
+            // The windows' names first, as an AIMP 4 index reads them: their keys show and hide them.
+            for (companion, _) in companions {
+                names.items.insert(companion.name)
+                if !companion.initiallyVisible { hidden.insert(companion.name) }
+            }
             func gather(_ item: Shaped) {
                 // Its saved visibility is the first item's of the name, the one lookups find.
                 if names.items.insert(item.name).inserted, !item.layout.savedShown { hidden.insert(item.name) }
@@ -22,15 +29,19 @@ extension AIMPSkinAIMP3 {
                 item.items.forEach(gather)
             }
             gather(form.root)
+            companions.forEach { gather($0.root) }
             var sizing: [String: AIMPSkinIndex.Sizing] = [:]
             if let edge = form.sizingEdge.flatMap(Double.init), edge > 0 { sizing[""] = .init(edge: CGFloat(edge), initialSize: nil) }
-            var index = AIMPSkinIndex(names: names, sizing: sizing, dialect: dialect)
-            index.hiddenItems = hidden
+            var index = AIMPSkinIndex(names: names, companions: companions.map(\.companion), sizing: sizing, dialect: dialect)
+            index.hiddenItems.formUnion(hidden)
             var made = Made(index: index)
-            let root = made.item(form.root)
-            let main = AIMPSkinItem(name: nil, className: nil, isItem: false, layout: Shape.layout(dock: .none).withDock(nil),
-                                    bindings: AIMPSkinBindings(links: [], declared: false), items: [root])
-            index.hold(main: main, companions: [], holders: [:])
+            func window(_ root: Shaped) -> AIMPSkinItem {
+                AIMPSkinItem(name: nil, className: nil, isItem: false, layout: Shape.layout(dock: .none).withDock(nil),
+                             bindings: AIMPSkinBindings(links: [], declared: false), items: [made.item(root)])
+            }
+            let main = window(form.root)
+            let windows = companions.map { (name: $0.companion.name, form: window($0.root)) }
+            index.hold(main: main, companions: windows, holders: [:])
             return index
         }
     }
@@ -139,13 +150,15 @@ extension AIMPSkinAIMP3 {
             fills[.playingSelected] = color("ItemHighlightColorSelectedPlaying")
             fills[.playing] = color("ItemHighlightColorPlaying")
             fills[.selected] = color("ItemHighlightColorSelected")
-            return AIMPSkinControl.Playlist(
+            var playlist = AIMPSkinControl.Playlist(
                 picture: resources["Skin"], background: background, rowPicture: nil,
                 fonts: Dictionary(uniqueKeysWithValues: Row.allCases.map { ($0, font($0.rawValue) ?? normal) }), fills: fills,
                 detailFonts: Dictionary(uniqueKeysWithValues: Row.allCases.map { ($0, font($0.rawValue, line: "ItemLine2") ?? detail) }),
                 headerFont: font("Normal", line: "Header") ?? normal, headerPicture: nil,
                 expandButtons: resources["HeaderExpandButtons"], marks: resources["ItemMarks"],
                 switches: resources["ItemSwitches"], headerSwitches: resources["ItemSwitches"])
+            playlist.classic = index.dialect.classicPlaylist
+            return playlist
         }
     }
 }

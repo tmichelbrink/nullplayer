@@ -378,7 +378,8 @@ enum AIMPSkinLoader {
         // -192. Older skins name the same pictures `.myimg` (Sony TC-MR2), AIMP 3.0's BMP skins `.bmp`,
         // cut as `main.ini` says; each is filed as `.img`, which wins, then `.myimg`.
         let budget = AIMPSkinPixelBudget()
-        let layouts = archive.mainINI.map(AIMPSkinAIMP3.bitmapLayouts) ?? [:]
+        // AIMP 2's bitmaps are laid out as its form is read (`AIMPSkinAIMP2.layOut`).
+        let layouts = archive.format != .acsp ? archive.mainINI.map(AIMPSkinAIMP3.bitmapLayouts) ?? [:] : [:]
         var images: [String: AIMPSkinImage] = [:]
         for (name, entry) in archive.entries.sorted(by: { $0.key < $1.key }) {
             guard let ext = [".img", ".myimg", ".bmp"].first(where: name.hasSuffix), archive.mainINI != nil || ext != ".bmp" else { continue }
@@ -412,6 +413,9 @@ enum AIMPSkinLoader {
         let companions: [AIMPSkin.Companion], resources: [String: AIMPSkinResource], index: AIMPSkinIndex
         if let mainForm {
             (companions, resources, index) = Self.markupForms(mainForm, documents: documents, strings: strings)
+        } else if let ini = archive.mainINI, archive.format == .acsp {
+            resources = [:]
+            (index, companions, images) = try AIMPSkinAIMP2(documents: documents, ini: ini, images: images).read(dialect: AIMPSkinDialect(archive))
         } else if let ini = archive.mainINI {
             (companions, resources) = ([], [:])
             index = try AIMPSkinAIMP3.read(documents, ini: ini, images: images, dialect: AIMPSkinDialect(archive))

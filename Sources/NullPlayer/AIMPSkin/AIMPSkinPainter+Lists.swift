@@ -6,7 +6,8 @@ extension AIMPSkinPainter {
     /// NullPlayer's playlist in the skin's colours and fonts, as AIMP lays its list out: a header over
     /// each group (its expand button, switch, name, and its run's count and length, `headers`), then
     /// each track on two lines, its switch, number, title and length, its format and size under the
-    /// title with its rating marks at the right; the playing row and the selected one lit. `shown` are the rows the quick search leaves, `rows`
+    /// title with its rating marks at the right; the playing row and the selected one lit. AIMP 2's
+    /// list (`classic`) is one line a track. `shown` are the rows the quick search leaves, `rows`
     /// those in view (`AIMPSkinLayout.Look.playlist`).
     func drawPlaylist(_ style: AIMPSkinControl.Playlist, rows: AIMPSkinLayout.Rows, shown: [Int],
                       headers: [Int: AIMPSkinLayout.GroupHeader], in rect: CGRect) {
@@ -18,7 +19,11 @@ extension AIMPSkinPainter {
         }
         context.saveGState()
         context.clip(to: rect)
-        drawGroupedRows(style, rows: rows, shown: shown, headers: headers, in: rect)
+        if style.classic {
+            drawClassicRows(style, rows: rows, shown: shown, in: rect)
+        } else {
+            drawGroupedRows(style, rows: rows, shown: shown, headers: headers, in: rect)
+        }
         context.restoreGState()
     }
 
@@ -42,6 +47,18 @@ extension AIMPSkinPainter {
 
     private static func timeWidth(_ time: String, font: AIMPSkinFont) -> CGFloat {
         CGFloat(time.count) * CGFloat(font.height) * 0.55 + 6
+    }
+
+    /// AIMP 2's rows: the number and title, the length at the right, on one line.
+    private func drawClassicRows(_ style: AIMPSkinControl.Playlist, rows: AIMPSkinLayout.Rows, shown: [Int], in rect: CGRect) {
+        for slot in rows.slots {
+            let (index, row, line, state) = beginRow(slot, style: style, shown: shown, in: rect)
+            guard let font = style.fonts[state].map({ self.font($0) }) else { continue }
+            let time = Self.time(row.seconds), timeWidth = Self.timeWidth(time, font: font)
+            canvas.draw(time, font: font, at: CGPoint(x: line.maxX - timeWidth, y: line.midY), centeredIn: nil, clippedTo: line)
+            canvas.draw("\(index + 1). \(row.title)", font: font, at: CGPoint(x: line.minX + 3, y: line.midY), centeredIn: nil,
+                        clippedTo: CGRect(x: line.minX, y: line.minY, width: max(0, line.width - timeWidth - 4), height: line.height))
+        }
     }
 
     /// AIMP's rows: group headers, and two lines a track.

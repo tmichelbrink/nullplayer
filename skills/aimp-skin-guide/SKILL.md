@@ -1,6 +1,6 @@
 ---
 name: aimp-skin-guide
-description: AIMP skin family (.acs5, .acs4, .acs3 — AIMP 4 forms and AIMP 3.0's main.ini skins —, .acs4proj; AIMP 2's .acs is decoded but not read yet) — the decoded containers, ACLIMG32/ASEIMG32 images, SXML/BXML documents, layout and binding rules, FastScript scripts, the test-target harness and load gate, and the backlog. Use before AIMP skin work, when an AIMP skin looks or behaves wrong, or when reading an AIMP skin.
+description: AIMP skin family (.acs5, .acs4, .acs3 — AIMP 4 forms and AIMP 3.0's main.ini skins —, .acs4proj, AIMP 2's .acs) — the decoded containers, ACLIMG32/ASEIMG32 images, SXML/BXML documents, layout and binding rules, FastScript scripts, the test-target harness and load gate, and the backlog. Use before AIMP skin work, when an AIMP skin looks or behaves wrong, or when reading an AIMP skin.
 ---
 
 # AIMP skins

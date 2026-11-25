@@ -10,14 +10,14 @@ import Foundation
 ///   AIMP 4 form; kinds 1 and 2 are AIMP 3.0's, a `main.ini` and pictures with no form documents
 ///   (`mainINI`, read by `AIMPSkinAIMP3`).
 /// - `.acs4proj` (the skin editor's project): the `.acs4` layout uncompressed and unscrambled.
-///
-/// AIMP 2's `.acs` (`ACSP`) is refused as not supported yet.
+/// - `.acs` (AIMP 2's `ACSP`): one zlib body of inline entries, Windows bitmaps and `main.ini`
+///   (`AIMPSkinArchive+ACSP.swift`), read by `AIMPSkinAIMP2`.
 ///
 /// Every entry is named as `.acs4` names it, with an extension: `.acs5` names carry none, so one is
 /// added from the entry's kind (`AIMPMainForm` → `AIMPMainForm.xml`).
 struct AIMPSkinArchive: Sendable {
     enum Format: String, Sendable {
-        case acs5, acs4, acs3, project
+        case acs5, acs4, acs3, project, acsp
     }
 
     struct Entry: Sendable {
@@ -47,8 +47,8 @@ struct AIMPSkinArchive: Sendable {
     private(set) var about: String
     /// The skin's own preview, a Windows BMP.
     private(set) var preview: Data?
-    /// An AIMP 3.0 skin's `main.ini`, read once: its credits, its pictures' layout and its form all
-    /// come from it (`AIMPSkinAIMP3`). Nil for a skin with form documents.
+    /// An AIMP 3.0 or AIMP 2 skin's `main.ini`, read once: its credits, its pictures' layout and its
+    /// form all come from it (`AIMPSkinAIMP3`, `AIMPSkinAIMP2`). Nil for a skin with form documents.
     private(set) var mainINI: INIFile?
     /// Keyed by lowercased name: AIMP resolves names case-insensitively.
     let entries: [String: Entry]
@@ -70,8 +70,8 @@ struct AIMPSkinArchive: Sendable {
         }
     }
 
-    /// `meta` nil for a container with no metadata block (AIMP 3.0's `.acs3`): its credits are
-    /// `main.ini`'s, its preview `preview.bmp`.
+    /// `meta` nil for a container with no metadata block (AIMP 3.0's `.acs3`, AIMP 2's `.acs`): its
+    /// credits are `main.ini`'s, its preview `preview.bmp`.
     private init(format: Format, meta: Meta?, entries: [String: Entry], storage: Data, key: [UInt8]) throws {
         self.format = format
         self.entries = entries
@@ -91,6 +91,15 @@ struct AIMPSkinArchive: Sendable {
         }
     }
 
+    /// An archive of plain entries, each a range of `storage` (AIMP 2's `ACSP` body), credited by
+    /// `header` when it names the skin, else by `main.ini`.
+    init(acsp entries: [(name: String, range: Range<Int>)], header: (name: String, author: String), storage: Data) throws {
+        var table: [String: Entry] = [:]
+        for entry in entries { table[entry.name.lowercased()] = Entry(name: entry.name, location: .plain(entry.range)) }
+        try self.init(format: .acsp, meta: nil, entries: table, storage: storage, key: [])
+        if !header.name.isEmpty { (name, author) = header }
+    }
+
     // MARK: - Reading
 
     static func read(_ data: Data) throws -> AIMPSkinArchive {
@@ -102,7 +111,7 @@ struct AIMPSkinArchive: Sendable {
         case Data("ACS4".utf8): return try readZlibBody(data, format: .acs4)
         case Data("ACS3".utf8): return try readZlibBody(data, format: .acs3)
         case Data("ACSJ".utf8): return try readProject(data)
-        case Data("ACSP".utf8): throw AIMPSkinFinding(.unsupportedFormat, "AIMP 2 skins are not supported yet.")
+        case Data("ACSP".utf8): return try readACSP(data)
         case let magic where magic.prefix(3) == Data("ACS".utf8):
             throw AIMPSkinFinding(.unsupportedFormat, "'\(String(decoding: magic, as: UTF8.self))' skins are not supported.")
         default:

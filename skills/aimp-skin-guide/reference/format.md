@@ -121,11 +121,11 @@ of layout is `AIMPSkinDialect`'s (`sizesBySkinState`, `listKeepsRoom`, `controls
 
 ## AIMP 2 (`.acs`)
 
-> Decoded, not read by NullPlayer yet: such skins are refused (`AM0011`) until a reader of their own
-> builds their forms directly (the earlier translation to AIMP 4 XML was removed).
-
-the earlier package reader reads the package, the earlier bitmap decoder the pictures, and the earlier reader
-turns `main.ini` into the AIMP 3.0 model above, so the earlier reader's translator builds the form.
+`AIMPSkinArchive+ACSP.swift` reads the package, `AIMPSkinBitmap` the pictures, and `AIMPSkinAIMP2`
+turns `main.ini` into AIMP 3.0's `Object`s and a typed layout (`AIMPSkinAIMP3.Layout`, no AIMP 3.0
+document between), which AIMP 3.0's `Shape` and `Build` read into the model. Its list is AIMP 2's
+one line a track (`AIMPSkinDialect.classicPlaylist`); an equalizer the layout leaves out is a
+window of its own (`EquaForm`).
 Version 3 (124 of the catalog's 166) leaves the header's name empty and credits it in `main.ini`'s
 `[FILE]`; one package (version `0x20`, Dark Lagoon) is scrambled and stays `AM0011`.
 

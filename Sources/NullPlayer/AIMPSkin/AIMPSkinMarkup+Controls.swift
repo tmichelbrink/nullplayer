@@ -118,6 +118,7 @@ extension AIMPSkinControl.Playlist {
         fills[.playing] = color("ItemHighlightColorPlaying", "ItemBackgroundColors", "Playing")
         fills[.selected] = color("ItemHighlightColorSelected", "ItemBackgroundColors", "Selected")
         self.fills = fills
+        classic = dialect.classicPlaylist
     }
 
     /// A row's font: `.acs3`'s flat `ItemLine1Font…`, else its state's (else the normal one's) in

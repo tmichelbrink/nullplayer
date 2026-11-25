@@ -66,6 +66,8 @@ extension AIMPSkinControl {
         let marks: String?
         let switches: String?
         let headerSwitches: String?
+        /// AIMP 2's list: one line a track, no group headers (`AIMPSkinDialect.classicPlaylist`).
+        var classic = false
     }
 
     /// The colours of the library's group tree and table (`Style` in `.acs4`, `StyleContent` in

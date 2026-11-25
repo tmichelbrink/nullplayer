@@ -47,12 +47,13 @@ final class AIMPSkinPlaylistLayoutTests: XCTestCase {
           <property name="SkinSwitches" value="Playlist.Resources.SkinSwitches"/>
         </property>
         """)
-        let style = AIMPSkinControl.Playlist(["Resources": resources], resources: [:], dialect: .init(delphiColors: true))
+        let style = AIMPSkinControl.Playlist(["Resources": resources], resources: [:], dialect: .init(delphiColors: true, classicPlaylist: false, sizesBySkinState: true, listKeepsRoom: true))
         XCTAssertEqual(style.headerFont.height, 13)
         XCTAssertEqual(style.fonts[.normal]?.height, 15)
         XCTAssertEqual(style.detailFonts[.normal]?.height, 11)
         XCTAssertEqual(style.expandButtons, "Playlist.Resources.HeaderExpandButtons")
         XCTAssertEqual(style.marks, "Playlist.Resources.SkinMarks")
         XCTAssertEqual(style.switches, "Playlist.Resources.SkinSwitches")
+        XCTAssertFalse(style.classic)
     }
 }

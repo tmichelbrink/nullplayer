@@ -137,6 +137,33 @@ final class AIMPSkinImageTests: XCTestCase {
         XCTAssertEqual(decodes, 1, "the first ask decodes the picture into its budget; asking or drawing after does not again")
     }
 
+    func testBitmapsDecodeToPremultipliedTopDown() throws {
+        // 2×2, 32 bits bottom-up: bottom row straight-alpha half-white, top row opaque red.
+        let rows: [[UInt8]] = [[255, 255, 255, 128, 255, 255, 255, 128], [0, 0, 255, 255, 0, 0, 255, 255]]
+        let pixels = try AIMPSkinBitmap.pixels(Data(Self.bitmap(width: 2, height: 2, bits: 32, rows: rows)), name: "a.bmp")
+        XCTAssertEqual(Array(pixels.prefix(4)), [0, 0, 255, 255], "the top row first")
+        XCTAssertEqual(Array(pixels.suffix(4)), [128, 128, 128, 128], "premultiplied")
+
+        // All alpha bytes 0: no alpha, opaque.
+        let flat = try AIMPSkinBitmap.pixels(Data(Self.bitmap(width: 1, height: 1, bits: 32, rows: [[10, 20, 30, 0]])), name: "b.bmp")
+        XCTAssertEqual(Array(flat), [10, 20, 30, 255])
+
+        // 24 bits, rows padded to four bytes.
+        let rgb = try AIMPSkinBitmap.pixels(Data(Self.bitmap(width: 1, height: 1, bits: 24, rows: [[1, 2, 3, 0]])), name: "c.bmp")
+        XCTAssertEqual(Array(rgb), [1, 2, 3, 255])
+    }
+
+    func testBitmapPictureTakesItsLayoutFromMainIni() throws {
+        let rows = (0..<2).map { _ in [UInt8](repeating: 9, count: 8 * 4) }
+        let data = Data(Self.bitmap(width: 8, height: 2, bits: 32, rows: rows))
+        let layout = AIMPSkinImage.Layout(frames: 4)
+        let image = try AIMPSkinImage(bitmap: data, name: "AddBtn.bmp", layout: layout, budget: AIMPSkinPixelBudget()) { data }
+        XCTAssertEqual(image.frameSize, CGSize(width: 2, height: 2))
+        XCTAssertEqual(image.frame(3)?.width, 2)
+    }
+
+    // MARK: - Building pictures
+
     /// An `ASEIMG32` whose blue byte at (x, y) is `blue(x, y)`, opaque where it is not 0.
     private static func ase(width: Int, height: Int, frames: Int, stacked: Bool, budget: AIMPSkinPixelBudget,
                             blue: (Int, Int) -> UInt8, onDecode: @escaping () -> Void = {}) -> AIMPSkinImage {
@@ -164,5 +191,14 @@ final class AIMPSkinImageTests: XCTestCase {
     private static func blue(_ image: CGImage?) -> [UInt8] {
         guard let image, let data = image.dataProvider?.data as Data? else { return [] }
         return stride(from: 0, to: image.width * image.height * 4, by: 4).map { data[$0] }
+    }
+
+    /// A Windows bitmap, rows bottom-up as given (each already padded).
+    private static func bitmap(width: Int, height: Int, bits: Int, rows: [[UInt8]]) -> [UInt8] {
+        func u32(_ v: Int) -> [UInt8] { (0..<4).map { UInt8((v >> (8 * $0)) & 0xFF) } }
+        let pixels = rows.flatMap { $0 }
+        return Array("BM".utf8) + u32(54 + pixels.count) + u32(0) + u32(54)
+            + u32(40) + u32(width) + u32(height) + [1, 0, UInt8(bits), 0] + u32(0) + u32(pixels.count)
+            + u32(0) + u32(0) + u32(0) + u32(0) + pixels
     }
 }

@@ -7,19 +7,19 @@ enum AIMPSkinImportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .noSkinInZip(name):
-            return "“\(name)” holds no .acs5, .acs4 or .acs3 skin."
+            return "“\(name)” holds no .acs5, .acs4, .acs3 or .acs skin."
         }
     }
 }
 
 /// The installed-skins folder and the selection preference (`SkinFileCatalogue`). A skin is one
-/// `.acs5`, `.acs4` or `.acs3` file, validated through `AIMPSkinLoader` off the main thread as
+/// `.acs5`, `.acs4`, `.acs3` or `.acs` file, validated through `AIMPSkinLoader` off the main thread as
 /// it is committed (`SkinInstallFolder`); of two files with one name, the first of `fileExtensions`
 /// is the skin. The AIMP catalog ships each skin in a `.zip`; importing one installs every skin
 /// inside it.
 struct AIMPSkinImporter: SkinFileCatalogue {
     static let family = "AIMP"
-    static let fileExtensions = ["acs5", "acs4", "acs3"]
+    static let fileExtensions = ["acs5", "acs4", "acs3", "acs"]
 
     let folder: SkinInstallFolder
     let selection: SkinSelection

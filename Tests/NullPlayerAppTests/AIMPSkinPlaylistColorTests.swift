@@ -6,7 +6,7 @@ import XCTest
 final class AIMPSkinPlaylistColorTests: XCTestCase {
     private func playlist(background: String, delphi: Bool) -> AIMPSkinControl.Playlist {
         let resources = AIMPNode.element("property", ["name": "Resources"], [AIMPNode.property("BackgroundColor", background)])
-        return AIMPSkinControl.Playlist(["Resources": resources], resources: [:], dialect: .init(delphiColors: delphi))
+        return AIMPSkinControl.Playlist(["Resources": resources], resources: [:], dialect: .init(delphiColors: delphi, classicPlaylist: false, sizesBySkinState: true, listKeepsRoom: true))
     }
 
     func testAFlatZeroIsClearOutsideDelphiSkins() {

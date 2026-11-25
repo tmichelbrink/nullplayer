@@ -10,12 +10,11 @@ final class AIMPSkinZipImportTests: XCTestCase {
         let files = try unzip([
             WMPTestArchiveEntry("A/Deck.acs4", data: Data("first".utf8)),
             WMPTestArchiveEntry("B/deck.acs5", data: Data("second".utf8)),
-            WMPTestArchiveEntry("Other.acs3", data: Data("other".utf8)),
-            WMPTestArchiveEntry("Old.acs", data: Data("aimp2".utf8)),
+            WMPTestArchiveEntry("Other.acs", data: Data("other".utf8)),
             WMPTestArchiveEntry("readme.txt", data: Data("text".utf8)),
             WMPTestArchiveEntry("__MACOSX/A/._Deck.acs4", data: Data("junk".utf8)),
         ])
-        XCTAssertEqual(files.map(\.lastPathComponent), ["Deck.acs4", "Other.acs3"], "a second Deck, in another folder or extension, is not written over the first; AIMP 2's .acs is not taken")
+        XCTAssertEqual(files.map(\.lastPathComponent), ["Deck.acs4", "Other.acs"], "a second Deck, in another folder or extension, is not written over the first")
         XCTAssertEqual(try Data(contentsOf: files[0]), Data("first".utf8))
     }
 

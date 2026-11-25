@@ -2,6 +2,26 @@ import CoreGraphics
 import Foundation
 
 extension AIMPSkinAIMP3 {
+    /// One item of a form's layout as AIMP 3.0 declares it (`MainFrame.xml`'s attribute-style
+    /// `<item>`: `Name`, `Class`, `Align`, `AlignLevel`, `AlignMargins`, `MinSize`, `MaxSize`, the
+    /// resize flags), or as AIMP 2's `main.ini` gives it, read by `Shape` alike.
+    struct Layout {
+        var name: String?
+        /// `TAIMPLayoutDockSiteItem`: it holds a frame (`Shape.frame`), the playlist or its tabs.
+        var isDockSite = false
+        /// `top` (also when none is given), `bottom`, `left`, `right`, `client`.
+        var align: String?
+        var level: String?
+        var margins: String?
+        var minSize: String?
+        var maxSize: String?
+        /// `AutoSize`, `AllowResizeByWidth`, `AllowResizeByHeight`: `0` is false.
+        var autoSize: String?
+        var resizesByWidth: String?
+        var resizesByHeight: String?
+        var items: [Layout] = []
+    }
+
     /// One item of the form as the layout documents give it: its docking, picture and natural
     /// size, the items in it, and what each control in it is (`Spec`), not yet read into the model.
     struct Shaped {
@@ -72,7 +92,9 @@ extension AIMPSkinAIMP3 {
 
     /// Reads the layout documents and the objects into `Shaped` items.
     struct Shape {
-        let documents: AIMPSkinDocuments
+        /// The items of the frame a dock site holds, by its file name (`PlaylistFrame.xml`); nil for
+        /// none.
+        let frame: (String) -> [Layout]?
         let images: [String: AIMPSkinImage]
         /// Each item's objects, back to front, by the item's name without regard to case, as
         /// `[Parents]` and the layout may differ in it.
@@ -82,6 +104,15 @@ extension AIMPSkinAIMP3 {
         /// `[Playlist]`'s fonts (`Nrm`, `Act`, `Sel`, `SelAct`, their `…Hdr` titles) and colours
         /// (`BK`, `ABK`, `SBK`, `SABK`).
         let playlist: [String: String]
+        /// AIMP 2's: a window of the skin's own that the equalizer keys show and hide; nil when they
+        /// open the equalizer as AIMP's action does.
+        var equalizerWindow: String?
+        /// AIMP 2's: the window's least size, where the skin asks for more than its parts take
+        /// (`[File] FormMinW`/`FormMinH`: Hameleon's playlist room).
+        var minimumSize: CGSize?
+        /// AIMP 2's: the playlist keeps 170 px of its own (AIMP 5.40 does not open AIMP 2 skins); an
+        /// AIMP 3.0 skin's takes none, as AIMP 5.40 opens it.
+        var playlistRoom = false
         var unnamed = 0
         /// The dock sites' frame documents being read into the tree (lowercased), and how many have
         /// been: a frame that docks itself, or frames that dock each other, would recurse until the
@@ -91,9 +122,9 @@ extension AIMPSkinAIMP3 {
         /// More frames than any AIMP 3.0 skin docks (`PlaylistFrame` and `EqFrame`).
         private static let mostFrames = 64
 
-        init(documents: AIMPSkinDocuments, images: [String: AIMPSkinImage], objects: [Object], activeTab: String?,
+        init(frame: @escaping (String) -> [Layout]?, images: [String: AIMPSkinImage], objects: [Object], activeTab: String?,
              playlist: [String: String]) {
-            self.documents = documents
+            self.frame = frame
             self.images = images
             self.objects = Dictionary(grouping: objects, by: { $0.item.lowercased() }).mapValues { $0.sorted { $0.z < $1.z } }
             self.activeTab = activeTab
@@ -109,10 +140,13 @@ extension AIMPSkinAIMP3 {
         /// `sizingEdge` (`[MainFrame] SizingHitTestAreaWidth`): the window sizes from its edges.
         /// The `<layout>`'s own `MinSize`/`MaxSize` are left out: AIMP 5.40 opens Cute below its
         /// 830x550 and 4CarPC over its 800x480, at what their items take.
-        mutating func form(_ layout: AIMPNode, sizingEdge: String?) -> (root: Shaped, sizingEdge: String?) {
+        mutating func form(_ layout: [Layout], sizingEdge: String?) -> (root: Shaped, sizingEdge: String?) {
             var items: [Shaped] = []
-            for child in layout.children("item") { items.append(item(child)) }
-            let size = Self.layout(dock: .client).slot(Self.aggregate(items))
+            for child in layout { items.append(item(child)) }
+            var size = Self.layout(dock: .client).slot(Self.aggregate(items))
+            if let least = minimumSize {
+                size = CGSize(width: max(size.width, least.width), height: max(size.height, least.height))
+            }
             let least = CGSize(width: Int(size.width), height: Int(size.height))
             let root = Shaped(name: "AIMP3Form", layout: Self.layout(dock: .client, sizeMinimal: least), texture: nil,
                               items: items, controls: [], natural: .zero)
@@ -121,41 +155,41 @@ extension AIMPSkinAIMP3 {
 
         /// One layout item, its children docked lowest `AlignLevel` first, and the controls
         /// `[Parents]` puts in it.
-        mutating func item(_ source: AIMPNode) -> Shaped {
+        mutating func item(_ source: Layout) -> Shaped {
             let name: String
-            if let given = source["Name"] {
+            if let given = source.name {
                 name = given
             } else {
                 unnamed += 1
                 name = "AIMP3Item\(unnamed)"
             }
             let dock = AIMPSkinDock(["top": "laTop", "bottom": "laBottom", "left": "laLeft", "right": "laRight", "client": "laClient"][
-                source["Align"] ?? "top"] ?? "laTop")
+                source.align ?? "top"] ?? "laTop")
             // Its level among its docked siblings, as AIMP's conversion writes it: the layout orders by
             // it, also where a form's or frame's own items come in another order.
-            let level = Int(source["AlignLevel"] ?? "") ?? 0
+            let level = Int(source.level ?? "") ?? 0
             // The playlist frame's top dock is its caption while it floats: AIMP 5.40 shows it only
             // undocked (its conversion binds it `not PlaylistFrame.Docked`), and NullPlayer docks the
             // frame. NGuvu's 42-px caption over its 295-px bars, Bloom's 33-px one.
             let shown = !(name.caseInsensitiveCompare("PlsTopDock") == .orderedSame && framesReading.contains("playlistframe.xml"))
             let texture = picture(name) != nil ? name : nil
             var items: [Shaped] = []
-            for child in source.children("item").enumerated()
-                .sorted(by: { (Int($0.element["AlignLevel"] ?? "") ?? 0, $0.offset) < (Int($1.element["AlignLevel"] ?? "") ?? 0, $1.offset) }) {
+            for child in source.items.enumerated()
+                .sorted(by: { (Int($0.element.level ?? "") ?? 0, $0.offset) < (Int($1.element.level ?? "") ?? 0, $1.offset) }) {
                 items.append(item(child.element))
             }
             var controls: [Spec] = []
             // A dock site's own minimum, which wins over the item's limits and its content's size.
             var siteMinimum: CGSize?
-            if source["Class"] == "TAIMPLayoutDockSiteItem" {
+            if source.isDockSite {
                 // A dock site holds a frame of its own layout (`PlaylistFrame`; the equalizer's is
                 // `EqFrame`); one that does not read is a finding, and the site is left as if it had none.
                 let file = name == "EqualizerFrame" ? "EqFrame.xml" : name + ".xml"
-                if !framesReading.contains(file.lowercased()), framesRead < Self.mostFrames, let layout = documents.node(file) {
+                if !framesReading.contains(file.lowercased()), framesRead < Self.mostFrames, let layout = frame(file) {
                     framesRead += 1
                     framesReading.insert(file.lowercased())
                     items = []
-                    for child in layout.children("item") { items.append(item(child)) }
+                    for child in layout { items.append(item(child)) }
                     framesReading.remove(file.lowercased())
                 } else if name == "TabCtrl" {
                     controls += tabs()
@@ -167,19 +201,20 @@ extension AIMPSkinAIMP3 {
                     // An AIMP 3.0 skin's playlist takes no room of its own: AIMP 5.40 opens it at what its
                     // other parts take (Bloom's list, 0 px under its tab row; Pure White's and BYG's).
                     controls += playlistControls()
+                    if playlistRoom { siteMinimum = CGSize(width: 0, height: 170) }
                 }
             }
             // The item's own limits and resize flags (Experience's 176x301 cover panel, bars the user
             // cannot size); a site's minimum above wins.
-            func size(_ key: String) -> CGSize? {
-                let numbers = AIMPNode.numbers(source[key])
+            func size(_ text: String?) -> CGSize? {
+                let numbers = AIMPNode.numbers(text)
                 return numbers.count == 2 ? CGSize(width: numbers[0], height: numbers[1]) : nil
             }
-            func flag(_ key: String) -> Bool? { source[key].map { $0 != "0" } }
-            var layout = Self.layout(dock: dock, level: level, margins: AIMPSkinImage.Margins(source["AlignMargins"]),
-                                     sizeMinimal: siteMinimum ?? size("MinSize"), sizeMaximal: size("MaxSize"),
-                                     autoSize: flag("AutoSize") ?? true, shown: shown,
-                                     fixedWidth: flag("AllowResizeByWidth") == false, fixedHeight: flag("AllowResizeByHeight") == false)
+            func flag(_ text: String?) -> Bool? { text.map { $0 != "0" } }
+            var layout = Self.layout(dock: dock, level: level, margins: AIMPSkinImage.Margins(source.margins),
+                                     sizeMinimal: siteMinimum ?? size(source.minSize), sizeMaximal: size(source.maxSize),
+                                     autoSize: flag(source.autoSize) ?? true, shown: shown,
+                                     fixedWidth: flag(source.resizesByWidth) == false, fixedHeight: flag(source.resizesByHeight) == false)
             // An item with no picture is as big as what docks in it, and no smaller than its `MinSize`.
             let content = layout.floored(texture.flatMap { picture($0)?.frameSize } ?? Self.aggregate(items))
             if texture == nil, siteMinimum == nil, content.width > 0 || content.height > 0 {

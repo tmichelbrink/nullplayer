@@ -81,13 +81,6 @@ final class AIMPSkinArchiveTests: XCTestCase {
         XCTAssertTrue(loaded.findings.first?.message.contains("Broken.fsxml") == true)
     }
 
-    /// AIMP 2's `.acs` is refused as not supported yet.
-    func testAIMP2SkinsAreRefusedAsNotSupportedYet() {
-        XCTAssertThrowsError(try AIMPSkinArchive.read(Data("ACSP".utf8) + Data(count: 40))) {
-            XCTAssertEqual(($0 as? AIMPSkinFinding)?.code, .unsupportedFormat)
-        }
-    }
-
     func testUnknownACS3KindIsUnsupported() {
         let file = Array("ACS3".utf8) + [0x04] + [UInt8](repeating: 0, count: 40)
         XCTAssertThrowsError(try AIMPSkinArchive.read(Data(file))) { error in

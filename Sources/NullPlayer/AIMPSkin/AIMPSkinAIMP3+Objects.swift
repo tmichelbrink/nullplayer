@@ -117,7 +117,11 @@ extension AIMPSkinAIMP3.Shape {
     /// counterpart for and that draws nothing.
     private func aimpObject(_ key: String, thumb: Bool, orientation: Int?, into spec: inout AIMPSkinAIMP3.Spec) -> Bool {
         func bind(_ source: String, _ pin: String, _ target: String) { spec.links.append(.init(source: source, pin: pin, target: target)) }
-        if let action = Self.actions[key] {
+        if let window = equalizerWindow, key == "eqbtn" || key == "hidebtn" {
+            // AIMP 2's equalizer is a window beside the player: its key and the window's own hide key
+            // show and hide it.
+            bind(window, "Visible", "Action")
+        } else if let action = Self.actions[key] {
             bind(action, "Action", "Action")
         } else if key == "playpausebtn" {
             // Play's four frames, then pause's, shown while playing.

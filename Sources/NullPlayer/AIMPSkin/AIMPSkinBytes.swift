@@ -101,7 +101,7 @@ struct AIMPSkinBytes {
 }
 
 /// A zlib stream (a 2-byte header, then raw DEFLATE) inflated, the one inflater of every compressed
-/// thing an AIMP skin holds: `.acs5` entries, an `.acs4`/`.acs3` body,
+/// thing an AIMP skin holds: `.acs5` entries, an `.acs4`/`.acs3` body, AIMP 2's `ACSP` body,
 /// `ACLIMG32`'s `bitz` pixels.
 enum AIMPSkinZlib {
     /// Inflated, at most `expected` bytes when the container declares a size (and exactly that many)

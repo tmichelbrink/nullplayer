@@ -147,7 +147,7 @@ extension AIMPSkinLayout {
             let group = { (position: Int) in tracks[shown[position]].group }
             let rows = Rows(top: state.lists.playlistTop, count: shown.count, room: rect.height,
                             generation: host.player.playlist.generation, search: state.lists.playlistSearch) { position in
-                let starts = !group(position).isEmpty && (position == 0 || group(position - 1) != group(position))
+                let starts = !style.classic && !group(position).isEmpty && (position == 0 || group(position - 1) != group(position))
                 return (starts ? metrics.header : 0, metrics.item)
             }
             // Each header in view totals its own run of rows, not every group of its name.

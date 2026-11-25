@@ -19,9 +19,11 @@ enum AIMPSkinAIMP3 {
     static func read(_ documents: AIMPSkinDocuments, ini: INIFile, images: [String: AIMPSkinImage],
                      dialect: AIMPSkinDialect) throws -> AIMPSkinIndex {
         let layout = try documents.throwing("MainFrame.xml", missing: "An AIMP 3.0 skin with no MainFrame.xml.", documents.node)
-        var shape = Shape(documents: documents, images: images, objects: objects(ini), activeTab: ini["TabCtrl", "ActiveTab"],
-                          playlist: playlistSettings(ini))
-        let form = shape.form(layout, sizingEdge: ini["MainFrame", "SizingHitTestAreaWidth"])
+        // A dock site's frame that does not read is a finding (`documents`), and the site is left as
+        // if it had none.
+        var shape = Shape(frame: { documents.node($0).map(Layout.items) }, images: images, objects: objects(ini),
+                          activeTab: ini["TabCtrl", "ActiveTab"], playlist: playlistSettings(ini))
+        let form = shape.form(Layout.items(of: layout), sizingEdge: ini["MainFrame", "SizingHitTestAreaWidth"])
         return Build(shape: shape, dialect: dialect).index(form)
     }
 
@@ -45,6 +47,25 @@ enum AIMPSkinAIMP3 {
         return layouts
     }
 
+    // MARK: - Layout documents
+
+}
+
+extension AIMPSkinAIMP3.Layout {
+    /// A layout document's `<item>`s, as AIMP 3.0 writes them.
+    static func items(of document: AIMPNode) -> [Self] {
+        document.children("item").map(Self.init)
+    }
+
+    init(_ node: AIMPNode) {
+        self.init(name: node["Name"], isDockSite: node["Class"] == "TAIMPLayoutDockSiteItem", align: node["Align"],
+                  level: node["AlignLevel"], margins: node["AlignMargins"], minSize: node["MinSize"], maxSize: node["MaxSize"],
+                  autoSize: node["AutoSize"], resizesByWidth: node["AllowResizeByWidth"], resizesByHeight: node["AllowResizeByHeight"],
+                  items: Self.items(of: node))
+    }
+}
+
+extension AIMPSkinAIMP3 {
     // MARK: - main.ini
 
     /// One object `main.ini` places.

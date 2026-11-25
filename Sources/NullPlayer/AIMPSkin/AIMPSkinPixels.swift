@@ -65,6 +65,38 @@ final class AIMPSkinPixels: @unchecked Sendable {
     struct Source {
         let budget: AIMPSkinPixelBudget
         let decode: () throws -> Data
+
+        /// Rows `range` of a `width`-wide strip alone (AIMP 2's `BottomDock`: the docked one of its
+        /// two stacked states).
+        func rows(_ range: Range<Int>, width: Int) -> Source {
+            let decode = decode
+            return Source(budget: budget) { try decode().dropFirst(range.lowerBound * width * 4).prefix(range.count * width * 4) }
+        }
+
+        /// A `width`×`height` picture on a transparent `toWidth`×`toHeight` one, at its top-left
+        /// (Hameleon's 46×7 `Speed_sel` under its 47×8 track).
+        func padded(width: Int, height: Int, toWidth: Int, toHeight: Int) -> Source {
+            let decode = decode
+            return Source(budget: budget) {
+                let pixels = try decode()
+                var out = Data(count: toWidth * toHeight * 4)
+                for row in 0..<min(height, toHeight) {
+                    let from = pixels.startIndex + row * width * 4, length = min(width, toWidth) * 4
+                    guard from + length <= pixels.endIndex else { break }
+                    out.replaceSubrange((row * toWidth * 4)..<(row * toWidth * 4 + length), with: pixels[from..<(from + length)])
+                }
+                return out
+            }
+        }
+
+        /// Strips of `length` bytes each, one after another (AIMP 2's slider track over its lit
+        /// twin, `VolumeBar` and `VolumeBar_sel`).
+        static func stacking(_ parts: [Source], length: Int) -> Source? {
+            guard let first = parts.first else { return nil }
+            return Source(budget: first.budget) {
+                try parts.reduce(into: Data(capacity: length * parts.count)) { $0 += try $1.decode().prefix(length) }
+            }
+        }
     }
 
     let width: Int

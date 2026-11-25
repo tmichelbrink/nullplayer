@@ -76,8 +76,7 @@ enum AIMPSkinDiagnosticCode: String, Sendable {
     case entryUnreadable = "AM0008"
     case xmlMalformed = "AM0009"
     case noMainForm = "AM0010"
-    /// An `ACS` container this engine does not read yet: AIMP 3.0's `.acs3` (`main.ini`), AIMP 2's
-    /// `.acs` (`ACSP`), or a header kind it does not know.
+    /// An `ACS` container this engine does not read (an `ACSP` version other than 2 or 3).
     case unsupportedFormat = "AM0011"
     /// A `.zip` import past `SkinZipLimits.aimpSkins`, or a skin in it failing its CRC or size.
     case zipRejected = "AM0012"
