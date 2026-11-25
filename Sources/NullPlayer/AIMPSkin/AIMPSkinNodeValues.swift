@@ -17,6 +17,12 @@ extension AIMPNode {
         (text ?? "").split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
             .map { min(max($0, -1_000_000), 1_000_000) }
     }
+
+    /// A list of numbers as the skin wrote it, fractions and all, unheld: what a script reads back
+    /// (`PlaceInfo` margins), where `numbers` is what the layout lays out by.
+    static func writtenNumbers(_ text: String?) -> [Double] {
+        (text ?? "").split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+    }
 }
 
 extension AIMPSkinColor {

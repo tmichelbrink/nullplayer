@@ -94,7 +94,7 @@ final class AIMPSkinPainter {
             let links = control.bindings.links.map {
                 "\($0.target ?? "?")<-\($0.source ?? "?").\($0.pin ?? "?")\($0.expression.map { "[\($0)]" } ?? "")"
             }
-            print("  CONTROL \(control.name ?? "?") \(control.node["class"] ?? "?") \(Int(rect.minX)),\(Int(rect.minY)) \(Int(rect.width))x\(Int(rect.height)) \(links.joined(separator: " "))")
+            print("  CONTROL \(control.name ?? "?") \(control.className ?? "?") \(Int(rect.minX)),\(Int(rect.minY)) \(Int(rect.width))x\(Int(rect.height)) \(links.joined(separator: " "))")
         }
         for child in placed.controls {
             if let cut = child.cut { context.saveGState(); context.clip(to: cut) }

@@ -15,7 +15,7 @@ extension AIMPSkinLayout {
             guard let placement = control.placement else { return true }
             return placement.rect(in: rect, moved: control.name.map { flow.state.script[$0].margins } ?? [:]).intersects(rect)
         }
-        func isPlaylist(_ control: AIMPSkinControl) -> Bool { control.node["link"] == AIMPSkinList.playlist.rawValue }
+        func isPlaylist(_ control: AIMPSkinControl) -> Bool { if case .playlist = control.kind { true } else { false } }
         func scrolls(_ control: AIMPSkinControl) -> Bool { if case .playlistScrollBar = control.kind { true } else { false } }
         var placed: [Control] = []
         for control in held where !isPlaylist(control) && !scrolls(control) && inside(control) {
@@ -227,9 +227,9 @@ extension AIMPSkinLayout {
         // wave progress bars): played part in `ColorProgress`, else AIMP's orange; the rest in
         // `Color`, else a half-clear grey the bar's times read over; its thumb, a line, where it plays.
         case .slider(let slider) where slider.isSeek && control.bindings["Waveform"] != nil && !host.player.waveform.isEmpty:
-            let flow = flow, colour = { (name: String) in flow.visibleColor(AIMPSkinColor(control.node.properties[name])) }
             return (.waveform(peaks: host.player.waveform, played: host.player.position, background: nil,
-                              content: colour("ColorProgress") ?? 0xFFFF_970A, rest: colour("Color") ?? 0x8080_8080,
+                              content: flow.visibleColor(slider.progressColor) ?? 0xFFFF_970A,
+                              rest: flow.visibleColor(slider.color) ?? 0x8080_8080,
                               thumb: flow.image(slider.thumb)), target(name, .seek))
         case .slider(let slider):
             let fraction = slider.isSeek ? host.player.position

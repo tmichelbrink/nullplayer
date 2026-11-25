@@ -50,7 +50,7 @@ extension AIMPSkinControl {
                 if let source = link.source, let provider = index.providers[source], provider.kind == .concatenator {
                     // No `Expression`: its first input's text.
                     display = .concatenation(inputs: provider.bindings.links,
-                                             template: expanded(provider.node.properties["Expression"]?.reference ?? "%TextValue1"))
+                                             template: expanded(provider.template ?? "%TextValue1"))
                 } else {
                     // A template over the bound number (`%time(MS;:;)`).
                     display = .number(link, template: (template ?? link.textFormat).map(expanded))

@@ -104,7 +104,7 @@ extension AIMPSkinDataflow {
         guard depth < 8, let provider = skin.index.providers[name] else { return "" }
         let key = Memo.Key(depth: depth, name: name)
         if let known = memo.texts[key] { return known }
-        let expression = state.script[name].expression ?? provider.node.properties["Expression"]?.reference ?? "%TextValue1"
+        let expression = state.script[name].expression ?? provider.template ?? "%TextValue1"
         let text = concatenation(provider.bindings.links, template: AIMPSkinLanguage.expanded(expression, strings: skin.strings), depth: depth)
         memo.texts[key] = text
         return text

@@ -112,14 +112,34 @@ struct AIMPSkinIndex: Sendable {
         case item(AIMPSkinItem)
         case control(AIMPSkinControl)
 
-        var node: AIMPNode {
+        var name: String? {
             switch self {
-            case .item(let item): return item.node
-            case .control(let control): return control.node
+            case .item(let item): return item.name
+            case .control(let control): return control.name
             }
         }
 
-        var name: String? { node["name"] }
+        /// Its `class`, `Tag` and `PlaceInfo` margins as the skin wrote them, which a script reads.
+        var className: String? {
+            switch self {
+            case .item(let item): return item.className
+            case .control(let control): return control.className
+            }
+        }
+
+        var tag: String? {
+            switch self {
+            case .item(let item): return item.tag
+            case .control(let control): return control.tag
+            }
+        }
+
+        var writtenMargins: [Double] {
+            switch self {
+            case .item(let item): return item.writtenMargins
+            case .control(let control): return control.writtenMargins
+            }
+        }
 
         /// Its `Visibility` bindings.
         var gates: [AIMPSkinLink] {
@@ -140,6 +160,9 @@ struct AIMPSkinIndex: Sendable {
         let script: String?
         /// A commutator's `Expression` over `value1…valueN`.
         let expression: String?
+        /// A concatenator's `Expression`, its text's template, read as a reference (a resource's
+        /// `link`, or the value) as other templates are.
+        let template: String?
         /// A timer's `Interval`, ms.
         let interval: Double?
         /// A counter's `Module` (its positions) and `PositionDefault`.
@@ -153,6 +176,7 @@ struct AIMPSkinIndex: Sendable {
             bindings = AIMPSkinBindings(node, names: names)
             script = props["Script"]?["value"]
             expression = props["Expression"]?["value"]
+            template = props["Expression"]?.reference
             interval = Double(props["Interval"]?["value"] ?? "")
             module = props["Module"]?["value"].flatMap { Int($0) }
             positionDefault = props["PositionDefault"]?["value"].flatMap { Int($0) } ?? 0
@@ -292,13 +316,12 @@ struct AIMPSkinIndex: Sendable {
             held(element, in: name ?? parent)
         }
         func held(_ element: Element, in holder: String?) {
-            for child in element.node.children {
-                switch (child.tag, element) {
-                case ("items", .item(let item)): for each in item.items { walk(.item(each), in: holder) }
-                case ("controls", .item(let item)): for each in item.controls { walk(.control(each), in: holder) }
-                case ("controls", .control(let control)): for each in control.controls { walk(.control(each), in: holder) }
-                default: break
-                }
+            switch element {
+            case .item(let item):
+                let items = item.items.map(Element.item), controls = item.controls.map(Element.control)
+                for each in item.itemsFirst ? items + controls : controls + items { walk(each, in: holder) }
+            case .control(let control):
+                for each in control.controls { walk(.control(each), in: holder) }
             }
         }
         for root in [forms[""]] + companions.map({ forms[$0.name] }) {

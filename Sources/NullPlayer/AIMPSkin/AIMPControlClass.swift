@@ -77,6 +77,9 @@ enum AIMPControlClass: Sendable {
         let isVertical: Bool
         /// `SkinThumb`.
         let thumb: String?
+        /// A seek bar's `ColorProgress` and `Color`, which it draws a track's waveform in (M5).
+        let progressColor: AIMPSkinColor?
+        let color: AIMPSkinColor?
     }
 
     /// `Digits` and `IndentBetweenDigits` of a digit strip.
@@ -128,7 +131,8 @@ enum AIMPControlClass: Sendable {
         func key(_ role: Key.Role) -> AIMPControlClass { .key(keyed(role)) }
         func slider(seek: Bool) -> AIMPControlClass {
             .slider(Slider(isSeek: seek, isVertical: name == "SliderVertical" || props["Orientation"]?.reference == "oVertical",
-                           thumb: props["SkinThumb"]?.reference))
+                           thumb: props["SkinThumb"]?.reference,
+                           progressColor: AIMPSkinColor(props["ColorProgress"]), color: AIMPSkinColor(props["Color"])))
         }
         // Held to ±4,096 px, as the spectrum's indent is: past a screen's width no gap means more, and
         // the painter's column arithmetic must stay inside `Int`.

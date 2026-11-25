@@ -108,7 +108,7 @@ extension AIMPSkinScript.Run {
         let bindings: AIMPSkinBindings?
         switch owner.element {
         case .control(let control): bindings = control.bindings
-        case .item(let item): bindings = AIMPSkinBindings(item.node, names: skin.index.names)
+        case .item(let item): bindings = item.bindings
         case nil: bindings = owner.provider?.bindings
         }
         bindingSets[key] = AIMPSkinScript.BindingSet((bindings?.links ?? []).filter { $0.target != nil })

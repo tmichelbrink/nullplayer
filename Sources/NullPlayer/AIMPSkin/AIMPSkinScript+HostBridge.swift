@@ -248,7 +248,7 @@ extension AIMPSkinScript.Run {
             } else {
                 engine.state.script[name].counter = position
             }
-        case (_, .state) where object.element?.node["class"] == "StateDisplay":
+        case (_, .state) where object.element?.className == "StateDisplay":
             engine.state.animation[name].frame = AIMPSkinScript.integer(value.number)
         case (_, .visible):
             // Taking the control over afresh, the script's value holds until its `Visibility`
@@ -348,8 +348,7 @@ extension AIMPSkinScript.Run {
         case (_, .margin(let side)):
             guard let side else { return .number(0) }
             if let moved = engine.state.script[name].margins[side] { return .number(moved) }
-            let margins = object.element?.node.properties["PlaceInfo"]?["margins"]?
-                .split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) } ?? []
+            let margins = object.element?.writtenMargins ?? []
             return .number(margins.indices.contains(side) ? margins[side] : 0)
         case (_, .parent):
             return flow.parent(of: name).map { .object(HostObject($0, in: skin)) } ?? .none
@@ -380,8 +379,8 @@ extension AIMPSkinScript.Run {
             guard case .control(let control)? = object.element else { return .string("") }
             return .string(flow.displayText(control))
         // A control's `Tag`, as the skin wrote it (Red Bias 2.0's layout switches: 0, 1, 2).
-        case (_, .tag) where object.element?.node.properties["Tag"]?["value"] != nil:
-            let tag = object.element?.node.properties["Tag"]?["value"] ?? ""
+        case (_, .tag) where object.element?.tag != nil:
+            let tag = object.element?.tag ?? ""
             return Double(tag).map { .number($0) } ?? .string(tag)
         default:
             return .number(flow.value(name, path))

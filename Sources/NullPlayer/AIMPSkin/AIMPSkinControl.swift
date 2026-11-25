@@ -22,6 +22,11 @@ final class AIMPSkinControl: AIMPSkinElement, Sendable {
     let id: ID
     let node: AIMPNode
     let name: String?
+    /// Its `class` (`StateDisplay`, `Button`), and its `Tag` and `PlaceInfo` margins as the skin
+    /// wrote them, which a script reads (`AIMPSkinIndex.Element`).
+    let className: String?
+    let tag: String?
+    let writtenMargins: [Double]
     /// The name a script restyles it by: its name, else its `link` (`<control link="Playlist">`).
     let styleKey: String?
     let kind: AIMPControlClass
@@ -57,6 +62,9 @@ final class AIMPSkinControl: AIMPSkinElement, Sendable {
         self.id = id
         self.node = node
         name = node["name"]
+        className = node["class"]
+        tag = props["Tag"]?["value"]
+        writtenMargins = AIMPNode.writtenNumbers(props["PlaceInfo"]?["margins"])
         styleKey = node["name"].flatMap { $0.isEmpty ? nil : $0 } ?? node["link"]
         bindings = AIMPSkinBindings(node, names: index.names)
         kind = AIMPControlClass(node, bindings: bindings, resources: index.resources, dialect: index.dialect)

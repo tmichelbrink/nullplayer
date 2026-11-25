@@ -20,6 +20,12 @@ protocol AIMPSkinElement: AnyObject {
 final class AIMPSkinItem: AIMPSkinElement, Sendable {
     let node: AIMPNode
     let name: String?
+    let className: String?
+    /// `Tag` and the `PlaceInfo` margins as the skin wrote them, which a script reads
+    /// (`AIMPSkinIndex.Element`).
+    let tag: String?
+    let writtenMargins: [Double]
+    let bindings: AIMPSkinBindings
     let gates: [AIMPSkinLink]
     let savedShown: Bool
     /// An `item`, not the form's root.
@@ -38,13 +44,20 @@ final class AIMPSkinItem: AIMPSkinElement, Sendable {
     let declaresColor: Bool
     let items: [AIMPSkinItem]
     let controls: [AIMPSkinControl]
+    /// Whether the skin wrote its items before its controls: the first of a name is found in that
+    /// order (`AIMPSkinIndex.byName`).
+    let itemsFirst: Bool
 
     init(_ node: AIMPNode, compile: (AIMPNode) -> AIMPSkinControl, names: AIMPSkinIndex.Names) {
         let props = node.properties
         self.node = node
         name = node["name"]
+        className = node["class"]
+        tag = props["Tag"]?["value"]
+        writtenMargins = AIMPNode.writtenNumbers(props["PlaceInfo"]?["margins"])
         layout = Layout(node)
-        gates = AIMPSkinBindings(node, names: names).all("Visibility")
+        bindings = AIMPSkinBindings(node, names: names)
+        gates = bindings.all("Visibility")
         savedShown = layout.savedShown
         isItem = node.tag == "item"
         isTabbedGroup = layout.isTabbedGroup
@@ -55,6 +68,8 @@ final class AIMPSkinItem: AIMPSkinElement, Sendable {
         declaresColor = !(props["Color"]?.reference ?? "").isEmpty
         items = (node.child("items")?.children("item") ?? []).map { AIMPSkinItem($0, compile: compile, names: names) }
         controls = (node.child("controls")?.children("control") ?? []).map(compile)
+        let order = node.children.map(\.tag)
+        itemsFirst = (order.firstIndex(of: "items") ?? .max) < (order.firstIndex(of: "controls") ?? .max)
     }
 
     /// How an item docks in its parent (`reference/layout.md` § Items), as `AIMPSkinAlignment` reads it.
