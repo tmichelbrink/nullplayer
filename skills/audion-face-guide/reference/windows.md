@@ -7,7 +7,7 @@ Read `../SKILL.md` first; its isolation rule binds every section here. The polic
 
 | File | Owns |
 |---|---|
-| `AudionFaceMainWindowController.swift` | the `SingleCanvasMainWindow` controller on a shared `SkinnedBorderlessWindow` (borderless, clear, key/main-capable; `App/Skinning/`): loads the selected face off the main thread, swaps between the face and the unskinned view, sizes the window to `base` × UI scale keeping the top-left, holds `surfaceStyle` |
+| `AudionFaceMainWindowController.swift` | the `SkinFileMainWindow` controller on a shared `SkinnedBorderlessWindow` (borderless, clear, key/main-capable; `App/Skinning/`): loads the selected face off the main thread, swaps between the face and the unskinned view, sizes the window to `base` × UI scale keeping the top-left, holds `surfaceStyle` |
 | `AudionFaceMainView.swift` | Draws `AudionFaceScene`s through an `AudionFaceCanvas` at `ceil(uiScale × backing)`, marking only the changed rects dirty and painting them in `draw(_:)`; the frame clock; hit-tests; drags; the two slider popups and the info menu; keys; right-click menu; accessibility |
 | `AudionFaceSliderWindow.swift` | FaceKit's `AudionSliderWindow`, ported (Panic's header): a borderless popup holding one `NSSlider`, closed when it resigns key |
 | `AudionFaceAudioEngineHost.swift` | `AudioEngine` → `AudionFaceHostState`, and an `AudionFaceCommand` (a button, a volume, a seek) → its NullPlayer action |
