@@ -153,7 +153,7 @@ extension AIMPSkinControl {
             }
             if let handler = props["OnClick"]?.reference { return .handler(handler) }
             if let down = props["OnMouseDown"]?.reference { return .hold(down: down, up: props["OnMouseUp"]?.reference) }
-            return props["PopupMenu"]?.reference.map { .menu(index.customMenus[$0] != nil ? .custom($0) : AIMPSkinPopup($0)) }
+            return props["PopupMenu"]?.reference.map { .menu(index.menuNames.contains($0) ? .custom($0) : AIMPSkinPopup($0)) }
         }
 
         /// A link's fixed `Expression` for a player value, AIMP's 0–100 as 0–1: nil for none or one

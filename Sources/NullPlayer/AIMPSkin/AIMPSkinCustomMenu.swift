@@ -29,9 +29,8 @@ struct AIMPSkinCustomMenu: Sendable {
 
     let items: [Item]
 
-    /// The menu provider `name`; nil when the skin declares none of that name.
-    init?(_ name: String, index: AIMPSkinIndex) {
-        guard let node = index.customMenus[name] else { return nil }
+    /// The menu a `CustomContextMenu` provider builds (`AIMPSkinIndex.customMenus`).
+    init(_ node: AIMPNode, index: AIMPSkinIndex) {
         items = Self.items(node, index: index)
     }
 

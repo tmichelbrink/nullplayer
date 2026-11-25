@@ -45,8 +45,10 @@ struct AIMPSkinIndex: Sendable {
     /// `Expression`) and nothing reads: commands, run on the press alone (Sony Media Tower Reborn's
     /// `S0` and `S1` set its source to the player or the tape; `bREW` shows it rewinding).
     var commandCounters: Set<String> = []
-    /// The menus the skin builds itself (`CustomContextMenu` providers), by name (`AIMPSkinCustomMenu`).
-    var customMenus: [String: AIMPNode] = [:]
+    /// The menus the skin builds itself (`CustomContextMenu` providers), by name, read once the rest
+    /// of the index is (`AIMPSkinCustomMenu`); their names are known before any key that opens one.
+    var menuNames: Set<String> = []
+    private(set) var customMenus: [String: AIMPSkinCustomMenu] = [:]
     /// What links are read against: the expressions, and the groups, items and providers the
     /// skin names. Read before anything else, so every link resolves as it is read (`AIMPSkinSource`).
     private(set) var names = Names()
@@ -286,9 +288,8 @@ struct AIMPSkinIndex: Sendable {
             if node["SourcePin"] == "Position", fires, node["Expression"] == nil { fired.insert(source) } else { readers.insert(source) }
         }
         commandCounters = fired.subtracting(readers)
-        for node in providerNodes where node["class"] == "CustomContextMenu" {
-            if let name = node["name"] { customMenus[name] = node }
-        }
+        let menuNodes = providerNodes.filter { $0["class"] == "CustomContextMenu" && $0["name"] != nil }
+        menuNames = Set(menuNodes.compactMap { $0["name"] })
 
         // The forms, read with the tables above, every control numbered.
         let tables = self
@@ -334,6 +335,9 @@ struct AIMPSkinIndex: Sendable {
                 (byName[page]?.gates ?? []).filter { !($0.source == mirrors[page] && $0.pin == "Visibility") }
             }
             if gates.contains(where: { !$0.isEmpty }) { pageGates[group] = gates }
+        }
+        for node in menuNodes {
+            if let name = node["name"] { customMenus[name] = AIMPSkinCustomMenu(node, index: self) }
         }
     }
 

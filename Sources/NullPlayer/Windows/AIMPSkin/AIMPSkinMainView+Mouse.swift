@@ -360,7 +360,7 @@ extension AIMPSkinMainView {
         // A menu the skin builds (AIMP Modern's menu bar), else the one it names (`pmEqualizer`: the
         // presets), else the player's.
         case .menu(.custom(let name)?):
-            guard let skin = runtime?.skin, let menu = AIMPSkinCustomMenu(name, index: skin.index) else { return }
+            guard let skin = runtime?.skin, let menu = skin.index.customMenus[name] else { return }
             self.menu(menu.items, for: target, at: point).popUp(positioning: nil, at: point, in: self)
         case .menu(.unavailable?): break
         case .menu(let popup): (popup.flatMap { popupMenu?($0, nil, window) } ?? contextMenu()).popUp(positioning: nil, at: point, in: self)
