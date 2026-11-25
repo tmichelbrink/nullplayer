@@ -14,11 +14,6 @@ struct AIMPSkinLink: Sendable {
     /// What a `FileInfo` link shows of the track (`%Title`), or a hint's label.
     let textFormat: String?
 
-    init(_ node: AIMPNode, names: AIMPSkinIndex.Names) {
-        self.init(source: node["Source"], pin: node["SourcePin"], target: node["TargetPin"], expression: node["Expression"],
-                  textFormat: node["TextFormat"], names: names)
-    }
-
     init(source: String?, pin: String?, target: String?, expression: String? = nil, textFormat: String? = nil,
          names: AIMPSkinIndex.Names) {
         (self.source, self.pin, self.target, self.expression, self.textFormat) = (source, pin, target, expression, textFormat)
@@ -30,7 +25,7 @@ struct AIMPSkinLink: Sendable {
     func shaped(_ value: Double) -> Double { shape?.evaluate(value: value) ?? value }
 }
 
-/// A node's `Bindings`: its links in document order, and by the pin they feed.
+/// An element's `Bindings`: its links in document order, and by the pin they feed.
 struct AIMPSkinBindings: Sendable {
     /// Whether the node has a `Bindings` property at all, even an empty one (a label with none is
     /// as wide as its text: `AIMPSkinLayout.autoSized`).
@@ -38,20 +33,10 @@ struct AIMPSkinBindings: Sendable {
     let links: [AIMPSkinLink]
     private let byTarget: [String: [AIMPSkinLink]]
 
-    init(_ node: AIMPNode, names: AIMPSkinIndex.Names) {
-        let property = node.properties["Bindings"]
-        declared = property != nil
-        links = (property?.children("link") ?? []).flatMap { link -> [AIMPSkinLink] in
-            // A link that names only an action (`<link Source="acPlayerPlayPause"/>`, AIMP 3 skins'
-            // AyonPlayer) binds the control to it: its Action, and its State for a key that lights.
-            guard let source = link["Source"], link["SourcePin"] == nil, link["TargetPin"] == nil, AIMPAction(source) != nil else {
-                return [AIMPSkinLink(link, names: names)]
-            }
-            // Its other attributes come along (`Expression="not Value"` shapes the lamp).
-            return ["Action", "State"].map { pin in
-                AIMPSkinLink(source: source, pin: pin, target: pin, expression: link["Expression"], textFormat: link["TextFormat"], names: names)
-            }
-        }
+    /// `declared`: whether the skin gave a `Bindings` property at all.
+    init(links: [AIMPSkinLink], declared: Bool = true) {
+        self.declared = declared
+        self.links = links
         byTarget = Dictionary(grouping: links.filter { $0.target != nil }, by: { $0.target! })
     }
 

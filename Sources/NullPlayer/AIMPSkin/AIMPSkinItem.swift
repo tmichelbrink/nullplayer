@@ -18,7 +18,6 @@ protocol AIMPSkinElement: AnyObject {
 /// (`AIMPSkinIndex`): how it docks in its parent, its picture and colour, and the items and controls
 /// it holds as the skin wrote them (a script may move some elsewhere: `AIMPSkinLayout.heldItems`).
 final class AIMPSkinItem: AIMPSkinElement, Sendable {
-    let node: AIMPNode
     let name: String?
     let className: String?
     /// `Tag` and the `PlaceInfo` margins as the skin wrote them, which a script reads
@@ -48,28 +47,30 @@ final class AIMPSkinItem: AIMPSkinElement, Sendable {
     /// order (`AIMPSkinIndex.byName`).
     let itemsFirst: Bool
 
-    init(_ node: AIMPNode, compile: (AIMPNode) -> AIMPSkinControl, names: AIMPSkinIndex.Names) {
-        let props = node.properties
-        self.node = node
-        name = node["name"]
-        className = node["class"]
-        tag = props["Tag"]?["value"]
-        writtenMargins = AIMPNode.writtenNumbers(props["PlaceInfo"]?["margins"])
-        layout = Layout(node)
-        bindings = AIMPSkinBindings(node, names: names)
+    /// `isItem`: an `item`, not a form's root; `className` says whether it is a dock site, tabbed
+    /// group or scroll view.
+    init(name: String?, className: String?, isItem: Bool = true, layout: Layout, bindings: AIMPSkinBindings,
+         texture: String? = nil, color: AIMPSkinColor? = nil, declaresColor: Bool = false,
+         items: [AIMPSkinItem] = [], controls: [AIMPSkinControl] = [], itemsFirst: Bool = true,
+         tag: String? = nil, writtenMargins: [Double] = []) {
+        self.name = name
+        self.className = className
+        self.tag = tag
+        self.writtenMargins = writtenMargins
+        self.layout = layout
+        self.bindings = bindings
         gates = bindings.all("Visibility")
         savedShown = layout.savedShown
-        isItem = node.tag == "item"
+        self.isItem = isItem
         isTabbedGroup = layout.isTabbedGroup
-        isDockSite = node["class"] == "LayoutDockSite"
-        isScrollView = node["class"] == "LayoutScrollView"
-        texture = props["Texture"]?.reference
-        color = AIMPSkinColor(props["Color"])
-        declaresColor = !(props["Color"]?.reference ?? "").isEmpty
-        items = (node.child("items")?.children("item") ?? []).map { AIMPSkinItem($0, compile: compile, names: names) }
-        controls = (node.child("controls")?.children("control") ?? []).map(compile)
-        let order = node.children.map(\.tag)
-        itemsFirst = (order.firstIndex(of: "items") ?? .max) < (order.firstIndex(of: "controls") ?? .max)
+        isDockSite = className == "LayoutDockSite"
+        isScrollView = className == "LayoutScrollView"
+        self.texture = texture
+        self.color = color
+        self.declaresColor = declaresColor
+        self.items = items
+        self.controls = controls
+        self.itemsFirst = itemsFirst
     }
 
     /// How an item docks in its parent (`reference/layout.md` § Items), as `AIMPSkinAlignment` reads it.
@@ -99,24 +100,6 @@ final class AIMPSkinItem: AIMPSkinElement, Sendable {
         /// `AllowResizeByHeight` False: the user cannot make it taller or shorter (Arctur's top bar).
         let fixedHeight: Bool
 
-        init(_ node: AIMPNode) {
-            let props = node.properties
-            isTabbedGroup = node["class"] == "LayoutTabbedGroup"
-            dock = props["Alignment"].map { AIMPSkinDock($0.reference) }
-            level = Int(props["AlignmentLevel"]?.reference ?? "") ?? 0
-            margins = AIMPSkinImage.Margins(props["AlignmentMargins"]?.reference)
-            size = Self.size(props["Size"]?.reference)
-            sizeMinimal = Self.size(props["SizeMinimal"]?.reference)
-            sizeMaximal = Self.size(props["SizeMaximal"]?.reference)
-            autoHide = props["AutoHide"]?.reference == "True"
-            autoHideThreshold = Double(props["AutoHideParentSizeThreshold"]?.reference ?? "").flatMap { $0 > 0 ? $0 : nil }
-            autoSize = props["AutoSize"]?.reference != "False"
-            isRow = props["LayoutDirection"]?.reference != "ldVertical"
-            fixedWidth = props["AllowResizeByWidth"]?.reference == "False"
-            fixedHeight = props["AllowResizeByHeight"]?.reference == "False"
-            savedShown = (props["Visible"]?.reference != "False" && props["InitialVisible"]?.reference != "False") || autoHide
-        }
-
         /// Whether its size follows what it holds; measuring the `least` a form takes, a client's
         /// still counts, its size being its parent's (Unsquareable's six cover sizes, one shown at a
         /// time, say `AutoSize` False).
@@ -142,12 +125,6 @@ final class AIMPSkinItem: AIMPSkinElement, Sendable {
             guard let size else { return nil }
             let extent = vertical ? size.height : size.width
             return extent > 0 ? extent : nil
-        }
-
-        /// "w,h": two numbers, else nil.
-        private static func size(_ text: String?) -> CGSize? {
-            let numbers = AIMPNode.numbers(text)
-            return numbers.count == 2 ? CGSize(width: numbers[0], height: numbers[1]) : nil
         }
     }
 }
