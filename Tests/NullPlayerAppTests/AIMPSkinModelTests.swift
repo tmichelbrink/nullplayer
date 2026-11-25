@@ -548,9 +548,9 @@ final class AIMPSkinModelTests: XCTestCase {
         let sites = AIMPSkinDockSites.sites(in: main) { ["PlaylistFrame": playlist, "MusicLibraryFrame": library][$0] }
 
         XCTAssertEqual(Set(sites.keys), ["PlaylistSite", "LibrarySite"], "a site whose form the skin lacks holds nothing")
-        XCTAssertEqual(sites["LibrarySite"]?.form, "MusicLibraryFrame")
-        XCTAssertEqual(sites["PlaylistSite"]?.initiallyDocked, true)
-        XCTAssertEqual(sites["LibrarySite"]?.initiallyDocked, false, "InitialDocked False starts it as a window")
+        XCTAssertEqual(sites["LibrarySite"]?.site.form, "MusicLibraryFrame")
+        XCTAssertEqual(sites["PlaylistSite"]?.site.initiallyDocked, true)
+        XCTAssertEqual(sites["LibrarySite"]?.site.initiallyDocked, false, "InitialDocked False starts it as a window")
         let holder = sites["PlaylistSite"]?.holder
         XCTAssertEqual(holder?["name"], "PlaylistFrame", "the form's keys show and hide it by its name")
         XCTAssertEqual(holder?.properties["AlignmentMargins"]?["value"], "-6,-6,-6,-6", "ContentExtends lays it out past the site")

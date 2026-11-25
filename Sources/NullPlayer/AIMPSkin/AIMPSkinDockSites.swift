@@ -15,9 +15,14 @@ enum AIMPSkinDockSites {
     struct Site: Sendable {
         /// The form the site holds.
         let form: String
-        /// The item the painter lays out in the site while the form is docked.
-        let holder: AIMPNode
         let initiallyDocked: Bool
+    }
+
+    /// A site as the main form's XML gives it, with the markup of the item the painter lays the
+    /// form out in while it is docked (`AIMPSkinIndex.holders`).
+    struct Marked: Sendable {
+        let site: Site
+        let holder: AIMPNode
     }
 
     /// The form a site names, and whether it starts docked; nil for an item that is no site.
@@ -30,8 +35,8 @@ enum AIMPSkinDockSites {
 
     /// The main form's sites by name, for the forms `reading` finds. A form takes the first site
     /// that names it.
-    static func sites(in main: AIMPNode, reading: (String) -> AIMPNode?) -> [String: Site] {
-        var sites: [String: Site] = [:]
+    static func sites(in main: AIMPNode, reading: (String) -> AIMPNode?) -> [String: Marked] {
+        var sites: [String: Marked] = [:]
         var placed: Set<String> = []
         for item in main.descendants() {
             // A name an earlier site took keeps that site; checked before `reading` registers the form.
@@ -41,8 +46,8 @@ enum AIMPSkinDockSites {
                   named.name.caseInsensitiveCompare("AIMPMainForm") != .orderedSame,
                   let form = reading(named.name) else { continue }
             placed.insert(named.name)
-            sites[site] = Site(form: named.name, holder: holder(named.name, of: form, extends: AIMPNode.numbers(item.properties["ContentExtends"]?["value"])),
-                               initiallyDocked: named.docked)
+            sites[site] = Marked(site: Site(form: named.name, initiallyDocked: named.docked),
+                                 holder: holder(named.name, of: form, extends: AIMPNode.numbers(item.properties["ContentExtends"]?["value"])))
         }
         return sites
     }
