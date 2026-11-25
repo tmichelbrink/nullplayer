@@ -1,7 +1,7 @@
 import Foundation
 
 /// Where a skin family keeps, per skin, the windows of its own the user arranged: each window's
-/// top-left, and which ones were open when the session ended.
+/// top-left, which ones were open when the session ended, and whether each was shown or hidden.
 ///
 /// A skin's own windows have no other home: the player's position is the main-window restore path's,
 /// and NullPlayer's windows are `AppStateManager`'s. Restored on the rule `.wal` follows: **what the
@@ -11,6 +11,8 @@ struct SkinWindowStore {
     struct Keys {
         let origins: String
         let openWindows: String
+        /// Where each window's shown-or-hidden is recorded, for a family that records it; nil records none.
+        var visibility: String? = nil
 
         /// `.wmz`'s, as they always were.
         static let wmp = Keys(origins: "wmpViewOrigins", openWindows: "wmpOpenViews")
@@ -44,6 +46,24 @@ struct SkinWindowStore {
         if windows.isEmpty { values.removeValue(forKey: Self.skinKey(skin)) }
         else { values[Self.skinKey(skin)] = windows }
         defaults.set(values, forKey: keys.openWindows)
+    }
+
+    /// Whether each window was last shown or hidden, keyed by its lowercased name. A window with no
+    /// entry has never been recorded, which is not the same as closed: its skin's own default applies.
+    /// Always empty for a family that records none (`Keys.visibility` nil).
+    func visibility(skin: String) -> [String: Bool] {
+        guard let key = keys.visibility else { return [:] }
+        return defaults.dictionary(forKey: key)?[Self.skinKey(skin)] as? [String: Bool] ?? [:]
+    }
+
+    /// Does nothing for a family that records no visibility.
+    func setVisibility(_ visible: Bool, window: String, skin: String) {
+        guard let key = keys.visibility else { return }
+        var values = defaults.dictionary(forKey: key) ?? [:]
+        var skinValues = values[Self.skinKey(skin)] as? [String: Bool] ?? [:]
+        skinValues[window.lowercased()] = visible
+        values[Self.skinKey(skin)] = skinValues
+        defaults.set(values, forKey: key)
     }
 
     /// A skin's identity in every per-skin key, length-prefixed so two names that differ only by case

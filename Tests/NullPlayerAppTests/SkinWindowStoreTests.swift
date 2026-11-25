@@ -2,7 +2,7 @@ import CoreGraphics
 import XCTest
 @testable import NullPlayer
 
-/// `SkinWindowStore`, the per-skin window origins and open windows a skin family keeps.
+/// `SkinWindowStore`, the per-skin window origins, open windows and visibility a skin family keeps.
 /// `.wmz` must find its geometry under exactly the defaults keys and values it always wrote, or every
 /// user's arranged panels reset on upgrade.
 final class SkinWindowStoreTests: XCTestCase {
@@ -33,6 +33,7 @@ final class SkinWindowStoreTests: XCTestCase {
                        ["6:skin a": ["plView", "eqView"]])
         XCTAssertEqual(defaults.dictionary(forKey: "wmpViewSizes") as? [String: [Double]],
                        ["6:skin a|plview": [320, 180]])
+        XCTAssertNil(SkinWindowStore.Keys.wmp.visibility, "WMP records no visibility")
         XCTAssertEqual(SkinWindowStore.skinKey("Skin A"), "6:skin a")
 
         // Values written by an older build read back unchanged.
@@ -46,7 +47,7 @@ final class SkinWindowStoreTests: XCTestCase {
     }
 
     func testOriginsAndOpenWindowsArePerSkinAndRefuseNonFiniteValues() {
-        let store = SkinWindowStore(defaults: defaults, keys: .init(origins: "testOrigins", openWindows: "testOpen"))
+        let store = SkinWindowStore(defaults: defaults, keys: Self.testKeys)
         store.setOrigin(CGPoint(x: 1, y: 2), skin: "A", window: "w")
         store.setOrigin(CGPoint(x: CGFloat.nan, y: 2), skin: "B", window: "w")
         XCTAssertEqual(store.origin(skin: "a", window: "W"), CGPoint(x: 1, y: 2))
@@ -57,4 +58,19 @@ final class SkinWindowStoreTests: XCTestCase {
         XCTAssertEqual(Set(defaults.dictionaryRepresentation().keys.filter { $0.hasPrefix("test") }),
                        ["testOrigins", "testOpen"])
     }
+
+    /// Hidden and never recorded are different answers: only the first overrides a skin's default.
+    func testVisibilityTellsClosedFromNeverRecorded() {
+        let store = SkinWindowStore(defaults: defaults, keys: Self.testKeys)
+        XCTAssertEqual(store.visibility(skin: "A"), [:])
+        store.setVisibility(false, window: "Speakers", skin: "A")
+        store.setVisibility(true, window: "Amp", skin: "A")
+        store.setVisibility(true, window: "Speakers", skin: "B")
+        XCTAssertEqual(store.visibility(skin: "A"), ["speakers": false, "amp": true])
+        XCTAssertEqual(store.visibility(skin: "B"), ["speakers": true])
+        XCTAssertNil(store.visibility(skin: "A")["remote"])
+    }
+
+    private static let testKeys = SkinWindowStore.Keys(origins: "testOrigins", openWindows: "testOpen",
+                                                       visibility: "testVisibility")
 }

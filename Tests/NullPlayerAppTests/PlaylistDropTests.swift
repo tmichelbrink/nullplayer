@@ -41,8 +41,9 @@ final class PlaylistDropTests: XCTestCase {
         XCTAssertEqual(tracks.map(\.title), ["One", "Two", "single"])
     }
 
-    /// Cue sheets alone are taken and delivered at once, and not at all when they name no tracks.
-    func testCueSheetsAloneAreDeliveredAtOnceAndOnlyWithTracks() throws {
+    /// Cue sheets alone are taken, read off the main thread and delivered on it after the drop
+    /// returns, and not at all when they name no tracks.
+    func testCueSheetsAloneAreDeliveredLaterAndOnlyWithTracks() throws {
         try Data().write(to: folder.appendingPathComponent("album.flac"))
         let cue = folder.appendingPathComponent("album.cue")
         try "FILE \"album.flac\" WAVE\nTRACK 01 AUDIO\n    TITLE \"One\"\n    INDEX 01 00:00:00\n"
@@ -51,8 +52,16 @@ final class PlaylistDropTests: XCTestCase {
         try "".write(to: empty, atomically: true, encoding: .utf8)
         var delivered: [[Track]] = []
         XCTAssertTrue(PlaylistDrop.gather([empty]) { delivered.append($0) })
-        XCTAssertTrue(delivered.isEmpty)
-        XCTAssertTrue(PlaylistDrop.gather([cue]) { delivered.append($0) })
+        let one = expectation(description: "the sheet's track")
+        XCTAssertTrue(PlaylistDrop.gather([cue]) {
+            XCTAssertTrue(Thread.isMainThread)
+            delivered.append($0)
+            one.fulfill()
+        })
+        XCTAssertTrue(delivered.isEmpty, "nothing is delivered before the drop returns")
+        wait(for: [one], timeout: 5)
+        // The empty sheet's read has had as long; it delivers nothing.
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
         XCTAssertEqual(delivered.map { $0.map(\.title) }, [["One"]])
     }
 

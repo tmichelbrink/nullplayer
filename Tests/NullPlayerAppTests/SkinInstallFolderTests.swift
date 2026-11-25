@@ -44,4 +44,41 @@ final class SkinInstallFolderTests: XCTestCase {
         try await folder.remove(destination)
         XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
     }
+
+    /// A batch commits all or none: the second copy failing leaves the first skin as it was, and no
+    /// staging copy behind; a batch that passes replaces both.
+    func testCommitAllPlacesNothingUntilEveryCopyPasses() async throws {
+        let folder = SkinInstallFolder("Skins", at: root.appendingPathComponent("Skins"))
+        let a = folder.url.appendingPathComponent("a.skin"), b = folder.url.appendingPathComponent("b.skin")
+        try folder.commit(try file("oldA", "old"), to: a)
+        struct Rejected: Error {}
+        do {
+            try await folder.commitAll([(try file("newA", "new"), a, ".skin"), (try file("newB", "bad"), b, ".skin")]) { copy in
+                if try String(contentsOf: copy, encoding: .utf8) == "bad" { throw Rejected() }
+            }
+            XCTFail("the batch should have thrown")
+        } catch is Rejected {}
+        XCTAssertEqual(try String(contentsOf: a, encoding: .utf8), "old")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.url.path), ["a.skin"])
+
+        try await folder.commitAll([(try file("newA2", "new"), a, ".skin"), (try file("newB2", "b"), b, ".skin")]) { _ in }
+        XCTAssertEqual(try String(contentsOf: a, encoding: .utf8), "new")
+        XCTAssertEqual(try String(contentsOf: b, encoding: .utf8), "b")
+    }
+
+    /// A placement that fails after another succeeded puts the skin the first replaced back, and
+    /// leaves nothing set aside.
+    func testCommitAllRestoresWhatItReplacedWhenALaterPlacementFails() async throws {
+        let folder = SkinInstallFolder("Skins", at: root.appendingPathComponent("Skins"))
+        let a = folder.url.appendingPathComponent("a.skin")
+        try folder.commit(try file("oldA", "old"), to: a)
+        // A destination in a folder that is not there: staging and validation pass, placing fails.
+        let unreachable = folder.url.appendingPathComponent("missing/b.skin")
+        do {
+            try await folder.commitAll([(try file("newA", "new"), a, ".skin"), (try file("newB", "b"), unreachable, ".skin")]) { _ in }
+            XCTFail("the batch should have thrown")
+        } catch {}
+        XCTAssertEqual(try String(contentsOf: a, encoding: .utf8), "old")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.url.path), ["a.skin"])
+    }
 }
