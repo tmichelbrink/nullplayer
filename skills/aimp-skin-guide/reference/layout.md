@@ -4,16 +4,21 @@ What `AIMPSkinRenderer` implements, and what it does not yet.
 
 ## How a frame is made
 
-1. **Read once, as the skin loads.** `AIMPSkinIndex` reads every form into typed `AIMPSkinItem`s
+1. **Read once, as the skin loads.** The model is plain typed values, built through their own
+   initialisers; a skin's XML forms and `Schema.xml` are one source of them, read in the
+   `AIMPSkinMarkup+…` files (controls, items and bindings, the index) and `AIMPSkinResources.swift`,
+   so a reader of another format builds the same model directly. The index reads every form into typed `AIMPSkinItem`s
    (docking: `AIMPSkinItem.Layout`, `AIMPSkinDock`) and `AIMPSkinControl`s (an identity, its class
    with what that class alone reads: `AIMPControlClass`; bindings by target pin, placement, picture,
    text, and what a press, right-click, hold or long click does: `AIMPSkinControl.Input`), and
    `Schema.xml`'s providers into `AIMPSkinIndex.Provider`; links are `AIMPSkinLink`s with their
    expressions compiled and what they read resolved (`AIMPSkinSource`, against
    `AIMPSkinIndex.Names`). Colours are read by `AIMPSkinColor` and fonts by `AIMPSkinFont`, one
-   reader each. Actions are `AIMPAction`. Nothing re-reads node properties per frame; a control a
-   script restyled (`AIMPSkinState.Object.properties`) is read again with the script's values
-   over its own, once per set of them. The windows' sizing and hover sources are worked out here
+   reader each; `Schema.xml`'s resources are `AIMPSkinResource`s, resolved through one resolver
+   (`AIMPSkin.resource`). Actions are `AIMPAction`. No XML is kept or read after loading, with one
+   exception: a control a script restyled (`AIMPSkinState.Object.properties`) is read again from
+   its markup (`AIMPSkinControl.Markup`) with the script's values over its own, once per set of
+   them; a control with no markup is never restyled. The windows' sizing and hover sources are worked out here
    too (`AIMPSkinIndex.sizing`, `hoverSources`).
 2. **Laid out.** `AIMPSkinLayout` places the shown items and, in each, the controls it shows, in
    drawing order, resolving how each looks (`AIMPSkinLayout.Look`: everything the painter needs,
