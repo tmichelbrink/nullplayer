@@ -218,11 +218,13 @@ extension AIMPSkinAIMP3.Shape {
         var list = AIMPSkinAIMP3.Spec(name: "Playlist", placement: Self.place(anchors: [1, 1, 1, 1], margins: [0, 0, bar, 0], size: .zero))
         list.type = .panel
         list.isPlaylist = true
+        list.confined = true
         list.playlist = resources
         guard bar > 0 else { return [list] }
         var scroll = AIMPSkinAIMP3.Spec(name: "PlaylistScroll",
                                         placement: Self.place(anchors: [0, 1, 1, 1], margins: [0, 0, 0, 0], size: CGSize(width: bar, height: 0)))
         scroll.type = .scrollBar
+        scroll.confined = true
         scroll.picture = "PlaylistScroll"
         scroll.links = [.init(source: "Playlist", pin: "Position", target: "Action")]
         if picture("PlaylistScroll_thumb") != nil { scroll.thumb = "PlaylistScroll_thumb" }

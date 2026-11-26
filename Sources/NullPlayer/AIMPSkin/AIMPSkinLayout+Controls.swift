@@ -11,9 +11,10 @@ extension AIMPSkinLayout {
         // A control wholly outside its item does not show: AIMP 4 and 5's controls are windows inside
         // their item's (RealPlayer 11's equalizer sliders sit below its 65-px panel until the window
         // grows). Not in every format (`AIMPSkinDialect.controlsOutliveItems`).
-        let outlives = skin.index.dialect.controlsOutliveItems
+        let dialectOutlives = skin.index.dialect.controlsOutliveItems
+        func outlives(_ control: AIMPSkinControl) -> Bool { dialectOutlives && !control.confined }
         func inside(_ control: AIMPSkinControl) -> Bool {
-            guard !outlives, let placement = control.placement else { return true }
+            guard !outlives(control), let placement = control.placement else { return true }
             return placement.rect(in: rect, moved: control.name.map { flow.state.script[$0].margins } ?? [:]).intersects(rect)
         }
         func isPlaylist(_ control: AIMPSkinControl) -> Bool { if case .playlist = control.kind { true } else { false } }
@@ -22,12 +23,13 @@ extension AIMPSkinLayout {
         for control in held where !isPlaylist(control) && !scrolls(control) && inside(control) {
             // Its window cuts a cover at the item's edge (W10's 136-px cover strip in its 50-px icon
             // bar lay over the big cover beside it).
+            // A confined control is cut there too (`AIMPSkinControl.confined`).
             let cut: Bool
-            if case .coverArt = control.kind { cut = !outlives } else { cut = false }
+            if case .coverArt = control.kind { cut = !outlives(control) } else { cut = control.confined }
             guard var made = place(control, in: rect, cut: cut ? rect : nil) else { continue }
             // Clicks too stop at the item's edge, a window's: Soot's play/pause, prev and next are
             // 400-px squares over their panels, each taking clicks only within its own.
-            if !outlives {
+            if !outlives(control) {
                 made.targets = made.targets.compactMap { target in
                     guard !rect.contains(target.rect) else { return target }
                     let shown = target.rect.intersection(rect)

@@ -71,7 +71,7 @@ extension AIMPSkinAIMP3 {
                                    picture: spec.picture, flipY: spec.flipped, text: text(spec, bindings: bindings),
                                    input: AIMPSkinControl.Input(className: spec.type.rawValue, handlers: .init(popupMenu: spec.popupMenu),
                                                                 bindings: bindings, index: index),
-                                   writtenMargins: spec.placement.margins.map(Double.init))
+                                   writtenMargins: spec.placement.margins.map(Double.init), confined: spec.confined)
         }
 
         private func kind(_ spec: Spec, bindings: AIMPSkinBindings) -> AIMPControlClass {

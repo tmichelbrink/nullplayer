@@ -58,12 +58,17 @@ final class AIMPSkinControl: AIMPSkinElement, Sendable {
     /// The skin's own markup for it, which a script's restyle is read again over (`restyled`); nil
     /// for a control read from a format scripts do not restyle.
     let markup: Markup?
+    /// Shown and clicked only within its item, though its format's controls belong to the window
+    /// (`AIMPSkinDialect.controlsOutliveItems`): AIMP's own tab strip and list, which an AIMP 3.0 or
+    /// AIMP 2 reader stands in for, live inside their site (Vega AIO's tab row, 2 px tall in its
+    /// compact window, shows no tab).
+    let confined: Bool
 
     init(id: ID, name: String?, className: String?, styleKey: String?, kind: AIMPControlClass, bindings: AIMPSkinBindings,
          savedShown: Bool = true, placement: AIMPPlacement.Info?, controls: [AIMPSkinControl] = [],
          picture: String?, maskFrame: Int? = nil, opacity: Double? = nil, blend: CGBlendMode? = nil,
          flipX: Bool = false, flipY: Bool = false, text: Text, input: Input,
-         tag: String? = nil, writtenMargins: [Double] = [], markup: Markup? = nil) {
+         tag: String? = nil, writtenMargins: [Double] = [], markup: Markup? = nil, confined: Bool = false) {
         self.id = id
         self.name = name
         self.className = className
@@ -85,6 +90,7 @@ final class AIMPSkinControl: AIMPSkinElement, Sendable {
         self.tag = tag
         self.writtenMargins = writtenMargins
         self.markup = markup
+        self.confined = confined
     }
 
     /// An animator's settings; nil for any other control.

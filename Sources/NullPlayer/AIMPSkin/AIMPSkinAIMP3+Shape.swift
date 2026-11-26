@@ -83,6 +83,9 @@ extension AIMPSkinAIMP3 {
         var playlist: [String: String]?
         /// A playlist's `link`.
         var isPlaylist = false
+        /// One of AIMP's own widgets the reader stands in for (the tab strip, the list and its scroll
+        /// bar): it lives inside its site (`AIMPSkinControl.confined`).
+        var confined = false
 
         init(name: String, placement: AIMPPlacement.Info) {
             self.name = name
@@ -252,6 +255,7 @@ extension AIMPSkinAIMP3 {
             spec.picture = "TabCtrlTab"
             spec.frame = tab.frameCount > 2 ? 2 : 0
             spec.caption = AIMPSkinList.playlistName
+            spec.confined = true
             spec.font = activeTab ?? "Tahoma,0,12,0"
             return [spec]
         }
