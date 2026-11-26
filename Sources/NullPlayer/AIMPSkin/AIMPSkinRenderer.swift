@@ -119,6 +119,8 @@ enum AIMPSkinRenderer {
     /// False and is the window's whole width (Bento's basic view); nil when the user may size it.
     static func fixedWidth(_ skin: AIMPSkin, form formName: String? = nil, state: AIMPSkinState) -> CGFloat? {
         guard let form = skin.index.form(formName) else { return nil }
+        // In a format whose windows keep their width, all of it (`AIMPSkinDialect.windowWidthFixed`).
+        if skin.index.dialect.windowWidthFixed { return skin.naturalSize(form: formName)?.width }
         return fixedStartWidth(form, docking: AIMPSkinLayout(flow: AIMPSkinDataflow(skin: skin, host: .init(), state: state)))
     }
 

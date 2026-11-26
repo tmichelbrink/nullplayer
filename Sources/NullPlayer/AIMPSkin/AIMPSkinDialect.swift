@@ -23,19 +23,24 @@ struct AIMPSkinDialect: Sendable, Equatable {
     /// (Vega AIO's equalizer, right of its panel, shows as the window widens); AIMP 4 and 5's are
     /// windows inside their item's.
     var controlsOutliveItems: Bool
+    /// A window keeps the width its skin gives it, sized by height alone. AIMP 2.61 does so: Hameleon
+    /// All-In-One's 624-px window and Euphoria Remix (All-In-One)'s 628-px one only grow down, into
+    /// their playlist, and their equalizer panels have no stretching columns to widen by.
+    var windowWidthFixed: Bool
 
     /// `.acs4` and `.acs5`, and a project folder.
     static let modern = Self(delphiColors: false)
 
     init(delphiColors: Bool, classicPlaylist: Bool = false, sizesBySkinState: Bool = true, listKeepsRoom: Bool = true,
-         controlsOutliveItems: Bool = false) {
+         controlsOutliveItems: Bool = false, windowWidthFixed: Bool = false) {
         (self.delphiColors, self.classicPlaylist, self.sizesBySkinState, self.listKeepsRoom, self.controlsOutliveItems)
             = (delphiColors, classicPlaylist, sizesBySkinState, listKeepsRoom, controlsOutliveItems)
+        self.windowWidthFixed = windowWidthFixed
     }
 
     init(_ archive: AIMPSkinArchive) {
         let format = archive.format, fromINI = archive.mainINI != nil
         self.init(delphiColors: format == .acs3 || format == .acsp, classicPlaylist: format == .acsp, sizesBySkinState: !fromINI,
-                  listKeepsRoom: !(fromINI && format == .acs3), controlsOutliveItems: fromINI)
+                  listKeepsRoom: !(fromINI && format == .acs3), controlsOutliveItems: fromINI, windowWidthFixed: format == .acsp)
     }
 }

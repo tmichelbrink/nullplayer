@@ -246,6 +246,19 @@ final class AIMPSkinACSPTests: XCTestCase {
         guard let data = image.frame(0)?.dataProvider?.data else { return nil }
         return [UInt8](data as Data)
     }
+    /// AIMP 2.61 sizes its windows by height alone: Hameleon All-In-One grows down into its playlist
+    /// and never widens.
+    func testAIMP2WindowsKeepTheirWidth() throws {
+        let skin = try AIMPSkinLoader.load(data: Self.package(version: 3, entries: [
+            ("main.ini", Self.ini("[File]\nFormDisableResizing=0\n[Parents]\nPlayBtn=MAIN\n[PlayBtn]\nBounds=0,0,10,10\n")),
+            ("MainLayout.xml", Data("<item Align=\"top\" Level=\"0\" Control=\"MainFrame\"/>".utf8)),
+            ("MainClient.bmp", Self.solid(width: 40, height: 20)), ("PlayBtn.bmp", Self.solid(width: 10, height: 10)),
+        ]))
+        XCTAssertTrue(skin.index.dialect.windowWidthFixed)
+        XCTAssertNotNil(skin.index.sizing[""], "it sizes from its edges")
+        XCTAssertEqual(AIMPSkinRenderer.fixedWidth(skin, state: AIMPSkinState()), skin.naturalSize(form: nil)?.width)
+    }
+
     /// Every control of the skin's windows, by name, the first of a name.
     static func controls(_ skin: AIMPSkin) -> [String: AIMPSkinControl] {
         var found: [String: AIMPSkinControl] = [:]
