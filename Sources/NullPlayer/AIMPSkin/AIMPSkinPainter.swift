@@ -142,6 +142,11 @@ final class AIMPSkinPainter {
         case .time(let seconds, let digits): drawTime(image, seconds: seconds, digits: digits, in: rect)
         case .slider(let slider, let fraction, let thumb): drawSlider(slider, image: image, fraction: fraction, thumb: thumb, in: rect)
         case .rating(let rating): drawRating(image, rating: rating, in: rect)
+        // Its picture under (Pioneer RT-707's frame), the background over it, the spectrum over that.
+        case .spectrogram(let background, let picture):
+            paint(image, in: rect)
+            canvas.fill(rect, argb: background)
+            if let picture { canvas.drawUpright(picture, in: CGRect(origin: rect.origin, size: CGSize(width: picture.width, height: picture.height))) }
         case .pageSelector(let count, let shown): drawPageSelector(image, count: count, shown: shown, in: rect)
         case .playlist(let style, let rows, let shown, let headers):
             paint(image, in: rect)

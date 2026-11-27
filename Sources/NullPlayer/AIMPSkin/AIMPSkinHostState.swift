@@ -254,6 +254,8 @@ struct AIMPSkinFrameFeedback: Sendable {
     var levelL = 0.0
     var levelR = 0.0
     var spectrum: [Double] = []
+    /// The spectrum over the last seconds, for spectrograms; empty unless the skin has one.
+    var spectrogram = AIMPSkinSpectrumHistory()
     /// Where the pointer is, in skin pixels, and where each named item and control was last drawn:
     /// `IsActive` is the pointer over one (Cassette-3D's keys show while it is over the cassette).
     var pointer = Pointer.anywhere

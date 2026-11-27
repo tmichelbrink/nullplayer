@@ -236,6 +236,13 @@ extension AIMPSkinLayout {
                               content: flow.color(content)),
                     target(name, .seek))
         case .waveForm(let trace): return (.waveForm(trace), [])
+        case .spectrogram(let spectrogram):
+            let picture = AIMPSkinSpectrogram.image(host.feedback.spectrogram, clock: host.feedback.clock,
+                                                    width: Int(rect.width), height: Int(rect.height),
+                                                    content: flow.color(spectrogram.content) ?? 0xFFFF_FFFF,
+                                                    flippedHorizontally: spectrogram.flippedHorizontally,
+                                                    flippedVertically: spectrogram.flippedVertically)
+            return (.spectrogram(background: flow.color(spectrogram.background), picture: picture), [])
         case .visualization(let spectrum, let cover): return (.visualization(spectrum, cover: cover), [])
         case .spectrum(let spectrum): return (.spectrum(spectrum), [])
         case .selector:

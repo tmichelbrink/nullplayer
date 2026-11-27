@@ -61,6 +61,8 @@ final class AIMPSkinLayout {
         case rating(Int)
         /// A page selector's cells, `count` of them, `shown` lit.
         case pageSelector(count: Int, shown: Int)
+        /// A spectrogram's background and its picture of the spectrum over time.
+        case spectrogram(background: UInt32?, picture: CGImage?)
         /// NullPlayer's playlist, the rows the quick search leaves (`shown`), and those in view.
         case playlist(AIMPSkinControl.Playlist, rows: Rows, shown: [Int], headers: [Int: GroupHeader])
         /// The library's tree or table: only the list's fill, which NullPlayer's library browser

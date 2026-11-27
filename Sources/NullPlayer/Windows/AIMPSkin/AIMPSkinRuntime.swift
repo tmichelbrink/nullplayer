@@ -23,7 +23,9 @@ final class AIMPSkinRuntime {
     /// What `view`'s frame reads at `clock`: the player, with the skin's meters and the window's
     /// pointer, gauges and last frame's measurements.
     func host(drawnBy view: AIMPSkinMainView, clock: Double) -> AIMPSkinHostState {
-        host(feedback: AIMPSkinFrameFeedback(clock: clock, levelL: levels.left, levelR: levels.right, spectrum: spectrum,
+        if hasSpectrogram { spectrogram.record(spectrum, at: clock) }
+        return host(feedback: AIMPSkinFrameFeedback(clock: clock, levelL: levels.left, levelR: levels.right, spectrum: spectrum,
+                                             spectrogram: spectrogram,
                                              pointer: view.pointer, hoverRects: view.hoverRects,
                                              playlistRowsShown: view.playlistRowsShown,
                                              gaugeLevels: gaugesBy[ObjectIdentifier(view)]?.levels ?? [:]))
@@ -55,6 +57,12 @@ final class AIMPSkinRuntime {
     /// The latest output levels and spectrum, drawn on the next animation frame.
     var levels = (left: 0.0, right: 0.0)
     var spectrum: [Double] = []
+    /// The spectrum as each frame drew it, kept only for a skin with a spectrogram.
+    private var spectrogram = AIMPSkinSpectrumHistory()
+    private lazy var hasSpectrogram = skin.index.byName.values.contains { element in
+        if case .control(let control) = element, case .spectrogram = control.kind { return true }
+        return false
+    }
 
     /// What the skin asks of the player: from a key, a control, a timer or a script.
     var onAction: ((AIMPSkinCommand) -> Void)?

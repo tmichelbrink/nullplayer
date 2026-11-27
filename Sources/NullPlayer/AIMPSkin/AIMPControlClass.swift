@@ -39,6 +39,8 @@ enum AIMPControlClass: Sendable {
     /// (`Pages`), the shown one lit; a click on a cell shows that page (M5's, Red Bias's, A4's and
     /// Soot's info-page dots).
     case pageSelector(group: String?)
+    /// `SpectrogramDisplay`: the spectrum over the last seconds (`AIMPSkinSpectrogram`).
+    case spectrogram(Spectrogram)
     /// NullPlayer's lists placed in the skin's frame, in the skin's colours and fonts: the playlist
     /// (`<control link="Playlist">`), the library's group tree and table (`"MLGroupingTree"`, `"MLTable"`).
     case playlist(AIMPSkinControl.Playlist)
@@ -116,6 +118,13 @@ enum AIMPControlClass: Sendable {
 
     /// A cover display's `CoverFrame` laid over it (RealPlayer 11's gloss) and `BlurLevel` (Soot's
     /// backdrop); its mask is the control's `maskFrame` (SL-1200's round label).
+    struct Spectrogram: Sendable {
+        let background: AIMPSkinColor?
+        let content: AIMPSkinColor?
+        let flippedHorizontally: Bool
+        let flippedVertically: Bool
+    }
+
     struct Cover: Sendable {
         let coverFrame: Int?
         let blur: Double?
