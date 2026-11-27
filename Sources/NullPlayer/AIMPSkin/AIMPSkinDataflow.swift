@@ -216,10 +216,16 @@ struct AIMPSkinDataflow {
         }
     }
 
-    /// A commutator's `Result`: its `Expression` over its values, or with none its first value.
+    /// A commutator's `Result`: its `Expression` over its values, or with none its first value. A
+    /// multiplexer's: the value its `Switch` picks (`Value2` at 2), 0 at a `Switch` with no value.
     private func commutatorValue(_ name: String, depth: Int) -> Double {
         guard let provider = skin.index.providers[name] else { return 0 }
         let links = provider.bindings.links
+        if provider.kind == .multiplexer {
+            guard let selector = provider.bindings["Switch"] else { return 0 }
+            let picked = "value" + String(AIMPSkinScript.integer(value(of: selector, depth: depth + 1)))
+            return links.first { $0.target?.lowercased() == picked }.map { value(of: $0, depth: depth + 1) } ?? 0
+        }
         // No `Expression`: it passes its first value on (Office 2016's volume read-out; 28 corpus skins).
         guard let expression = provider.expression else {
             return links.first { $0.target?.lowercased() == "value1" }.map { value(of: $0, depth: depth + 1) } ?? 0

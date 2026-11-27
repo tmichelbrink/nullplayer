@@ -161,7 +161,7 @@ indirect enum AIMPSkinSource: Sendable, Equatable {
         }
         if let player = PlayerPin(source, pin) { return .player(player) }
         switch (names.providers[source], pin) {
-        case (.commutator?, "Result"): return .commutator(source)
+        case (.commutator?, "Result"), (.multiplexer?, "Result"): return .commutator(source)
         case (.concatenator?, "Result"): return .concatenator(source)
         case (.counter?, "Position"): return .counter(source)
         default: return .value(0)

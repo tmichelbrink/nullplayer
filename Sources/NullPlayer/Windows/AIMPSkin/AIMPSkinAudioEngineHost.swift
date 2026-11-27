@@ -41,6 +41,7 @@ final class AIMPSkinAudioEngineHost {
         var rating: Int?
         var playCount: Int?
         var lastPlayed: Date?
+        var trackNumber = 0
         var discNumber = 0
         var created: Date?
         var modified: Date?
@@ -122,6 +123,7 @@ final class AIMPSkinAudioEngineHost {
         player.rating = details?.rating
         player.playCount = details?.playCount
         player.lastPlayed = details?.lastPlayed
+        player.trackNumber = details?.trackNumber ?? 0
         player.discNumber = details?.discNumber ?? 0
         player.fileCreated = details?.created
         player.fileModified = details?.modified
@@ -139,6 +141,7 @@ final class AIMPSkinAudioEngineHost {
         player.durationSeconds = Self.seconds(duration)
         let now = Calendar.current.dateComponents([.hour, .minute, .second], from: Date())
         player.timeOfDay = (now.hour ?? 0) * 3_600 + (now.minute ?? 0) * 60 + (now.second ?? 0)
+        player.today = Date()
         player.shuffle = engine.shuffleEnabled
         player.repeatAll = engine.repeatEnabled
         player.stayOnTop = WindowManager.shared.isAlwaysOnTop
@@ -184,7 +187,8 @@ final class AIMPSkinAudioEngineHost {
             let found = MediaLibrary.shared.findTrack(byURL: url).map { track -> Details in
                 let file = url.isFileURL ? try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey]) : nil
                 return Details(year: track.year ?? 0, size: track.fileSize, rating: track.rating.map { ($0 + 1) / 2 },
-                               playCount: track.playCount, lastPlayed: track.lastPlayed, discNumber: track.discNumber ?? 0,
+                               playCount: track.playCount, lastPlayed: track.lastPlayed, trackNumber: track.trackNumber ?? 0,
+                               discNumber: track.discNumber ?? 0,
                                created: file?.creationDate, modified: file?.contentModificationDate)
             }
             DispatchQueue.main.async {

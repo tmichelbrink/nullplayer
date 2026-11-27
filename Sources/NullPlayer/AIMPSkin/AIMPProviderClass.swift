@@ -5,6 +5,10 @@ enum AIMPProviderClass: Equatable, Sendable {
     case counter(scripted: Bool)
     /// `LogicalOperatorCommutator`: `Result` is its `Expression` over its inputs.
     case commutator
+    /// `LogicalOperatorMultiplexer`: `Result` is the value its `Switch` picks, `Value1` at 1 (FLAT
+    /// DARK's time read-out: the track's length or what is left of it, by a counter; the Elfa and
+    /// Jupiter decks' reels: their speed page picks the frame sequence).
+    case multiplexer
     /// `StringOperatorConcatenator`: text joined from its inputs. `…Notificator` shows AIMP's
     /// passing notices over the same text (Bliss Compact Dark's title line); NullPlayer posts none.
     case concatenator
@@ -23,6 +27,7 @@ enum AIMPProviderClass: Equatable, Sendable {
         // A delayer passes its input on `Interval` ms later: read at once, a commutator with no
         // `Expression` (M5's wave seek bars swap their time for their waveform while hovered).
         case "LogicalOperatorCommutator", "LogicalOperatorDelayer": self = .commutator
+        case "LogicalOperatorMultiplexer": self = .multiplexer
         case "StringOperatorConcatenator", "StringOperatorConcatenatorNotificator": self = .concatenator
         case "LogicalOperatorTimer": self = .timer
         case "ScriptableEventHandler": self = .eventHandler

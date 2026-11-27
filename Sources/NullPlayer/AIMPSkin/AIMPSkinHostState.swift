@@ -110,10 +110,11 @@ struct AIMPSkinPlayerSnapshot: Equatable, Sendable {
     var fileName = ""
     var fileDirectory = ""
     /// The library's play count and last play of the playing track (`%PlayCount`, `%LastPlayDate`),
-    /// its disc number (`%DiskNumber`, 0 when unknown), and the file's own dates
-    /// (`%FileCreatedDate`, `%FileModifiedDate`).
+    /// its track and disc numbers (`%TrackNumber`, `%DiskNumber`, 0 when unknown), and the file's
+    /// own dates (`%FileCreatedDate`, `%FileModifiedDate`).
     var playCount: Int?
     var lastPlayed: Date?
+    var trackNumber = 0
     var discNumber = 0
     var fileCreated: Date?
     var fileModified: Date?
@@ -123,7 +124,7 @@ struct AIMPSkinPlayerSnapshot: Equatable, Sendable {
     var templateFingerprint: Int {
         var hasher = Hasher()
         for text in [title, artist, album, genre, fileType, fileName, fileDirectory] { hasher.combine(text) }
-        for number in [year, bitrate, sampleRate, channels, durationSeconds, discNumber] { hasher.combine(number) }
+        for number in [year, bitrate, sampleRate, channels, durationSeconds, trackNumber, discNumber] { hasher.combine(number) }
         hasher.combine(fileSize)
         hasher.combine(rating)
         hasher.combine(playCount)
@@ -140,6 +141,8 @@ struct AIMPSkinPlayerSnapshot: Equatable, Sendable {
     var durationSeconds = 0
     /// Seconds since local midnight, for clock displays.
     var timeOfDay = 0
+    /// Today, for the date AIMP 3's skins show beside the clock (`%DC`); nil reads empty.
+    var today: Date?
     /// 0…1, left to right.
     var balance = 0.5
     /// 0…1, for every other bound value (effects): the middle, unless a knob has been turned

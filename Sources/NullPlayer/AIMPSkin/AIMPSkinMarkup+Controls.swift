@@ -247,6 +247,7 @@ extension AIMPControlClass {
             self = .coverArt(Cover(coverFrame: coverFrame, blur: number("BlurLevel")))
         case "WaveFormDisplay": self = .waveForm(Trace(color: AIMPSkinColor.delphi(props["ColorContent"]), channel: props["Source"]?.reference))
         case "Rating": self = .rating(keyed(.picture))
+        case "PageSelector": self = .pageSelector(group: bindings.links.first { $0.target == "Action" && $0.pin == "Pages" }?.source)
         case "VisualDisplay": self = .visualization(spectrum, cover: coverFrame)
         case "SpectrumDisplay": self = .spectrum(spectrum)
         case "StateDisplay": self = .stateDisplay

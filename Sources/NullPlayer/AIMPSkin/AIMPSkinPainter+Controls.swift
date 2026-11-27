@@ -80,6 +80,16 @@ extension AIMPSkinPainter {
         }
     }
 
+    /// A page selector's cells across from its left, the shown page's lit (its second frame).
+    func drawPageSelector(_ image: AIMPSkinImage?, count: Int, shown: Int, in rect: CGRect) {
+        guard let image else { return }
+        let size = image.frameSize
+        for i in 0..<count {
+            paint(image, in: CGRect(x: rect.minX + CGFloat(i) * size.width, y: rect.minY, width: size.width, height: size.height),
+                  frame: i == shown ? 1 : 0)
+        }
+    }
+
     /// The track's rating: a star picture (empty, lit, …) five across, lit up to the rating.
     func drawRating(_ image: AIMPSkinImage?, rating: Int, in rect: CGRect) {
         guard let image else { return }

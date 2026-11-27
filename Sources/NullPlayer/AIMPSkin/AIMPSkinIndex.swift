@@ -26,6 +26,16 @@ struct AIMPSkinIndex: Sendable {
     var pageGates: [String: [[AIMPSkinLink]]] = [:]
     /// The companions' names.
     var companions: Set<String> = []
+    /// The companion windows a counter shows and hides as it turns, by counter: `Schema.xml`'s entry
+    /// for the form binds its `Visibility` to the counter's `Position` (TASCAM CD-RW750's EQUALIZER
+    /// and PLST keys step `EQ_Counter` and `PL_Counter`). AIMP applies it as the counter moves, not
+    /// at load: the form opens as its `InitialVisible` says (the playlist shown, its counter at 0).
+    var windowCounters: [String: [WindowSwitch]] = [:]
+
+    struct WindowSwitch: Sendable {
+        let form: String
+        let link: AIMPSkinLink
+    }
     /// The forms the skin declares that NullPlayer does not open, and what they hold, by name.
     var elsewhere: Set<String> = []
     /// Items the form starts with hidden (`InitialVisible` False: Cassette-3D's VU meters), less

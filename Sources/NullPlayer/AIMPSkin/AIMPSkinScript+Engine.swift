@@ -216,7 +216,14 @@ extension AIMPSkinScript {
         /// Any other failure stays the counter script's.
         func movingCounter(_ name: String, to value: Int) throws {
             let before = state
+            let turned = flow.value(name, "Position") != Double(value)
             state.script[name].counter = value
+            // The windows it shows and hides follow it as it turns (`AIMPSkinIndex.windowCounters`).
+            if turned {
+                for each in skin.index.windowCounters[name] ?? [] {
+                    state.override(visible: each.link.shaped(Double(value)) != 0, of: each.form, gateFrom: flow)
+                }
+            }
             guard let provider = skin.index.providers[name], provider.kind == .counter(scripted: true),
                   let script = provider.script, let program = program(script) else { return }
             do {

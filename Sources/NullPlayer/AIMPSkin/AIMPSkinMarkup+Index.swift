@@ -90,6 +90,14 @@ extension AIMPSkinIndex {
         commandCounters = fired.subtracting(readers)
         let menuNodes = providerNodes.filter { $0["class"] == "CustomContextMenu" && $0["name"] != nil }
         menuNames = Set(menuNodes.compactMap { $0["name"] })
+        for entry in schema?.child("forms")?.children("form") ?? [] {
+            guard let form = entry["name"], self.companions.contains(form) else { continue }
+            for link in entry.properties["Bindings"]?.children("link") ?? []
+            where link["TargetPin"] == "Visibility" && link["SourcePin"] == "Position" {
+                guard let source = link["Source"], counterModule(source) != nil else { continue }
+                windowCounters[source, default: []].append(WindowSwitch(form: form, link: AIMPSkinLink(link, names: names)))
+            }
+        }
 
         // The forms, read with the tables above, every control numbered.
         let tables = self

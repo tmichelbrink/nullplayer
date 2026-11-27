@@ -59,6 +59,8 @@ final class AIMPSkinLayout {
         /// A slider's or seek bar's value, 0–1, and its thumb.
         case slider(AIMPControlClass.Slider, fraction: Double, thumb: AIMPSkinImage?)
         case rating(Int)
+        /// A page selector's cells, `count` of them, `shown` lit.
+        case pageSelector(count: Int, shown: Int)
         /// NullPlayer's playlist, the rows the quick search leaves (`shown`), and those in view.
         case playlist(AIMPSkinControl.Playlist, rows: Rows, shown: [Int], headers: [Int: GroupHeader])
         /// The library's tree or table: only the list's fill, which NullPlayer's library browser
@@ -521,7 +523,7 @@ final class AIMPSkinLayout {
         guard let provider = skin.index.providers[source] else { return false }
         switch provider.kind {
         case .counter: return true
-        case .commutator:
+        case .commutator, .multiplexer:
             let links = provider.bindings.links
             return !links.isEmpty && links.allSatisfy { link in
                 link.source.map { isSkinState($0, pin: link.pin, depth: depth + 1) } ?? false

@@ -43,6 +43,22 @@ final class AIMPSkinTemplateTests: XCTestCase {
         XCTAssertFalse(AIMPSkinTemplate.format("%LastPlayDate", host: host).isEmpty)
     }
 
+    /// As AIMP 5.40 shows them (a track tagged 7/12, first of one and of 101 in the list, at
+    /// 20:18:20 on 2026-11-27, with no play statistics).
+    func testShortFieldsReadAsAIMPShowsThem() {
+        var host = AIMPSkinHostState()
+        host.player.trackNumber = 7
+        host.player.playlistIndex = 0
+        host.player.timeOfDay = 20 * 3_600 + 18 * 60 + 20
+        host.player.today = DateComponents(calendar: Calendar(identifier: .gregorian), year: 2026, month: 11, day: 27, hour: 12).date
+        XCTAssertEqual(AIMPSkinTemplate.format("a[%TN]b[%TC]c[%DC]d[%RT]", host: host), "a[7]b[20:18:20]c[2026.11.27]d[-]")
+        XCTAssertEqual(AIMPSkinTemplate.format("e[%TrackNumber]h[%Rating]i[%IN]", host: host), "e[7]h[-]i[01]")
+        host.player.trackNumber = 0
+        host.player.playlistIndex = 100
+        host.player.today = nil
+        XCTAssertEqual(AIMPSkinTemplate.format("a[%TN]i[%IN]c[%DC]", host: host), "a[]i[101]c[]", "untagged reads empty")
+    }
+
     func testTextTemplatesSplitAndMeasureAsAIMPCounts() {
         let host = AIMPSkinHostState()
         // Soot's off and on labels, split from one language string.

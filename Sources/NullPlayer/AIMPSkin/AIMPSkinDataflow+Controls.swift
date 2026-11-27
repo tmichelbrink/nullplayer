@@ -65,7 +65,17 @@ extension AIMPSkinDataflow {
         switch control.text.display {
         case .none: return ""
         case .caption(let caption): return caption
-        case .template(let template), .file(let template): return AIMPSkinTemplate.format(template, host: host)
+        case .template(let template): return AIMPSkinTemplate.format(template, host: host)
+        case .file(let template):
+            let text = AIMPSkinTemplate.format(template, host: host)
+            // An `Expression` on the link reads the text as a number, and shows what it makes of it:
+            // Sony Media Tower's `%IN` through `Value MOD 10000` shows 1, not "01" (AIMP 5.40).
+            if let link = control.bindings.links.first(where: { $0.pin == "FileInfo" && $0.target == "DisplayValue" }),
+               link.shape != nil, let number = Double(text.trimmingCharacters(in: .whitespaces)) {
+                let shaped = link.shaped(number)
+                return shaped.isFinite ? Int(exactly: shaped).map(String.init) ?? String(shaped) : text
+            }
+            return text
         case .concatenation(let inputs, let template):
             if let source = control.bindings["DisplayValue"]?.source, state.script[source].expression != nil {
                 return concatenatorText(source)

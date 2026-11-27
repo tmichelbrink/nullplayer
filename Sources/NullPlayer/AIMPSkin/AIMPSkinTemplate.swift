@@ -70,7 +70,17 @@ enum AIMPSkinTemplate {
             if let variable = variables[field.lowercased()] { return variable }
             let player = host.player
             switch field {
-            case "IN": return player.playlistIndex >= 0 ? String(player.playlistIndex + 1) : ""
+            // AIMP pads the position to two digits, whatever the list's length ("01" of 1 and of 101
+            // in AIMP 5.40).
+            case "IN": return player.playlistIndex >= 0 ? String(format: "%02d", player.playlistIndex + 1) : ""
+            // AIMP 3's short fields, which AIMP 5.40 still reads though its list no longer names them
+            // (seen in AIMP 5.40 with Tunes' `%TN` and Eclipse's `%RT / 5.00` and `%TC %DC`): the
+            // track number (empty untagged), the clock and today's date in AIMP's own forms (as
+            // `%Today`'s, not the system's), and the automatic rating.
+            case "TN": return trackNumber
+            case "TC": return clock
+            case "DC": return host.player.today.map { Self.day.string(from: $0) } ?? ""
+            case "RT": return rating
             case "E": return player.fileType
             case "T": return player.title
             case "R", "a": return player.artist
@@ -103,6 +113,8 @@ enum AIMPSkinTemplate {
             case "filedir": return player.fileDirectory
             case "fileparentdir": return (player.fileDirectory as NSString).lastPathComponent
             case "disknumber": return player.discNumber > 0 ? String(player.discNumber) : ""
+            case "tracknumber": return trackNumber
+            case "rating": return rating
             // The library's statistics: Windows Media Player 8 and 11 write `%PlayCount /
             // %LastPlayDate %LastPlayTime`. AIMP 5.40 shows "-" for a file it has no statistics for.
             case "playcount": return player.playCount.map(String.init) ?? "-"
@@ -141,6 +153,20 @@ enum AIMPSkinTemplate {
             return s > 0 ? AIMPSkinFormat.minutes(s) : ""
         }
         var fileSize: String { host.player.fileSize > 0 ? AIMPSkinFormat.size(Double(host.player.fileSize)) : "" }
+        var trackNumber: String { host.player.trackNumber > 0 ? String(host.player.trackNumber) : "" }
+        var clock: String {
+            let s = host.player.timeOfDay
+            return String(format: "%02d:%02d:%02d", s / 3_600 % 24, s / 60 % 60, s % 60)
+        }
+        /// AIMP's automatic rating comes from its own play statistics, which NullPlayer does not
+        /// keep: "-", as AIMP 5.40 shows for a track it has none for.
+        var rating: String { "-" }
+        static let day: DateFormatter = {
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.dateFormat = "yyyy.MM.dd"
+            return f
+        }()
 
         /// Dates and times in the user's short formats, as AIMP takes Windows'.
         func date(_ date: Date?) -> String { date.map { Self.dates.string(from: $0) } ?? "" }

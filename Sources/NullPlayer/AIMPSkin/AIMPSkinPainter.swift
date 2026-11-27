@@ -142,6 +142,7 @@ final class AIMPSkinPainter {
         case .time(let seconds, let digits): drawTime(image, seconds: seconds, digits: digits, in: rect)
         case .slider(let slider, let fraction, let thumb): drawSlider(slider, image: image, fraction: fraction, thumb: thumb, in: rect)
         case .rating(let rating): drawRating(image, rating: rating, in: rect)
+        case .pageSelector(let count, let shown): drawPageSelector(image, count: count, shown: shown, in: rect)
         case .playlist(let style, let rows, let shown, let headers):
             paint(image, in: rect)
             drawPlaylist(style, rows: rows, shown: shown, headers: headers, in: rect)

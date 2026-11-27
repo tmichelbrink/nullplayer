@@ -135,6 +135,18 @@ extension AIMPSkinLayout {
         switch control.kind {
         case .key(let key):
             return self.key(control, key, image: image, name: name, in: rect)
+        // As AIMP 5.40 draws one: a cell a frame wide for each page, from the control's top left,
+        // the shown page's in its second frame, the others in its first; a click on a cell shows
+        // its page.
+        case .pageSelector(let group):
+            guard let group, let pages = flow.skin.index.groups[group], !pages.isEmpty, let image else { return (.pageSelector(count: 0, shown: 0), []) }
+            let size = image.frameSize
+            let fits = size.width > 0 ? min(pages.count, Int(rect.width / size.width)) : 0
+            let cells = (0..<fits).flatMap { i in
+                target(name, .page(group: group, step: AIMPSkinStep(String(i))),
+                       rect: CGRect(x: rect.minX + CGFloat(i) * size.width, y: rect.minY, width: size.width, height: min(size.height, rect.height)))
+            }
+            return (.pageSelector(count: fits, shown: flow.activePage(group)), cells)
         // The track's rating, five stars across; without a picture, a key's.
         case .rating(let key):
             guard image != nil else { return self.key(control, key, image: image, name: name, in: rect) }

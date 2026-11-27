@@ -35,6 +35,10 @@ enum AIMPControlClass: Sendable {
     case waveform(background: AIMPSkinColor?, content: AIMPSkinColor?)
     /// `Rating`: five stars of its picture; with no picture, a key's (`Key`).
     case rating(Key)
+    /// `PageSelector`: a cell of its picture for each page of the tabbed group its `Action` names
+    /// (`Pages`), the shown one lit; a click on a cell shows that page (M5's, Red Bias's, A4's and
+    /// Soot's info-page dots).
+    case pageSelector(group: String?)
     /// NullPlayer's lists placed in the skin's frame, in the skin's colours and fonts: the playlist
     /// (`<control link="Playlist">`), the library's group tree and table (`"MLGroupingTree"`, `"MLTable"`).
     case playlist(AIMPSkinControl.Playlist)
