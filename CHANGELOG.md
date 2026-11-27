@@ -113,6 +113,32 @@
   window, Opulent Records Player's website window and hm_Touch's album art window.
 - **Classic: a skin that keeps its bitmaps several folders deep loads** (#819). MERYXMS1 (Merry Christmas
   Amp) fell back to the unskinned look because only the first folder level was searched.
+- **Winamp Modern (`.wal`): windows wearing the skin's frame show all of their content.** In
+  Trance_Critic, Cava, Flow, Spectrum Analyzer, Audio Analyzer and Waveform were mostly hidden under a
+  solid blue band, and Official_Coldplay_skin's Thinger icons were cut off by its status bar. Lists
+  and panels in about 60 other skins now fill the space their frame leaves for them, instead of
+  stopping short of it.
+- **Winamp Modern (`.wal`): Wurlitzer_v2's frame draws its right-hand corner the right way round.**
+  The Library, Visualizations, EQ Studio and other framed windows showed the left corner piece at
+  the top right, with a gap in the rail beneath it.
+- **Winamp Modern (`.wal`): the EQ Studio keeps its panels apart at every size.** In skins with a
+  thick frame, such as Simple_Amp_, dragging the Studio smaller or switching to a smaller UI Size
+  squeezed its panels over each other. It now stops at the size its panels need, and grows to make
+  room for them when you change UI Size.
+- **Winamp Modern (`.wal`): playlists in skin frames show their whole Add/Rem/Sel/Misc/List bar.**
+  In Blogz, HARMONIA, X_Sphere, Probe_V5, the iTunes Mini skins and about 20 others, the list
+  covered the bar or cut it off. Framed windows now end above the frame's status bar.
+- **Winamp Modern (`.wal`): Center_Fresh's frame shows on every window.** Art, Cava, EQ Studio, Flow,
+  PeppyMeter, the analyzers, Waveform, Sonos Rooms and Stream Ripper opened with no frame, while the
+  Library and Playlist wore it.
+- **Winamp Modern (`.wal`): Winamp Single GUI's separate Video window behaves.** Windows → Video
+  Player and Escape now hide a film playing there, its close button no longer reopens it, and a new
+  film or leaving fullscreen keeps the film in that window. In skins with no video window of their
+  own (Nokia 7210, Dawson's Creek, jvc.tape and others), the skin's video button now shows and hides
+  NullPlayer's video window.
+- **Winamp Modern (`.wal`): switching skins with a film playing draws the new skin's Video window.**
+  Going from cPro-Bento or a Classic skin to Holiday left an empty grey box around the film that
+  clicks went through.
 
 ## 0.35.2
 

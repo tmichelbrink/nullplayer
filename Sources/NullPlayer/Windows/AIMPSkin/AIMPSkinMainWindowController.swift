@@ -308,6 +308,10 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
     /// (`SkinOwnedWindowsProviding`).
     var skinOwnedWindows: [NSWindow] { forms.materializedAuxiliaryWindows }
 
+    /// Snap targets only, never centre-stack members: a form is an authored canvas of its own
+    /// size, with no column to join.
+    var managedSkinWindows: [ManagedSkinWindow] { skinOwnedWindows.map { ManagedSkinWindow(window: $0) } }
+
     // MARK: - Host state
 
     private func refreshHostState() {
