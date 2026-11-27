@@ -61,6 +61,12 @@ class EmbeddedLibraryBrowserSurface {
         browser.applyStyle(style)
     }
 
+    /// Points the host adds to each row (an AIMP skin's row spacing), before content scale.
+    func applyRowPadding(_ points: CGFloat) {
+        guard !isTornDown else { return }
+        browser.embeddedRowPadding = max(0, points)
+    }
+
     func applyContentScale(_ scale: CGFloat) {
         guard !isTornDown else { return }
         // The browser reads this through the closure it already holds, so storing it is the whole

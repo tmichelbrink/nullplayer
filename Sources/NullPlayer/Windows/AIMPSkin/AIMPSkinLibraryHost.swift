@@ -47,11 +47,22 @@ final class AIMPSkinLibraryHost {
         }
         surface.view.frame = rect
         surface.applyContentScale(view.uiScale)
+        surface.applyRowPadding(Self.rowPadding(view.skinState))
         let style = colours.map { Self.style($0, over: fallbackStyle) } ?? fallbackStyle
         if style != self.style {
             self.style = style
             surface.applyStyle(style)
         }
+    }
+
+    /// The row spacing a skin's script gave its library table (BECHA, Vilma and the other Zigar-style
+    /// decks' row-spacing key: `Style.RowContentOffsets.Top`/`Bottom` 8, 4 or 2 on `MLTable`): the
+    /// points past the 2 + 2 the browser's own rows already leave. None set: the browser's own.
+    nonisolated static func rowPadding(_ state: AIMPSkinState) -> CGFloat {
+        let properties = state.script[AIMPSkinList.libraryTable.rawValue].properties
+        let offset = { (side: String) in properties["Style.RowContentOffsets.\(side)"].flatMap(Double.init).map { min(max($0, 0), 64) } }
+        guard let top = offset("Top"), let bottom = offset("Bottom") else { return 0 }
+        return CGFloat(max(0, top + bottom - 4))
     }
 
     /// The skin is going: the browser goes with it, its server work cancelled.

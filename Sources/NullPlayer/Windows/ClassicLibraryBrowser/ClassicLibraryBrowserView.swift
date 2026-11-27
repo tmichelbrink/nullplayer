@@ -25,7 +25,13 @@ class ClassicLibraryBrowserView: NSView {
     }
 
     private var itemHeight: CGFloat {
-        18 * contentScale
+        (18 + embeddedRowPadding) * contentScale
+    }
+
+    /// Points added to each row by the skin the browser is embedded in (AIMP skins' row spacing
+    /// modes); 0 in the browser's own window.
+    var embeddedRowPadding: CGFloat = 0 {
+        didSet { if embeddedRowPadding != oldValue { needsDisplay = true } }
     }
 
     /// Extra inset so top bar items don't sit against the window edges.
