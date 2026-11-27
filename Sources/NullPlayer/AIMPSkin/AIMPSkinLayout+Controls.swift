@@ -426,8 +426,10 @@ extension AIMPSkinLayout {
         // is a state (AIMPshield's material overlays, a texture a position).
         let count = image?.frameCount ?? 0
         let onPage = control.bindings["State"]?.pin == "ActivePage"
+        // Nine are the same two runs and the hit mask (MediaTower's window lamps, lit green in AIMP
+        // 5.40 while the player and equalizer windows show).
         if isButton || key.role == .switch, state != nil, declaredPerState == nil,
-           count == 8 || (onPage && count > 8 && count % 4 == 0 && count % 3 != 0) { perStateFrames = 4 }
+           count == 8 || count == 9 || (onPage && count > 8 && count % 4 == 0 && count % 3 != 0) { perStateFrames = 4 }
         // Six: three (normal, hot, pressed) off, then on (Bento's shuffle and repeat, their glyphs
         // lit blue).
         if perStateFrames == 0, isButton, state != nil, image?.frameCount == 6 { perStateFrames = 3 }
