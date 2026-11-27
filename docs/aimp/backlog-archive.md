@@ -6,9 +6,9 @@ was closed on.
 
 ## Issuing a number
 
-**The next free number is A39.** A1–A28 closed 2026-10-31 to 2026-11-03 (the family's build-up and
+**The next free number is A45.** A1–A28 closed 2026-10-31 to 2026-11-03 (the family's build-up and
 three pre-PR review rounds); A29–A38 closed 2026-11-04 in review round 4 (the maintainer's
-review of ad-repo/nullplayer#691). Check this file before reusing any number: the live backlog is a
+review of ad-repo/nullplayer#691); A39–A44 closed 2026-11-27, each measured in AIMP 5.40 under Wine. Check this file before reusing any number: the live backlog is a
 list of *open* work and says nothing about which numbers are spent.
 
 ## Closed
@@ -301,3 +301,23 @@ list of *open* work and says nothing about which numbers are spent.
   pitch script always did (open point 5). The probe's live run now sets its player's volume from a
   script's ask as the host always did (it took only sliders' before): Sony TC-MR2's volume script
   reads it back and asks once more, 17 → 18 actions; the commands asked are otherwise the same.
+- A39 A form's `Visibility` bound to a counter (part of open row 9): a companion form whose
+  `Schema.xml` entry binds its `Visibility` to a counter's `Position` follows the counter as it turns
+  (`AIMPSkinIndex.windowCounters`, applied in `movingCounter`), never at load. AIMP 5.40 on TASCAM
+  CD-RW750: the playlist opens shown with `PL_Counter` at 0, PLST's first press turns the counter to
+  1 with nothing to change, the second hides it; EQUALIZER shows the EQ docked above the deck.
+- A40 AIMP 3's short template fields, as AIMP 5.40 shows them on a test skin: `%TN` the track number
+  (empty untagged), `%TC` the clock `HH:mm:ss`, `%DC` today `yyyy.MM.dd`, `%RT` and `%Rating` `-` (no
+  play statistics), `%IN` two digits ("01" of 1 and of 101; Mutter's `01.MP3`). A `FileInfo` link with
+  an `Expression` reads its text as a number (Sony Media Tower's `%IN` through `Value MOD 10000`: 1).
+- A41 `LogicalOperatorMultiplexer`: `Result` is the `ValueN` its 1-based `Switch` picks (7 corpus
+  skins: FLAT DARK's length/remaining read-out, the Elfa and Jupiter reels, Electronica's needle).
+- A42 `PageSelector` (M5, Red Bias, A4, Soot): a cell a frame wide per page of the group its `Action`
+  link's `Pages` names, from the control's top left, the shown page lit (frame 1); a click on a cell
+  shows its page. Matched AIMP 5.40's pixels on a Tunes test skin carrying M5's dots.
+- A43 `SpectrogramDisplay` (27 corpus skins): 33.5 px a second right to left, AIMP's frequency scale
+  (100 Hz 1.8% up, 1 kHz 17.4%, 10 kHz 75.5%), `ColorBackground` toward `ColorContent` by level,
+  flips; its link makes no difference. Measured with tones, 1-s bursts and 6 dB steps.
+- A44 Library row spacing (BECHA's `clfRowContentOffsetsMode`, about 24 skins): the counter script's
+  `Style.RowContentOffsets` on `MLTable` (8, 4, 2 a side) grows the embedded browser's rows by what
+  passes 2 + 2.

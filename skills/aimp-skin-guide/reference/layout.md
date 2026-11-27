@@ -97,7 +97,7 @@ keep the margins' proportion. Margins on an unanchored side are stale from the e
 |---|---|
 | `Button`, `Panel`… | `Skin` frame 0 (1 hovered, 2 pressed, 3 disabled); a frame left over after whole runs of `FramesPerState` (default 4) is the hit mask, so buttons can share a rect; a caption from `Caption` (`@Lng:N;` → the user's language, else `English.lng`: `AIMPSkinLanguage`) inside the skin's content margins, centred unless `Alignment` says otherwise |
 | `Switch` | as a button, plus `FramesPerState` frames on while its action's `State` is 1 (shuffle, repeat, stay on top, mute) |
-| `TextDisplay` | text from a `FileInfo` binding's `TextFormat` (`%Title`, `%Artist`, `%Album`); bound to nothing, its own `Template` (window titles, labels, RealPlayer 11's skin-info lines: 4,874 displays in 279 corpus skins); `WordWrap` True or a `MultiLine` `Layout` breaks it into lines down from the top; `AutoSize` `csHeight` makes it as tall as its lines |
+| `TextDisplay` | text from a `FileInfo` binding's `TextFormat` (`%Title`, `%Artist`, `%Album`), read as a number through the link's `Expression` when it has one (Sony Media Tower's `%IN` through `Value MOD 10000` shows 1, not "01"); bound to nothing, its own `Template` (window titles, labels, RealPlayer 11's skin-info lines: 4,874 displays in 279 corpus skins); `WordWrap` True or a `MultiLine` `Layout` breaks it into lines down from the top; `AutoSize` `csHeight` makes it as tall as its lines |
 | `Slider*`, `SeekBar` | track frame 0, progress frame 1 over the whole track clipped to the value, `SkinThumb` |
 | `SliderMasked` | a filmstrip of positions (knob rotation, tape reel): the value picks the frame |
 | `RunningLine` | the playing track (`%R - %T`) unless a `DisplayValue` binding says otherwise; scrolling not yet |
@@ -108,6 +108,8 @@ keep the margins' proportion. Margins on an unanchored side are stale from the e
 | `VisualDisplay` (AIMP 2: `MultiDisplay`) | the visualization screen, in the mode `AIMPVisualMode` holds: NullPlayer's spectrum (the default), a scope, analog VU meters (PeppyMeter's `vintage` face), or off, which leaves the skin's picture behind it (Hameleon's logo) showing. `acVisualNext` / `acVisualPrev` (AIMP 2's VisNext and VisPrev keys) step it; the choice is kept per skin (`AIMPSkinVisual.<skin>`); `AIMP_RENDER_VISUAL=<mode>` renders one |
 | `CoverArtDisplay` | the playing track's artwork filling its rect inside its mask frame, blurred by `BlurLevel` (Soot's backdrop) |
 | `BlurredGlass` | what is drawn under it so far, blurred by `BlurLevel` (0–100), inside its skin's `MaskFrame` (on the control's `Skin` or its resource), tinted by its `Color` |
+| `SpectrogramDisplay` | the spectrum over the last seconds (`AIMPSkinSpectrogram`): newest at the right edge (`FlipHorizontally`: left), 33.5 px a second; frequency up from the bottom (`FlipVertically`: down) on AIMP's scale (100 Hz 1.8% up, 1 kHz 17.4%, 10 kHz 75.5%, the top near 22 kHz); `ColorBackground` blended toward `ColorContent` by level, over its `Skin`. Its link makes no difference (Dark's `LevelL` panels show the same). The runtime keeps 30 s of the 75-band spectrum, only for a skin with one |
+| `PageSelector` | a cell a frame wide for each page of the group its `Action` link's `Pages` names, from its top left; the shown page's in frame 1, the rest frame 0; a click on a cell shows its page (M5, Red Bias, A4, Soot) |
 | `DigitsDisplay` | `Digits` frames of a digit strip (0–9 first), zero-padded, stepped by frame width + `IndentBetweenDigits`; value from the `DisplayValue` binding and its `Expression`. One digit of a one-frame image is a plain picture (Vega's cassette sticker) |
 
 What a slider or knob moves (`AIMPSkinProvider`): `prvSpeed` and `prvTempo` are NullPlayer's
@@ -154,8 +156,12 @@ keys are their state's fill seen through a glyph (133 corpus skins).
 `Schema.xml`'s `providers` are the skin's own dataflow (`AIMPSkinDataflow`):
 - `LogicalOperatorCommutator`: `Result` = `Expression` over `value1…valueN`, each a link; with no
   `Expression`, `value1` (28 corpus skins: Office 2016's volume read-out).
+- `LogicalOperatorMultiplexer`: `Result` = the `ValueN` its `Switch` link picks (1-based; 0 past the
+  values): FLAT DARK's length/remaining read-out, the Elfa and Jupiter reels, Electronica's needle.
 - `LogicalOperatorCounter` / `ScriptableOperatorCounter`: `Position`, held in `AIMPSkinState`, else
-  a bound `Position` link, else `PositionDefault`.
+  a bound `Position` link, else `PositionDefault`. A companion form whose `Schema.xml` entry binds
+  its `Visibility` to a counter's `Position` follows the counter as it turns, never at load: it opens
+  as `InitialVisible` says (TASCAM CD-RW750's EQUALIZER and PLST: `AIMPSkinIndex.windowCounters`).
 
 `AIMPSkinState` is what the skin keeps for itself, in three parts by how often they move:
 - `script`: what keys, bindings and scripts set. On one of the skin's objects (a control, item,
@@ -236,7 +242,7 @@ thresholds sit beside it).
 | `SearchEdit` on `Playlist.QuickSearch`, `link="PlaylistSearch"` | the search over the box; a click types into a field over it; rows hold every word |
 | `SearchEdit` on `MLTable`/`MLGroupingTree.QuickSearch` | the empty box, inert: the library browser has its own search |
 | `PlaylistTabs`, `TabControl` on `prvPlaylistManager`/`prvMusicLibraryManager` | one lit tab: "Playlist", "Music Library" |
-| `<control link="MLGroupingTree">`, `<control link="MLTable">` | the list's fill (`Look.libraryArea`), with NullPlayer's library browser over it in the window (`AIMPSkinLibraryHost`) |
+| `<control link="MLGroupingTree">`, `<control link="MLTable">` | the list's fill (`Look.libraryArea`), with NullPlayer's library browser over it in the window (`AIMPSkinLibraryHost`); a script's `Style.RowContentOffsets.Top`/`Bottom` on `MLTable` (BECHA's row-spacing key: 8, 4 or 2 a side) adds what passes 2 + 2 to the browser's rows |
 
 **The library lists are NullPlayer's library browser**, never a second one (review round 4,
 blocker 1): the real `ClassicLibraryBrowserView`, hosted through `EmbeddedLibraryBrowserSurface` as
@@ -286,6 +292,13 @@ frame falls outside. The probe prints `DOCKED <form>`. Scripts that dock and und
 (`Dock`, `Undock`, `Parent`: A4, Telos) are not followed yet.
 
 ## Text
+
+Template fields: AIMP 5.40's long names (`%TrackNumber`, `%DiskNumber`, `%PlayCount`…) and the
+short ones AIMP 3 skins use, which AIMP 5.40 still reads though its list no longer names them: `%T`,
+`%A` (album), `%a`/`%R` (artist), `%IN` (position, two digits: "01"), `%TN` (track number, empty
+untagged), `%TC` and `%DC` (the clock and today's date as AIMP writes them, `HH:mm:ss` and
+`yyyy.MM.dd`), `%RT`/`%Rating` (`-`: AIMP's automatic rating comes from play statistics NullPlayer
+does not keep). A field AIMP does not know reads empty.
 
 `@Lng:Section\Key;` names a string of AIMP's own language files, not the skin's: it reads as the
 key's words ("Quick search" for Soot's `Actions\QuickSearch`).

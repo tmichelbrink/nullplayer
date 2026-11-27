@@ -5,7 +5,7 @@ anything up; the family pattern is `skills/skin-subsystem-blueprint`.
 
 - **Done** rows are numbered `A<n>` in the order they landed and moved, verbatim, to
   [`docs/aimp/backlog-archive.md`](../docs/aimp/backlog-archive.md); the next free number is
-  A39 (the archive keeps the count).
+  A45 (the archive keeps the count).
 - **Next** is ranked by how many corpus skins a row reaches, measured by the census
   (`reference/harness.md`); a row moves to the archive, numbered, in the change that closes it.
 
@@ -103,9 +103,9 @@ slider frame, AM0006), Dark Lagoon (ACSP version byte 0x20).
     - round 2 left: a picture's `stretchColumns` as a type (in `AIMPSkinImage`), a non-optional
       runtime for the skinned view. (The skin playlist's menu through `PlaylistMenuBuilder`, finding
       14, is done: review round 4.)
-9. **A form's own `Visibility` binding** (`Schema.xml`, 41 forms: Dark v1.7's four windows on
-    counters, Romantik 304's playlist on a tab page, Denon Classic Style's units on commutators) is
-    not read: those windows follow their `Visible` keys only. AIMP's evidence (RealPlayer's EQ key
+9. **A form's own `Visibility` binding** (`Schema.xml`, 41 forms): bound to a counter it is read
+    (A39); on a tab page (Romantik 304's playlist) or a commutator (Denon Classic Style's units) it is
+    not: those windows follow their `Visible` keys only. AIMP's evidence (RealPlayer's EQ key
     opens a form bound to a page index that stays 0) says the binding sets `Visible` when its value
     changes rather than gating it.
 10. **`MagnetRectOffsets`** on the main form: Dual C 846 & CV 1460's window is 608 px tall with its
@@ -137,3 +137,8 @@ slider frame, AM0006), Dark Lagoon (ACSP version byte 0x20).
     B11–B14, B16); the legacy loader's string round trips and the script decoder (C2, C3); the
     layout's `Look`, key-frame rules, settle loops, raw geometry and painter boilerplate (C5–C11,
     C14, C15).
+
+17. **Certification leftovers** (cert kit run 2026-11-27, 505 of 722 certified): keys a skin shows
+    only behind a delayer or a page the probe's click run does not reach (Lumin's `Button_Size_Inc`,
+    Mirillis's `Button16` behind `masa2`), and state frames no host state reaches. Probe reach, not
+    rendering; listed so a later run can tell them from new gaps.

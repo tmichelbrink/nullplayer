@@ -127,7 +127,10 @@ outranks everything*.
 - **Bitmap skins** (tape decks) are layout and state; **modern skins** (Soot) depend on scripts,
   `AutoHide` and cover art.
 - **No oracle.** AIMP is Windows-only. The reference is the skin's catalog screenshot; a diff against
-  it is evidence, not ground truth (blueprint § *A sweep diff is unclassified*).
+  it is evidence, not ground truth (blueprint § *A sweep diff is unclassified*). A rule a doc
+  comment credits to "AIMP 5.40" was measured black-box in real AIMP 5.40 under Wine: a test skin
+  made from a corpus skin with the one control swapped in, driven with test tones and clicks (no
+  AIMP code read or decompiled).
 
 ## Symptom → file
 
