@@ -97,4 +97,13 @@ final class AIMPSkinHostileInputTests: XCTestCase {
             XCTAssertTrue("\(error)".contains("deeper"), "\(error)")
         }
     }
+
+    /// An entry name met twice keeps its first entry: a later copy cannot swap the form or a
+    /// picture behind the one read first.
+    func testADuplicateEntryKeepsTheFirst() throws {
+        let data = Self.project([Self.form, ("aimpmainform.xml", Data("<form".utf8))])
+        let archive = try AIMPSkinArchive.read(data)
+        XCTAssertEqual(try archive.entry("AIMPMainForm.xml").map(archive.payload), Self.form.1)
+        XCTAssertNoThrow(try AIMPSkinLoader.load(data: data))
+    }
 }

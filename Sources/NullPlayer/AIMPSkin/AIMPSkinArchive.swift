@@ -95,9 +95,16 @@ struct AIMPSkinArchive: Sendable {
     /// `header` when it names the skin, else by `main.ini`.
     init(acsp entries: [(name: String, range: Range<Int>)], header: (name: String, author: String), storage: Data) throws {
         var table: [String: Entry] = [:]
-        for entry in entries { table[entry.name.lowercased()] = Entry(name: entry.name, location: .plain(entry.range)) }
+        for entry in entries { Self.file(Entry(name: entry.name, location: .plain(entry.range)), in: &table) }
         try self.init(format: .acsp, meta: nil, entries: table, storage: storage, key: [])
         if !header.name.isEmpty { (name, author) = header }
+    }
+
+    /// Files `entry` by its lowercased name. A name met twice keeps its first entry, whichever
+    /// container it is in: which one a crafted skin draws never depends on how the table was built.
+    private static func file(_ entry: Entry, in entries: inout [String: Entry]) {
+        let key = entry.name.lowercased()
+        if entries[key] == nil { entries[key] = entry }
     }
 
     // MARK: - Reading
@@ -145,7 +152,7 @@ struct AIMPSkinArchive: Sendable {
             }
             let range = try reader.skip(stored)
             let name = base + extensionForACS5Kind(kind)
-            entries[name.lowercased()] = Entry(name: name, location: .scrambled(range, inflatedSize: packed ? size : nil))
+            file(Entry(name: name, location: .scrambled(range, inflatedSize: packed ? size : nil)), in: &entries)
         }
         return try AIMPSkinArchive(format: .acs5, meta: meta, entries: entries, storage: data, key: key)
     }
@@ -252,7 +259,7 @@ struct AIMPSkinArchive: Sendable {
             guard !overflow, start + size <= body.count else {
                 throw AIMPSkinFinding(.entryOutOfBounds, "\(name) lies past the end of the body.")
             }
-            entries[name.lowercased()] = Entry(name: name, location: .plain(start..<(start + size)))
+            file(Entry(name: name, location: .plain(start..<(start + size))), in: &entries)
         }
         return try AIMPSkinArchive(format: format, meta: meta, entries: entries, storage: body, key: [])
     }
@@ -268,7 +275,7 @@ struct AIMPSkinArchive: Sendable {
         for _ in 0..<count {
             let name = try reader.name()
             let range = try reader.skip(try reader.u32())
-            entries[name.lowercased()] = Entry(name: name, location: .plain(range))
+            file(Entry(name: name, location: .plain(range)), in: &entries)
         }
         return try AIMPSkinArchive(format: .project, meta: meta, entries: entries, storage: data, key: [])
     }

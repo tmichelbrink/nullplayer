@@ -368,9 +368,16 @@ enum AIMPSkinLoader {
         let fontShelf = AIMPSkinFonts.shelf(archive.entries.sorted { $0.key < $1.key }
             .filter { $0.key.hasSuffix(".ttf") || $0.key.hasSuffix(".otf") }
             .compactMap { entry -> Data? in
-                guard fontBytes + entry.value.declaredSize <= Self.fontBytes, let data = try? archive.payload(entry.value) else { return nil }
-                fontBytes += data.count
-                return fontBytes <= Self.fontBytes ? data : nil
+                guard fontBytes + entry.value.declaredSize <= Self.fontBytes else { return nil }
+                do {
+                    let data = try archive.payload(entry.value)
+                    fontBytes += data.count
+                    return fontBytes <= Self.fontBytes ? data : nil
+                } catch {
+                    // A font that does not inflate is left out, and said so (`AM0008`).
+                    documents.record(error as? AIMPSkinFinding ?? AIMPSkinFinding(.entryUnreadable, "\(entry.key): \(error)"))
+                    return nil
+                }
             })
 
         // Pictures are read from their headers here and decode when first drawn, within one

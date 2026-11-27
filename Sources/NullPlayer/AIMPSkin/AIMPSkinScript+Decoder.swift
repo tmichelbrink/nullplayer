@@ -5,39 +5,25 @@ extension AIMPSkinScript {
 
     /// `FSXMLBIN`, then nodes of `{ u16 + UTF-16LE tag, u16 + UTF-16LE attribute text, u32 child count }`.
     static func parse(_ data: Data) throws -> AIMPNode {
-        let bytes = [UInt8](data)
-        guard bytes.count > 8, bytes.prefix(8).elementsEqual("FSXMLBIN".utf8) else { throw Unsupported(what: "not FSXMLBIN") }
-        var at = 8
+        guard data.count > 8, data.prefix(8) == Data("FSXMLBIN".utf8) else { throw Unsupported(what: "not FSXMLBIN") }
+        var reader = AIMPSkinBytes(data, code: .entryUnreadable)
+        reader.offset = 8
         var nodes = 0
-        func u16() throws -> Int {
-            guard at + 2 <= bytes.count else { throw Unsupported(what: "truncated") }
-            defer { at += 2 }
-            return Int(bytes[at]) | Int(bytes[at + 1]) << 8
-        }
-        func wide() throws -> String {
-            let n = try u16() * 2
-            guard at + n <= bytes.count else { throw Unsupported(what: "truncated") }
-            defer { at += n }
-            return String(bytes: bytes[at..<(at + n)], encoding: .utf16LittleEndian) ?? ""
-        }
         func node(_ depth: Int) throws -> AIMPNode {
             nodes += 1
             guard depth < AIMPSkinPolicy.xmlDepth, nodes < AIMPSkinPolicy.xmlNodes else { throw Unsupported(what: "too deep") }
-            let tag = try wide()
+            let tag = try reader.utf16(units: reader.u16())
             var attributes: [String: String] = [:]
-            let text = try wide()
-            var rest = Substring(text)
+            var rest = Substring(try reader.utf16(units: reader.u16()))
             // `name="value"` pairs; a value never holds a double quote.
             while let eq = rest.firstIndex(of: "=") {
                 let key = rest[..<eq].trimmingCharacters(in: .whitespaces)
                 let afterQuote = rest.index(eq, offsetBy: 2, limitedBy: rest.endIndex) ?? rest.endIndex
-                guard afterQuote <= rest.endIndex, let close = rest[afterQuote...].firstIndex(of: "\"") else { break }
+                guard let close = rest[afterQuote...].firstIndex(of: "\"") else { break }
                 attributes[key] = decodeEntities(String(rest[afterQuote..<close]))
                 rest = rest[rest.index(after: close)...]
             }
-            guard at + 4 <= bytes.count else { throw Unsupported(what: "truncated") }
-            let count = (0..<4).reduce(0) { $0 | Int(bytes[at + $1]) << (8 * $1) }
-            at += 4
+            let count = try reader.u32()
             var children: [AIMPNode] = []
             for _ in 0..<count { children.append(try node(depth + 1)) }
             return AIMPNode(tag: tag, attributes: attributes, children: children, text: nil)

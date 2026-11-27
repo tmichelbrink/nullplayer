@@ -126,8 +126,6 @@ extension AIMPSkinScript.Run {
         switch call {
         case .dataAsText:
             try arity(2)
-            // A tabbed group's page reads as its name: Mayak MP-140C builds `Skin.VUAveraged` +
-            // 'Green' from its `Colour` group.
             // Through the text reader the four-argument form uses: a page as its name (Mayak MP-140C
             // builds `Skin.VUAveraged` + 'Green' from its `Colour` group), `FileInfo` as the title, a
             // number as its digits.

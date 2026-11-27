@@ -56,7 +56,7 @@ struct AIMPSkinAIMP2 {
         // `links.system`: the skin editor's shared pictures, one object drawn with another's
         // (Hameleon's equalizer bands with `PreAmp`'s, its effect sliders with `Speed`'s, its
         // rating with `PlaylistRating`'s). A picture the skin ships itself wins.
-        for (target, source) in Self.links(documents.archive) {
+        for (target, source) in Self.links(documents) {
             let key = stem(target) + ".img"
             if renamed[key] == nil, let image = renamed[stem(source) + ".img"] { renamed[key] = image }
         }
@@ -71,8 +71,13 @@ struct AIMPSkinAIMP2 {
 
     /// `links.system`'s aliases, lowercased: 64-byte records, the picture an object draws with
     /// (32 bytes, NUL-padded, the Windows code page) and the picture it is (32 bytes).
-    static func links(_ archive: AIMPSkinArchive) -> [(target: String, source: String)] {
-        guard let entry = archive.entry("links.system"), let data = try? archive.payload(entry) else { return [] }
+    static func links(_ documents: AIMPSkinDocuments) -> [(target: String, source: String)] {
+        guard let entry = documents.archive.entry("links.system") else { return [] }
+        let data: Data
+        do { data = try documents.archive.payload(entry) } catch {
+            documents.record(error as? AIMPSkinFinding ?? AIMPSkinFinding(.entryUnreadable, "links.system: \(error)"))
+            return []
+        }
         let bytes = [UInt8](data)
         func name(_ range: Range<Int>) -> String {
             let used = bytes[range].prefix { $0 != 0 }

@@ -89,9 +89,11 @@ enum AIMPSkinScript {
         init(_ archive: AIMPSkinArchive, findings: inout [AIMPSkinFinding]) {
             for ext in [".script", ".fsxml"] {
                 for (name, entry) in archive.entries.sorted(by: { $0.key < $1.key }) where name.hasSuffix(ext) {
-                    guard let data = try? archive.payload(entry), data.prefix(8) == Data("FSXMLBIN".utf8) else { continue }
                     let stem = String(name.dropLast(ext.count))
                     do {
+                        // A script that does not inflate is unreadable as one that does not decode is.
+                        let data = try archive.payload(entry)
+                        guard data.prefix(8) == Data("FSXMLBIN".utf8) else { continue }
                         programs[stem] = try compile(parse(data))
                         unreadable[stem] = nil
                     } catch {

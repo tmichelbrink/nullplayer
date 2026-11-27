@@ -105,14 +105,14 @@ extension AIMPSkinScript {
         /// handler only animates: what it asks of the player is dropped.
         func visualize() {
             if host.player.playState == .playing, !host.feedback.spectrum.isEmpty {
-                let asked = (actions, eqWrites)
-                defer { (actions, eqWrites) = asked }
-                for (_, provider) in skin.index.visualizationHandlers {
-                    guard let script = provider.script, let program = program(script) else { continue }
-                    do {
-                        try atomically { _ = try run(program) }
-                    } catch {
-                        if AIMPSkinTrace.items || AIMPSkinTrace.visualize { print("  VISUAL_FAIL \(script) \(error)") }
+                droppingRequests {
+                    for (_, provider) in skin.index.visualizationHandlers {
+                        guard let script = provider.script, let program = program(script) else { continue }
+                        do {
+                            try atomically { _ = try run(program) }
+                        } catch {
+                            if AIMPSkinTrace.items || AIMPSkinTrace.visualize { print("  VISUAL_FAIL \(script) \(error)") }
+                        }
                     }
                 }
             }
@@ -142,12 +142,12 @@ extension AIMPSkinScript {
                         state.animation[name].scriptInputs = [position]
                         changed = true
                         guard let program = program(script) else { continue }
-                        let asked = (actions, eqWrites)
                         // Out of budget, it has not run: it runs on a later tick, as a bound one does.
-                        if stopsOnLimit({ try runCounter(name, program, at: position) }) {
-                            state.animation[name].scriptInputs = nil
+                        droppingRequests {
+                            if stopsOnLimit({ try runCounter(name, program, at: position) }) {
+                                state.animation[name].scriptInputs = nil
+                            }
                         }
-                        (actions, eqWrites) = asked
                         continue
                     }
                     let inputs = flow.inputs(of: link)
@@ -158,11 +158,11 @@ extension AIMPSkinScript {
                     state.animation[name].scriptInputs = inputs
                     changed = true
                     guard let program = program(script) else { continue }
-                    let asked = (actions, eqWrites)
-                    if stopsOnLimit({ try runCounter(name, program, at: flow.value(of: link)) }) {
-                        state.animation[name].scriptInputs = previous
+                    droppingRequests(if: previous == nil) {
+                        if stopsOnLimit({ try runCounter(name, program, at: flow.value(of: link)) }) {
+                            state.animation[name].scriptInputs = previous
+                        }
                     }
-                    if previous == nil { (actions, eqWrites) = asked }
                 }
                 // Event handlers bound to a value run when it moves: `prvPlayerState`'s `OnTrackStarted`
                 // and `OnTrackFinished` (a count the host keeps), or a provider (Mayak-232's
@@ -181,9 +181,9 @@ extension AIMPSkinScript {
                     // Soot's volume ring waits for the volume to move).
                     if previous == nil, let event = link.pin, event.hasPrefix("On") || event == "Action",
                        event != "OnTrackStarted" || host.player.playState != .playing { continue }
-                    let asked = (actions, eqWrites)
-                    if handle(name, sender: name) { state.animation[name].scriptInputs = previous }
-                    if previous == nil { (actions, eqWrites) = asked }
+                    droppingRequests(if: previous == nil) {
+                        if handle(name, sender: name) { state.animation[name].scriptInputs = previous }
+                    }
                 }
                 if !changed { break }
             }
@@ -201,8 +201,6 @@ extension AIMPSkinScript {
                 state.script[name].visibleGate = value
             }
         }
-
-
 
         /// Sets counter `name` to `value`. A `ScriptableOperatorCounter` runs its script with `State`
         /// the new value (Pioneer's play key sets `RemoteControllScript` to 1, and the script
@@ -269,6 +267,14 @@ extension AIMPSkinScript {
         func run(_ program: Program, sender: String = "", arguments: [String: Double] = [:],
                  statePosition: Double = 0) throws -> Double {
             try Run(engine: self, program: program, sender: sender, arguments: arguments).execute(statePosition: statePosition)
+        }
+
+        /// `body`, what it asks of the player dropped when `drop` holds (a run that only sets the
+        /// skin up, as it loads, or a visualization handler, which only animates).
+        private func droppingRequests(if drop: Bool = true, _ body: () -> Void) {
+            let asked = (actions, eqWrites)
+            body()
+            if drop { (actions, eqWrites) = asked }
         }
 
         /// `body`, all or nothing: when it throws, what it set and asked for is undone.
