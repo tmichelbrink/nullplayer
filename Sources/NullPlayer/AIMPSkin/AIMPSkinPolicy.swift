@@ -12,6 +12,11 @@ enum AIMPSkinPolicy {
     /// AM0005. One inflated entry, or a whole `.acs4` body. Technics SL-1200's body is 539 MB
     /// (high-resolution artwork in an `.acs4`), measured 2026-10-31.
     static let inflatedBytes = 1_024 * 1_024 * 1_024
+    /// AM0005, per load: what reading every picture's header may inflate together, counted from the
+    /// sizes the container declares before a byte is inflated. Skins are compressed already, so a
+    /// real one inflates to about its file size (`fileBytes`); 32,768 entries of 1 GiB each would
+    /// otherwise each be inflated for their header.
+    static let loadInflatedBytes = 2 * 1_024 * 1_024 * 1_024
     /// AM0006, per frame: animation filmstrips are wide by design (Vega MP-120's tape reel is
     /// 58,580 px of 182 px frames). Memory is AM0007's job.
     static let imageSide = 16_384
@@ -20,6 +25,10 @@ enum AIMPSkinPolicy {
     /// go first, so a skin's pictures may sum past it (Mayak-203's 1.1 Gpx, alternative reels of
     /// which one set shows; its window draws ~240 Mpx).
     static let decodedPixels = 256 * 1_024 * 1_024
+    /// The largest frame `AIMPSkinRenderer.frame` draws, in device pixels: each side, and the whole
+    /// at most `decodedPixels`. The window holds a form to four times its natural size
+    /// (`AIMPSkinSizing`), but the renderer is the engine's own entry and does not rely on it.
+    static let frameSide = 32_768
     /// AM0009. Nesting and node count of one binary or text XML document.
     static let xmlDepth = 256
     static let xmlNodes = 1_000_000

@@ -381,12 +381,17 @@ enum AIMPSkinLoader {
         // AIMP 2's bitmaps are laid out as its form is read (`AIMPSkinAIMP2.layOut`).
         let layouts = archive.format != .acsp ? archive.mainINI.map(AIMPSkinAIMP3.bitmapLayouts) ?? [:] : [:]
         var images: [String: AIMPSkinImage] = [:]
+        var inflated = 0
         for (name, entry) in archive.entries.sorted(by: { $0.key < $1.key }) {
             guard let ext = [".img", ".myimg", ".bmp"].first(where: name.hasSuffix), archive.mainINI != nil || ext != ".bmp" else { continue }
             let stem = String(name.dropLast(ext.count))
             if ext != ".img", archive.entries[stem + ".img"] != nil { continue }
             if ext == ".bmp", archive.entries[stem + ".myimg"] != nil { continue }
             if let dash = stem.lastIndex(of: "-"), Int(stem[stem.index(after: dash)...]) != nil { continue }
+            inflated += entry.declaredSize
+            guard inflated <= AIMPSkinPolicy.loadInflatedBytes else {
+                throw AIMPSkinFinding(.inflatedTooLarge, "The pictures inflate past \(AIMPSkinPolicy.loadInflatedBytes) bytes.")
+            }
             do {
                 let payload = try archive.payload(entry)
                 let source = { try archive.payload(entry) }

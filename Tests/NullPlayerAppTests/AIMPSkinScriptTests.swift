@@ -399,6 +399,28 @@ final class AIMPSkinScriptTests: XCTestCase {
         XCTAssertTrue(formatted.value.string.hasPrefix("1.000"))
     }
 
+    /// Text work is charged by the byte: a loop copying a long text over and over, each pass under
+    /// the text limit, spends the budget long before its steps do, so one tick cannot move
+    /// gigabytes a step at a time.
+    func testCopyingLongTextSpendsTheBudget() throws {
+        let skin = try Self.skin(scripts: ["Churn": """
+        <program><procedure><name text="Execute"/><compoundstmt>
+          <assignstmt><dsgn><node text="Where"/></dsgn><expr><string text="'ab'"/></expr></assignstmt>
+          <whilestmt><expr><number text="1"/></expr><compoundstmt>
+            <assignstmt><dsgn><node text="Where"/></dsgn>
+              <expr><dsgn><node text="Copy"/>
+                <expr><dsgn><node text="Where"/></dsgn><op text="+"/><dsgn><node text="Where"/></dsgn></expr>
+                <expr><number text="1"/></expr><expr><number text="30000"/></expr></dsgn></expr></assignstmt>
+          </compoundstmt></whilestmt>
+        </compoundstmt></procedure></program>
+        """])
+        let budget = AIMPSkinScript.Budget()
+        let engine = AIMPSkinScript.Engine(skin: skin, host: AIMPSkinHostState(player: .probe), state: AIMPSkinState(), budget: budget)
+        XCTAssertTrue(engine.handle("Churn", sender: "Churn"), "stopped on a limit")
+        XCTAssertTrue(budget.isSpent)
+        XCTAssertLessThan(budget.steps, 500, "spent by bytes, not steps")
+    }
+
     /// A handler the text limit stops is undone as one the step budget stops is, though the tick's
     /// step budget is not spent: what it set before the limit does not stay.
     func testAHandlerStoppedByTheTextLimitIsUndone() throws {

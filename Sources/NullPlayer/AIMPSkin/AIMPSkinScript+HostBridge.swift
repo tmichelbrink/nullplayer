@@ -142,7 +142,14 @@ extension AIMPSkinScript.Run {
         case .configGet:
             return .string(engine.state.script.config[args.first?.string ?? ""] ?? (args.count > 1 ? args[1].string : ""))
         case .configSet:
-            if args.count >= 2 { engine.state.script.config[args[0].string] = args[1].string }
+            // Held to `storedKeyLimit` keys of `storedTextLimit` bytes: the store is copied and
+            // compared with every job, so a loop of fresh names would grow every frame's work.
+            guard args.count >= 2 else { return .none }
+            let key = args[0].string, text = args[1].string
+            let config = engine.state.script.config
+            guard key.utf8.count <= Self.longestPropertyPath, text.utf8.count <= Self.storedTextLimit,
+                  config[key] != nil || config.count < Self.storedKeyLimit else { return .none }
+            engine.state.script.config[key] = text
             return .none
         case .findObject:
             return .object(HostObject(args.first?.string ?? "", in: skin))
@@ -214,9 +221,27 @@ extension AIMPSkinScript.Run {
     /// The longest dotted property path a script may set, and how many names it may hold.
     static let longestPropertyPath = 256
     static let deepestPropertyPath = 8
+    /// The most a script may keep: text per value (a caption, a colour, a template), and keys per
+    /// store (`ConfigSet`'s, one object's `properties`). The busiest gate skin keeps a few dozen
+    /// short values; the state is copied and compared with every job, so it stays small.
+    static let storedTextLimit = AIMPSkinTemplate.textLimit
+    static let storedKeyLimit = 256
+
+    /// Whether the skin has anything of `object`'s name for a script to set: an element, a
+    /// provider, a list, a group or an item. Anything else is no object of the skin's, and setting
+    /// it would only grow the state.
+    private func isKnown(_ object: HostObject) -> Bool {
+        if case .skin = object.kind {
+            let names = skin.index.names
+            return object.element != nil || object.provider != nil || object.list != nil
+                || names.groups.contains(object.name) || names.items.contains(object.name)
+        }
+        return true
+    }
 
     private func set(_ object: HostObject, _ path: String, to value: Value) throws {
         let name = object.name
+        guard isKnown(object) else { return }
         switch (object.kind, AIMPSkinScript.Property(path)) {
         case (_, .activePage):
             engine.state.script[name].activePage = AIMPSkinScript.integer(value.number)
@@ -263,6 +288,7 @@ extension AIMPSkinScript.Run {
         case (_, .margin(let side)):
             if let side { engine.state.script[name].margins[side] = value.number }
         case (_, .template):
+            guard value.textBytes <= Self.storedTextLimit else { return }
             engine.state.script[name].text = value.string
         case (_, .opacity):
             engine.state.animation[name].opacity = min(255, max(0, value.number))
@@ -291,6 +317,7 @@ extension AIMPSkinScript.Run {
             // no alpha) is opaque. Of anything else (a form, a provider, a name the skin lacks) it
             // is AIMP's own, which nothing here draws: the run goes on.
             if path == "Expression", object.provider?.kind == .concatenator {
+                guard value.textBytes <= Self.storedTextLimit else { return }
                 engine.state.script[name].expression = value.string
                 return
             }
@@ -306,6 +333,9 @@ extension AIMPSkinScript.Run {
             } else {
                 text = value.string
             }
+            let properties = engine.state.script[name].properties
+            guard text.utf8.count <= Self.storedTextLimit,
+                  properties[path] != nil || properties.count < Self.storedKeyLimit else { return }
             engine.state.script[name].properties[path] = text
         }
     }

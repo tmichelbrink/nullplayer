@@ -2,7 +2,7 @@ import XCTest
 @testable import NullPlayer
 
 final class INIFileTests: XCTestCase {
-    private let text = "key=before\n[FILE]\n SkinName =Micro Aimp \n; note=x\n// also=x\n[Label] trailing\nTemplate= / %S\n[file]\nAuthor=Me\n[broken\nlost=1\n"
+    private let text = "key=before\n[FILE]\n SkinName =Micro Aimp \n; note=x\n// also=x\nSkinName=second\n[Label] trailing\nTemplate= / %S\n[file]\nAuthor=Me\n[broken\nlost=1\n"
 
     func testSectionsAndKeysInAnyCaseTheValueAsWritten() {
         let ini = INIFile(text, repeatedSections: .continued)
@@ -19,6 +19,18 @@ final class INIFileTests: XCTestCase {
         XCTAssertNil(ini["file", "; note"])
         XCTAssertNil(ini["file", "// also"])
         XCTAssertEqual(ini["file", "lost"], "1", "a header with no ] is skipped: its lines stay in the section before")
+    }
+
+    /// As `GetPrivateProfileString` reads it, the first value of a key wins; every line stays, in order.
+    func testTheFirstValueOfAKeyWins() {
+        let ini = INIFile(text)
+        XCTAssertEqual(ini.value("FILE", "SkinName"), "Micro Aimp")
+        XCTAssertEqual(ini["FILE"]?.lines.map(\.value), ["Micro Aimp", "second"])
+    }
+
+    /// A repeated header is ignored unless asked otherwise, as Sonique's `skin.ini` is read.
+    func testARepeatedHeaderIsIgnoredByDefault() {
+        XCTAssertNil(INIFile(text).value("FILE", "Author"))
     }
 
     func testARepeatedHeaderCarriesOnOrIsIgnored() {

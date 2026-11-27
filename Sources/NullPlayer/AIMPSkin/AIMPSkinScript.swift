@@ -36,13 +36,19 @@ enum AIMPSkinScript {
     /// the gate corpus in an optimized build: the busiest skin's tick takes 1,734 steps
     /// (Technicss, under 1 ms), a load or a click at most 64; a runaway loop of host calls spends
     /// 20,000 steps in about 10 ms, a third of a frame at 30 fps.
+    ///
+    /// Steps alone do not bound the work: one step can copy a long text. So text work is charged
+    /// too, by the bytes each `+`, `Insert`, `Format` and string built-in reads and makes
+    /// (`charge`), against `byteLimit`. The busiest gate skin's tick moves a few kilobytes.
     final class Budget {
         static let stepLimit = 20_000
         static let depthLimit = 32
+        static let byteLimit = 4 << 20
         private(set) var steps = 0
+        private(set) var bytes = 0
         private var depth = 0
 
-        var isSpent: Bool { steps >= Self.stepLimit }
+        var isSpent: Bool { steps >= Self.stepLimit || bytes >= Self.byteLimit }
 
         /// Thrown when the budget runs out; a script's `except` does not catch it.
         struct Spent: Error, CustomStringConvertible {
@@ -53,6 +59,12 @@ enum AIMPSkinScript {
         func step() throws {
             steps += 1
             guard steps < Self.stepLimit else { throw Spent(what: "step budget") }
+        }
+
+        /// Charges `count` bytes of text work.
+        func charge(_ count: Int) throws {
+            bytes += count
+            guard bytes < Self.byteLimit else { throw Spent(what: "text budget") }
         }
 
         /// `body`, one routine or handler deeper.

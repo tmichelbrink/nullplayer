@@ -75,16 +75,13 @@ width` that share the extra width while the rest keeps its size (Vega AIO's tran
 
 ## AIMP 3.0 BMP pictures
 
-> Decoded, not read by NullPlayer yet: such skins are refused (`AM0011`) until a reader of their own
-> builds their forms directly (the earlier translation to AIMP 4 XML was removed).
-
 `.acs3` kind 1 keeps its pictures as Windows bitmaps (`AddBtn.bmp`): `BITMAPINFOHEADER`, uncompressed,
 mostly 32 bits with straight alpha (every alpha byte 0: opaque), else 24 bits, rarely 8 with a
 palette; bottom-up. What `ASEIMG32` keeps in its header is the object's `main.ini` section:
 `SkinFrames`, `SkinLayout` (1 stacked, 0 side by side), `Margins` (left, top, right, bottom),
 `StretchMode` (1 stretched) and with it `TLC`/`TRC`, the two stretched columns as `left, top, right,
 bottom` (`TRC=281,0,281,0`, empty, for none). `SkinHitTestMask`/`SkinHitTestMaskFrame` name a mask
-frame (not read; the painter finds masks itself). One decoder (the earlier bitmap decoder) reads these and
+frame (not read; the painter finds masks itself). One decoder (`AIMPSkinBitmap`) reads these and
 AIMP 2's: magenta `FF00FF` is clear in both (`AIMP 2 (.acs)` below).
 
 ## AIMP 3.0 forms

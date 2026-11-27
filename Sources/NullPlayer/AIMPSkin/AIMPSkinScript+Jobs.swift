@@ -36,9 +36,11 @@ extension AIMPSkinScript {
 
     /// Runs `jobs` in order on one budget, each on a fresh engine over the state the one before it
     /// left; returns what each did and the state they leave. Pure: it reads only what it is given,
-    /// so it runs on any thread (the window runs it on the AIMP queue, `AIMPSkinScriptScheduler`).
+    /// so it runs on any thread with a deep stack (`AIMPSkinWorker.hasDeepStack`; the window runs
+    /// it on the AIMP queue, `AIMPSkinScriptScheduler`).
     static func perform(_ jobs: [Job], skin: AIMPSkin, host: AIMPSkinHostState,
                         state: AIMPSkinState) -> (outcomes: [Outcome], state: AIMPSkinState) {
+        assert(AIMPSkinWorker.hasDeepStack, "AIMP skin scripts need a deep stack (AIMPSkinWorker)")
         let budget = Budget()
         var state = state
         let outcomes = jobs.map { job in

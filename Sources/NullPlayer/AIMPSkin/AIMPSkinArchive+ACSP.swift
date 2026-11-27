@@ -8,7 +8,7 @@ import Foundation
 ///   author empty and credits them in `main.ini`'s `[FILE]`.
 ///
 /// Entry names stay as the package spells them: version 2's pictures are `<Object>_skin.bmp`,
-/// version 3's `<Object>.bmp` (`AIMPSkinLegacy` reads both).
+/// version 3's `<Object>.bmp` (`AIMPSkinAIMP2` reads both).
 extension AIMPSkinArchive {
     static func readACSP(_ data: Data) throws -> AIMPSkinArchive {
         guard data.count >= 0x4C else { throw AIMPSkinFinding(.notAnArchive, "The ACSP header is \(data.count) bytes.") }

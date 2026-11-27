@@ -38,6 +38,12 @@ extension AIMPSkinScript {
             }
         }
 
+        /// The bytes of text it holds, which the budget charges (`Budget.charge`).
+        var textBytes: Int {
+            if case .string(let s) = self { return s.utf8.count }
+            return 0
+        }
+
         /// What it is, for a run that stops on it.
         var described: String {
             switch self {
@@ -362,8 +368,8 @@ extension AIMPSkinScript {
         /// `in` tests a set, and a comparison compares text unless a number meets a number (`'1.0' =
         /// 1` holds, `'10' < '9'` too, as Delphi's variants compare).
         private func apply(_ op: BinaryOperator, _ left: Value, _ right: Value) throws -> Value {
-            if op == .add, case .string = left { return try Self.joined(left.string, right.string) }
-            if op == .add, case .string = right { return try Self.joined(left.string, right.string) }
+            if op == .add, case .string = left { return try joined(left.string, right.string) }
+            if op == .add, case .string = right { return try joined(left.string, right.string) }
             func truth(_ condition: Bool) -> Value { .number(condition ? 1 : 0) }
             guard let numeric = op.numeric else {
                 guard case .array(let members) = right else { return .number(0) }
@@ -391,13 +397,24 @@ extension AIMPSkinScript {
 
         /// The most text one `+` may make. A caption or a path is a few hundred characters; a skin
         /// that doubles a string in a loop would reach gigabytes long before its step budget ran out.
-        static let textLimit = 1 << 20
+        static let textLimit = 64 << 10
 
-        /// `left` and `right` joined, unless that passes `textLimit`: the run stops as if out of
-        /// budget, and a skin's `except` does not catch it.
-        private static func joined(_ left: String, _ right: String) throws -> Value {
-            guard left.utf8.count + right.utf8.count <= textLimit else { throw Budget.Spent(what: "text length") }
+        /// `left` and `right` joined, unless that passes `textLimit`, charged to the budget: the run
+        /// stops as if out of budget, and a skin's `except` does not catch it.
+        private func joined(_ left: String, _ right: String) throws -> Value {
+            let count = left.utf8.count + right.utf8.count
+            guard count <= Self.textLimit else { throw Budget.Spent(what: "text length") }
+            try engine.budget.charge(count)
             return .string(left + right)
+        }
+
+        /// A built-in's result for `args`, its text work (what it reads and what it makes) charged
+        /// to the budget: `Copy`, `Pos` or `StringReplace` on a long text cost what they copy.
+        private func called(_ builtin: Builtin, _ args: [Value]) throws -> (value: Value, outputs: [Int: Value]) {
+            try engine.budget.charge(args.reduce(0) { $0 + $1.textBytes })
+            let result = try builtin.call(args)
+            try engine.budget.charge(result.outputs.values.reduce(result.value.textBytes) { $0 + $1.textBytes })
+            return result
         }
 
         /// Whether a comparison is numeric: a number against a number, or against text that reads as one.
@@ -461,7 +478,7 @@ extension AIMPSkinScript {
             if case .builtin(let builtin) = call.target, builtin.readsVariable {
                 var args = [lookup(call.arguments[0].variable ?? "") ?? .none]
                 args += try call.arguments.dropFirst().map { try evaluate($0.value) }
-                return write(try builtin.call(args), to: call.arguments)
+                return write(try called(builtin, args), to: call.arguments)
             }
             let args = try call.arguments.map { try evaluate($0.value) }
             switch call.target {
@@ -470,7 +487,7 @@ extension AIMPSkinScript {
                 var writingBack: [Int: String] = [:]
                 for (i, argument) in call.arguments.enumerated() { if let variable = argument.variable { writingBack[i] = variable } }
                 return try run(index, arguments: args, writingBack: writingBack)
-            case .builtin(let builtin): return write(try builtin.call(args), to: call.arguments)
+            case .builtin(let builtin): return write(try called(builtin, args), to: call.arguments)
             case .host(let host): return try self.host(host, args)
             case .unresolved:
                 if let target = withObjects.last { return try method(target, Member(call.name), args) }

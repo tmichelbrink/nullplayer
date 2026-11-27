@@ -18,7 +18,7 @@ header checked), every `.lng` through `INIFile` (`INIFile+AIMP`).
 | `AM0002` | yes | the file is over `fileBytes` (1 GB), or a `.zip` entry inflates past its declared size on import |
 | `AM0003` | yes | more than `entries` (32,768) entries |
 | `AM0004` | yes | an entry or header field lies past the end of the file |
-| `AM0005` | yes | one entry, or a whole `.acs4` body, inflates past `inflatedBytes` (1 GB) |
+| `AM0005` | yes | one entry, or a whole `.acs4` body, declares or inflates past `inflatedBytes` (1 GB); or a skin's pictures declare more than `loadInflatedBytes` (2 GB) together, counted before any is inflated |
 | `AM0006` | yes | an image's *frame* side is over `imageSide` (16,384 px); a filmstrip's full width is not |
 | `AM0007` | yes | one image alone is over `decodedPixels` (256 Mpx), from its header. Pictures decode when first drawn, and a skin keeps at most `decodedPixels` decoded at once (`AIMPSkinPixelBudget`): a decode that would pass it lets the least recently drawn pictures go, to decode again if drawn again |
 | `AM0008` | **no** | an entry does not inflate, is truncated, or is not an image; or a compiled script (`FSXMLBIN`) does not decode, or has a tree the script compiler does not take: it is skipped |
@@ -26,6 +26,19 @@ header checked), every `.lng` through `INIFile` (`INIFile+AIMP`).
 | `AM0010` | yes | no `AIMPMainForm.xml` |
 | `AM0011` | yes | a container this engine does not read: an `ACSP` version other than 2 or 3 (Dark Lagoon's scrambled `0x20`), or an unknown header kind |
 | `AM0012` | yes (import) | a `.zip` import past `SkinZipLimits.aimpSkins` (`SkinZipExtraction`; entries, total bytes, a ratio past 200:1 above 1 MiB), or a skin in it failing its CRC or size. A skin over the file limit in a zip is `AM0002` |
+
+## Limits past loading
+
+Not codes: what a loaded skin is held to while it runs, each tested by an input crafted past it
+(`AIMPSkinHostileInputTests`, `AIMPSkinScriptTests`, `AIMPSkinModelTests`).
+
+| Limit | What it bounds |
+|---|---|
+| `Budget.stepLimit` (20,000), `depthLimit` (32), `byteLimit` (4 MiB) | one tick's or event's script work: steps, call depth, and the bytes of text its `+`, `Insert`, `Format` and string built-ins read and make |
+| `Run.textLimit` (64 KiB), `formatWidthLimit` (1,024), `expressionDepthLimit` (256) | one text a script makes, one `Format` field, one expression's nesting (refused at compile) |
+| `storedTextLimit` (4 KiB), `storedKeyLimit` (256), `longestPropertyPath` (256), `deepestPropertyPath` (8) | what scripts keep: `ConfigSet`'s store and one object's properties; a `Set` on a name the skin has no object of is ignored |
+| `frameSide` (32,768 px) | the frame `AIMPSkinRenderer.frame` draws, each side, and at most `decodedPixels` in all |
+| `AIMPSkinWorker.stackSize` (16 MB) | the stack layout and scripts run on, asserted in debug builds (`hasDeepStack`) |
 
 ## Tolerated
 

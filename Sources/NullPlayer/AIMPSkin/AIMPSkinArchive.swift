@@ -194,7 +194,12 @@ struct AIMPSkinArchive: Sendable {
             meta = try readMeta(&reader)
             body = reader.offset
             if format == .acs4 {
-                inflatedSize = try AIMPSkinBytes(data, code: .entryOutOfBounds).u32(at: body)
+                let size = try AIMPSkinBytes(data, code: .entryOutOfBounds).u32(at: body)
+                // Refused from the declaration, before a byte is inflated, as an `.acs5` entry is.
+                guard size <= AIMPSkinPolicy.inflatedBytes else {
+                    throw AIMPSkinFinding(.inflatedTooLarge, "The .\(format.rawValue) body declares \(size) bytes.")
+                }
+                inflatedSize = size
                 body += 4
             }
         }

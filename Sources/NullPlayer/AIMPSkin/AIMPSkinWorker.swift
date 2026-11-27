@@ -8,6 +8,13 @@ final class AIMPSkinWorker: @unchecked Sendable {
     /// The stack each worker thread gets.
     static let stackSize = 16 << 20
 
+    /// Whether the current thread has the stack a skin's work needs: a worker's, or the main
+    /// thread's (8 MB, what the tests run on). A dispatch or concurrency thread's 512 KB is not
+    /// enough, so `AIMPSkinRenderer.frame` and `AIMPSkinScript.perform` assert this in debug builds.
+    static var hasDeepStack: Bool {
+        Thread.isMainThread || Thread.current.stackSize >= stackSize
+    }
+
     private let lock = NSCondition()
     private var work: [() -> Void] = []
     private var suspensions = 0

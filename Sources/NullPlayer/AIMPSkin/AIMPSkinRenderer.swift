@@ -13,16 +13,23 @@ import Foundation
 /// - a `LayoutTabbedGroup` shows its active page; `Visible`/`InitialVisible` `False` hides; a
 ///   `Visibility` binding hides when its source (an item's visibility, a provider's pin), shaped by
 ///   its `Expression`, is 0.
+///
+/// It runs on a thread with a deep stack (`AIMPSkinWorker.hasDeepStack`): a skin's layout reads
+/// through itself many levels down.
 enum AIMPSkinRenderer {
     static func frame(_ skin: AIMPSkin, size: CGSize, item rootName: String? = nil, form formName: String? = nil,
                       host: AIMPSkinHostState = .init(), state: AIMPSkinState = .init(),
                       interaction: AIMPSkinInteraction = .init(), scale: CGFloat = 1) -> AIMPSkinFrame? {
+        assert(AIMPSkinWorker.hasDeepStack, "AIMP skin layout needs a deep stack (AIMPSkinWorker)")
         let flow = AIMPSkinDataflow(skin: skin, host: host, state: state)
         // `scale` device pixels per skin pixel: drawn at the screen's resolution, what NullPlayer
         // draws itself (text, the VU meters, the spectrum) is sharp at any UI size.
         let scale = max(1, scale)
+        // Checked as doubles first: an infinite or NaN size would trap converting to `Int`.
+        let sides = 0...CGFloat(AIMPSkinPolicy.frameSide)
+        guard sides.contains(size.width * scale), sides.contains(size.height * scale) else { return nil }
         let width = Int((size.width * scale).rounded(.up)), height = Int((size.height * scale).rounded(.up))
-        guard width > 0, height > 0,
+        guard width > 0, height > 0, width * height <= AIMPSkinPolicy.decodedPixels,
               let layout = AIMPSkinLayout(flow: flow, interaction: interaction).tree(size: size, item: rootName, form: formName),
               let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
                                       space: CGColorSpace(name: CGColorSpace.sRGB)!,

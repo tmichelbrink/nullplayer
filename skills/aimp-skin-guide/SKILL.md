@@ -87,7 +87,7 @@ controls are driven by `AIMP_RENDER_LIVE=1`, then `AIMP_RENDER_CLICK`, `AIMP_REN
     session's; a launch's restore of the playlist or library waits for the first skin
     (`deferUntilSkinLoads`).
 - **Skins:** Skins › AIMP lists `Application Support/NullPlayer/AIMPSkins` (`AIMPSkinImporter`,
-  selection key `aimpSkinName`). A `.zip` is bounded before it is written (`AIMPSkinZipLimits`,
+  selection key `aimpSkinName`). A `.zip` is bounded before it is written (`SkinZipLimits.aimpSkins`,
   `AM0012`). A name is one skin: installing `X.acs4` replaces `X.acs5`, of two left from before
   `.acs5` lists, and removing the name removes every file of it.
 
