@@ -91,6 +91,8 @@ final class AIMPSkinStateChangesTests: XCTestCase {
         after.lists.playlistTop = 4
         after.lists.playlistSearch = "word"
         XCTAssertEqual(Mirror(reflecting: after.script).children.count, 5, "a part added to Script needs setting here, and a field in Changes")
+        XCTAssertEqual(Mirror(reflecting: after).children.count, 3, "a part added to the state needs setting here, and a field in Changes")
+        XCTAssertEqual(Mirror(reflecting: AIMPSkinState.Animation()).children.count, 1, "a part added to Animation needs a field in Changes")
         carried(AIMPSkinState(), after)
         carried(after, AIMPSkinState())
     }

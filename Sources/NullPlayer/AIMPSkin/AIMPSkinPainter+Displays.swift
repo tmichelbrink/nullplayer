@@ -223,10 +223,7 @@ extension AIMPSkinPainter {
         let channel = trace.channel == "ssRight" ? host.feedback.levelR : trace.channel == "ssLeft" ? host.feedback.levelL
             : max(host.feedback.levelL, host.feedback.levelR)
         let bands = 12
-        let amplitudes = (0..<bands).map { band -> Double in
-            let from = band * spectrum.count / bands, to = max(from + 1, (band + 1) * spectrum.count / bands)
-            return spectrum[from..<min(to, spectrum.count)].max() ?? 0
-        }
+        let amplitudes = (0..<bands).map { Self.band($0, of: bands, in: spectrum) }
         let total = max(0.001, amplitudes.reduce(0, +))
         let path = CGMutablePath()
         for step in 0...Int(inner.width) {
@@ -248,6 +245,12 @@ extension AIMPSkinPainter {
         context.restoreGState()
     }
 
+    /// Band `index` of `count` across `levels`: the loudest of its share of them, at least one.
+    static func band(_ index: Int, of count: Int, in levels: [Double]) -> Double {
+        let from = index * levels.count / count, to = max(from + 1, (index + 1) * levels.count / count)
+        return levels[from..<min(to, levels.count)].max() ?? 0
+    }
+
     /// `ColumnsCount` bars across the rect, `ColumnsIndent` apart, each as tall as its share of the
     /// spectrum, in the control's `Color` (a light default when it names none).
     func drawSpectrum(_ spectrum: AIMPControlClass.Spectrum, in rect: CGRect) {
@@ -262,8 +265,7 @@ extension AIMPSkinPainter {
         let lit = image(spectrum.peakColumns)?.frame(0)
         let segment = spectrum.peakSegment
         for i in 0..<columns {
-            let from = i * levels.count / columns, to = max(from + 1, (i + 1) * levels.count / columns)
-            let level = levels[from..<min(to, levels.count)].max() ?? 0
+            let level = Self.band(i, of: columns, in: levels)
             var height = (rect.height * CGFloat(min(1, max(0, level)))).rounded()
             let column = CGRect(x: rect.minX + CGFloat(i) * (width + indent), y: rect.maxY - height, width: width, height: height)
             guard let lit else {

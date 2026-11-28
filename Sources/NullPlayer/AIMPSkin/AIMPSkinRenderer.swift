@@ -70,8 +70,7 @@ enum AIMPSkinRenderer {
         if rootName == nil, formName == nil, !search.pictured, skin.index.sizing[""] != nil {
             // By the pages it shows; where those measure too little before its scripts run
             // (IpplePlay's), by every page, as all its pages could show.
-            let everyPage = AIMPSkinLayout(flow: docking.flow)
-            everyPage.leastByEveryPage = true
+            let everyPage = AIMPSkinLayout(flow: docking.flow, leastByEveryPage: true)
             for docked in [docking.leastSize(root), everyPage.leastSize(root)]
             where docked.width >= AIMPSkinPolicy.leastWindowSide && docked.height >= AIMPSkinPolicy.leastWindowSide { return docked }
         }

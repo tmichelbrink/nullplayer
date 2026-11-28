@@ -6,18 +6,11 @@ import XCTest
 /// have their own (`AIMPSkinScriptTests`, `AIMPSkinModelTests`: the step, depth, text and expression
 /// limits; a dock site naming its own form; a concatenator ladder).
 final class AIMPSkinHostileInputTests: XCTestCase {
-    private static func u32(_ value: Int) -> Data { withUnsafeBytes(of: UInt32(truncatingIfNeeded: value).littleEndian) { Data($0) } }
-
-    private static func utf16LE(_ text: String) -> Data {
-        Data([UInt8(text.utf16.count & 0xFF), UInt8(text.utf16.count >> 8)]) + (text.data(using: .utf16LittleEndian) ?? Data())
-    }
+    private static func u32(_ value: Int) -> Data { AIMPTestProject.u32(value) }
 
     /// A project file (`ACSJ`) of `entries`, its count `count` when given.
     private static func project(_ entries: [(String, Data)], count: Int? = nil) -> Data {
-        let meta = utf16LE("Test") + utf16LE("") + utf16LE("") + [0]
-        var data = Data("ACSJ".utf8) + Data(count: 9) + u32(meta.count) + meta + u32(count ?? entries.count)
-        for (name, bytes) in entries { data += utf16LE(name) + u32(bytes.count) + bytes }
-        return data
+        AIMPTestProject.data(entries, count: count)
     }
 
     private static let form = ("AIMPMainForm.xml", Data(#"<form name="AIMPMainForm"/>"#.utf8))
@@ -59,7 +52,7 @@ final class AIMPSkinHostileInputTests: XCTestCase {
     func testAnEntryPastTheEndIsRefused() {
         var data = Self.project([])
         data.replaceSubrange((data.count - 4)..<data.count, with: Self.u32(1))
-        data += Self.utf16LE("AIMPMainForm.xml") + Self.u32(1 << 20) + Data("<form/>".utf8)
+        data += AIMPTestProject.utf16LE("AIMPMainForm.xml") + Self.u32(1 << 20) + Data("<form/>".utf8)
         refused(data, .entryOutOfBounds)
     }
 
@@ -70,7 +63,7 @@ final class AIMPSkinHostileInputTests: XCTestCase {
         let key: [UInt8] = [0x11, 0x22, 0x33, 0x44]
         // The marker at 9, scrambled with the key: byte i XORed with key[i mod 4].
         file += Array("3SCA".utf8).enumerated().map { $0.element ^ key[(9 + $0.offset) % 4] }
-        let meta = Array(Self.utf16LE("Test") + Self.utf16LE("") + Self.utf16LE("") + [0])
+        let meta = Array(AIMPTestProject.utf16LE("Test") + AIMPTestProject.utf16LE("") + AIMPTestProject.utf16LE("") + [0])
         file += Array(Self.u32(meta.count))
         file += meta.enumerated().map { $0.element ^ key[(17 + $0.offset) % 4] }
         file += Array(Self.u32(AIMPSkinPolicy.inflatedBytes + 1)) + [0x78, 0x9C, 0x03, 0x00]

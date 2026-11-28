@@ -20,7 +20,7 @@ list of *open* work and says nothing about which numbers are spent.
 - A3 In-app probe: census and render (`reference/harness.md`). Kanono and Vega MP-120 render close
   to their screenshots; Soot does not (script-driven).
 - A4 Deck corpus (2026-10-31): 45 non-4K deck skins from the aimp.ru catalog with their screenshots
-  (`~/projects/aimp-skin-lab/corpus/shots`). 12 `.acs5` and 18 `.acs4` installed in the corpus
+  (kept outside the repo). 12 `.acs5` and 18 `.acs4` installed in the corpus
   folder; 16 `.acs3` set aside. 27 of 30 render.
 - A5 The mode: `PlayerUIMode.aimp` / `PlayerUIControllerFamily.aimp` (single canvas, own runtime);
   `AIMPSkinMainWindowController` (a `SingleCanvasMainWindow`) and `AIMPSkinMainView`; hover and

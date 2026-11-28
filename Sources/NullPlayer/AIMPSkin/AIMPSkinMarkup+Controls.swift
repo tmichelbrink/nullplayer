@@ -56,28 +56,10 @@ extension AIMPSkinControl.Input.Handlers {
 extension AIMPSkinControl.Text {
     init(_ node: AIMPNode, bindings: AIMPSkinBindings, index: AIMPSkinIndex) {
         let props = node.properties
-        func expanded(_ text: String) -> String { AIMPSkinLanguage.expanded(text, strings: index.strings) }
         font = AIMPSkinFont(props["Font"] ?? props["Fonts"]?.named["Normal"], resources: index.resources)
         let template = props["Template"]?.reference
-        if let caption = props["Caption"]?.reference {
-            // A caption with a language string inside it (`Akai GX-635D - @Lng:10;`) has it filled in.
-            display = .caption(expanded(caption))
-        } else if let file = bindings.links.first(where: { $0.pin == "FileInfo" && $0.target == "DisplayValue" }) {
-            // Language strings inside it too (Red Bias's `@Lng:15; %PlayCount`: "Played: 3").
-            display = .file(expanded(template ?? file.textFormat ?? "%T"))
-        } else if let link = bindings["DisplayValue"] {
-            if let source = link.source, let provider = index.providers[source], provider.kind == .concatenator {
-                // No `Expression`: its first input's text.
-                display = .concatenation(inputs: provider.bindings.links,
-                                         template: expanded(provider.template ?? "%TextValue1"))
-            } else {
-                // A template over the bound number (`%time(MS;:;)`).
-                display = .number(link, template: (template ?? link.textFormat).map(expanded))
-            }
-        } else {
-            display = template.map { .template(expanded($0)) } ?? .none
-        }
-        running = bindings["DisplayValue"] == nil ? template.map(expanded) ?? "%IF(%R,%R - ,)%T" : nil
+        display = .resolve(caption: props["Caption"]?.reference, template: template, bindings: bindings, index: index)
+        running = Self.running(template: template, bindings: bindings, index: index)
         alignment = AIMPSkinTextAlign(props["Alignment"]?.reference ?? props["TextAlign"]?.reference)
         // `.acs3`'s `TextAlign` other than left counts too: such a label is not the left-aligned
         // one AIMP sized to its text (`AIMPSkinLayout.autoSized`).
@@ -98,16 +80,7 @@ extension AIMPSkinControl.Playlist {
         picture = resources["Skin"]?.reference ?? resources["Background"]?.reference
         rowPicture = resources["ItemBackground"]?.reference
         background = color("BackgroundColor", "BackgroundColor", "")
-        let normal = Self.font(resources, "Normal", ids: ids) ?? AIMPSkinFont(name: "Tahoma", height: 13, bold: false, color: 0xFFC0_C0C0)
-        fonts = Dictionary(uniqueKeysWithValues: Row.allCases.map { ($0, Self.font(resources, $0.rawValue, ids: ids) ?? normal) })
-        // With none of its own, the second line is the first's font, smaller.
-        var small = normal
-        small.height = max(9, normal.height - 2)
-        let detail = Self.font(resources, "Normal", line: "ItemLine2", ids: ids) ?? small
-        detailFonts = Dictionary(uniqueKeysWithValues: Row.allCases.map {
-            ($0, Self.font(resources, $0.rawValue, line: "ItemLine2", ids: ids) ?? detail)
-        })
-        headerFont = Self.font(resources, "Normal", line: "Header", ids: ids) ?? normal
+        (fonts, detailFonts, headerFont) = Self.fonts { Self.font(resources, $0, line: $1, ids: ids) }
         headerPicture = resources["HeaderBackground"]?.reference
         expandButtons = resources["HeaderExpandButtons"]?.reference
         marks = (resources["ItemMarks"] ?? resources["SkinMarks"])?.reference
@@ -125,7 +98,7 @@ extension AIMPSkinControl.Playlist {
     /// `ItemLine1Fonts`, in `.acs3`'s one value (W10, New.VK: `Segoe UI,6842472,13,0`) or declared,
     /// over the list's own default, Tahoma 13.
     /// The header's and second line's likewise (`line` `Header`, `ItemLine2`).
-    private static func font(_ resources: [String: AIMPNode], _ state: String, line: String = "ItemLine1",
+    private static func font(_ resources: [String: AIMPNode], _ state: String, line: String,
                              ids: [String: AIMPSkinResource]) -> AIMPSkinFont? {
         if let flat = AIMPSkinFont(flat: resources[line + "Font" + (state == "Normal" ? "" : state)]?.reference) { return flat }
         let states = (resources[line + "Fonts"]?.named ?? [:])

@@ -51,7 +51,9 @@ final class PlaylistDropTests: XCTestCase {
         let empty = folder.appendingPathComponent("empty.cue")
         try "".write(to: empty, atomically: true, encoding: .utf8)
         var delivered: [[Track]] = []
-        XCTAssertTrue(PlaylistDrop.gather([empty]) { delivered.append($0) })
+        let none = expectation(description: "nothing from the empty sheet")
+        none.isInverted = true
+        XCTAssertTrue(PlaylistDrop.gather([empty]) { _ in none.fulfill() })
         let one = expectation(description: "the sheet's track")
         XCTAssertTrue(PlaylistDrop.gather([cue]) {
             XCTAssertTrue(Thread.isMainThread)
@@ -60,8 +62,8 @@ final class PlaylistDropTests: XCTestCase {
         })
         XCTAssertTrue(delivered.isEmpty, "nothing is delivered before the drop returns")
         wait(for: [one], timeout: 5)
-        // The empty sheet's read has had as long; it delivers nothing.
-        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        // The empty sheet's read has had as long, and a little more; it delivers nothing.
+        wait(for: [none], timeout: 0.2)
         XCTAssertEqual(delivered.map { $0.map(\.title) }, [["One"]])
     }
 

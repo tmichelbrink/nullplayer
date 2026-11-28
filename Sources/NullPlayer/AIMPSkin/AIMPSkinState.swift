@@ -180,6 +180,18 @@ struct AIMPSkinState: Equatable, Sendable {
     }
 }
 
+extension AIMPSkinState {
+    /// The row spacing a skin's script gave its library table (`Style.RowContentOffsets.Top` and
+    /// `Bottom` on `MLTable`: the Zigar-style decks' row-spacing key), each held to 0–64 pixels; nil
+    /// unless the script set both.
+    var libraryRowOffsets: (top: Double, bottom: Double)? {
+        let properties = script[AIMPSkinList.libraryTable.rawValue].properties
+        let offset = { (side: String) in properties["Style.RowContentOffsets.\(side)"].flatMap(Double.init).map { min(max($0, 0), 64) } }
+        guard let top = offset("Top"), let bottom = offset("Bottom") else { return nil }
+        return (top, bottom)
+    }
+}
+
 /// One object's record in `AIMPSkinState`: empty as made, and empty when nothing is set.
 protocol AIMPSkinStateRecord: Equatable, Sendable {
     init()
@@ -188,7 +200,8 @@ protocol AIMPSkinStateRecord: Equatable, Sendable {
 /// What AIMP's visualization screen (`VisualDisplay`; AIMP 2's `MultiDisplay`) shows. AIMP steps
 /// through its built-in visualizations with `acVisualNext` / `acVisualPrev` (AIMP 2's VisPrev and
 /// VisNext keys), and shows the skin's own picture when none runs. NullPlayer offers its spectrum, a
-/// scope, analog VU meters (PeppyMeter's) and none, in that order; the choice is kept per skin.
+/// scope, analog VU meters (PeppyMeter's) and none, in that order; the choice is kept per skin
+/// (`AIMPSkinStore`).
 enum AIMPVisualMode: String, CaseIterable, Sendable {
     case spectrum, scope, vu, off
 
@@ -198,15 +211,4 @@ enum AIMPVisualMode: String, CaseIterable, Sendable {
         let at = all.firstIndex(of: self) ?? 0
         return all[((at + steps) % all.count + all.count) % all.count]
     }
-
-    /// The mode last chosen for `skin`, kept by its name.
-    static func saved(skin: String, defaults: UserDefaults = .standard) -> AIMPVisualMode? {
-        defaults.string(forKey: key(skin)).flatMap(AIMPVisualMode.init(rawValue:))
-    }
-
-    func save(skin: String, defaults: UserDefaults = .standard) {
-        defaults.set(rawValue, forKey: Self.key(skin))
-    }
-
-    private static func key(_ skin: String) -> String { "AIMPSkinVisual." + skin }
 }

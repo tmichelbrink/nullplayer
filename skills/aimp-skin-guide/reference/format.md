@@ -2,7 +2,7 @@
 
 Reverse-engineered from Kanono (`.acs4` + `.acs4proj`), Soot and Vega MP-120 (`.acs5`), and the 16
 `.acs3` decks of the corpus. The Python
-reference tools are in `~/projects/aimp-skin-lab` (outside the repo); `AIMPSkinArchive`,
+reference tools used to decode it are kept outside the repo; `AIMPSkinArchive`,
 `AIMPSkinImage` and `AIMPNode` are the Swift readers. Every one reads bytes through `AIMPSkinBytes`
 (little-endian, bounds-checked, XOR-aware), inflates through `AIMPSkinZlib`, and reads INI text
 (`main.ini`, `.lng`) through the shared `INIFile` (`INIFile+AIMP`, as Delphi's `TMemIniFile`):

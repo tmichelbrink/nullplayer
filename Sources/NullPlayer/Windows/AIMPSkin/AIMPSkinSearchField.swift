@@ -46,8 +46,7 @@ final class AIMPSkinSearchField: NSObject, NSTextFieldDelegate {
         // The face the skin's text is drawn in (a font it ships included), at the view's scale.
         let face = font.ctFont(on: view.runtime?.skin.fontShelf)
         field.font = CTFontCreateCopyWithAttributes(face, CTFontGetSize(face) * view.uiScale, nil, nil) as NSFont
-        field.textColor = NSColor(srgbRed: CGFloat(font.color >> 16 & 0xFF) / 255, green: CGFloat(font.color >> 8 & 0xFF) / 255,
-                                  blue: CGFloat(font.color & 0xFF) / 255, alpha: 1)
+        field.textColor = NSColor(cgColor: AIMPSkinText.color(0xFF00_0000 | font.color))
         let height = min(box.height, field.intrinsicContentSize.height)
         field.frame = NSRect(x: box.minX, y: box.midY - height / 2, width: box.width, height: height)
         field.stringValue = view.skinState.lists.search(list)
@@ -79,7 +78,7 @@ final class AIMPSkinSearchField: NSObject, NSTextFieldDelegate {
             let host = view.host
             // A search of spaces alone filters nothing (`playlistIndices`), so plays nothing either.
             if !search.split(separator: " ").isEmpty, list == .playlist, let first = host.playlistIndices(matching: search).first {
-                view.runtime?.onAction?(.playRow(first))
+                view.runtime?.perform(.playRow(first))
             }
             end()
             return true

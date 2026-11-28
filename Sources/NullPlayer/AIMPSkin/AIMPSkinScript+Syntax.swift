@@ -118,69 +118,45 @@ extension AIMPSkinScript {
         }
     }
 
-    enum BinaryOperator: Sendable {
-        case add, subtract, multiply, divide, intDivide, modulo
-        case and, or, xor, shiftLeft, shiftRight
-        case member, equal, notEqual, less, greater, lessOrEqual, greaterOrEqual
+    /// A script's binary operator: one on numbers, the core a binding's expression uses too
+    /// (`AIMPSkinExpression.Operator`, written the same), or `in`, which only a script has.
+    enum BinaryOperator: Sendable, Equatable {
+        case numeric(AIMPSkinExpression.Operator)
+        case member
 
         init?(_ text: String) {
-            switch text {
-            case "+": self = .add
-            case "-": self = .subtract
-            case "*": self = .multiply
-            case "/": self = .divide
-            case "div": self = .intDivide
-            case "mod": self = .modulo
-            case "and": self = .and
-            case "or": self = .or
-            case "xor": self = .xor
-            case "shl": self = .shiftLeft
-            case "shr": self = .shiftRight
-            case "in": self = .member
-            case "=": self = .equal
-            case "<>": self = .notEqual
-            case "<": self = .less
-            case ">": self = .greater
-            case "<=": self = .lessOrEqual
-            case ">=": self = .greaterOrEqual
-            default: return nil
+            if text == "in" {
+                self = .member
+            } else if let op = AIMPSkinExpression.Operator(rawValue: text) {
+                self = .numeric(op)
+            } else {
+                return nil
             }
         }
 
-        /// Pascal's: multiplying operators bind tighter than adding ones, and those than comparisons.
+        /// Pascal's: multiplying operators (`and` among them) bind tighter than adding ones, and
+        /// those than comparisons. A binding's expression ranks them otherwise, `and` below the
+        /// comparisons and `or` below that, as AIMP reads it (`AIMPSkinExpression.Parser`).
         var precedence: Int {
-            switch self {
-            case .multiply, .divide, .intDivide, .modulo, .and, .shiftLeft, .shiftRight: return 2
-            case .add, .subtract, .or, .xor: return 1
+            switch numeric {
+            case .multiply?, .divide?, .div?, .mod?, .and?, .shl?, .shr?: return 2
+            case .add?, .subtract?, .or?, .xor?: return 1
             default: return 0
             }
         }
 
-        /// The operator on numbers, the core a binding's expression uses too; nil for `in`.
+        /// The operator on numbers; nil for `in`.
         var numeric: AIMPSkinExpression.Operator? {
-            switch self {
-            case .add: return .add
-            case .subtract: return .subtract
-            case .multiply: return .multiply
-            case .divide: return .divide
-            case .intDivide: return .div
-            case .modulo: return .mod
-            case .and: return .and
-            case .or: return .or
-            case .xor: return .xor
-            case .shiftLeft: return .shl
-            case .shiftRight: return .shr
-            case .member: return nil
-            case .equal: return .equal
-            case .notEqual: return .notEqual
-            case .less: return .less
-            case .greater: return .greater
-            case .lessOrEqual: return .lessOrEqual
-            case .greaterOrEqual: return .greaterOrEqual
-            }
+            if case .numeric(let op) = self { return op }
+            return nil
         }
 
-        var isComparison: Bool { [.equal, .notEqual, .less, .greater, .lessOrEqual, .greaterOrEqual].contains(self) }
+        var isComparison: Bool {
+            switch numeric {
+            case .equal?, .notEqual?, .less?, .greater?, .lessOrEqual?, .greaterOrEqual?: return true
+            default: return false
+            }
+        }
     }
 
     /// `name(args…)[index].member(args…)…`: a variable, routine or built-in, then members and

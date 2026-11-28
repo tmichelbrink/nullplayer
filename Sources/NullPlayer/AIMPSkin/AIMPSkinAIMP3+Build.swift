@@ -35,11 +35,10 @@ extension AIMPSkinAIMP3 {
             var sizing: [String: AIMPSkinIndex.Sizing] = [:]
             if let edge = form.sizingEdge.flatMap(Double.init), edge > 0 { sizing[""] = .init(edge: CGFloat(edge), initialSize: nil) }
             var index = AIMPSkinIndex(names: names, companions: companions.map(\.companion), sizing: sizing, strings: strings,
-                                      dialect: dialect)
-            index.hiddenItems.formUnion(hidden)
+                                      dialect: dialect, hidden: hidden)
             var made = Made(index: index)
             func window(_ root: Shaped) -> AIMPSkinItem {
-                AIMPSkinItem(name: nil, className: nil, isItem: false, layout: Shape.layout(dock: .none).withDock(nil),
+                AIMPSkinItem(name: nil, className: nil, isItem: false, layout: Shape.layout(dock: nil),
                              bindings: AIMPSkinBindings(links: [], declared: false), items: [made.item(root)])
             }
             let main = window(form.root)
@@ -87,7 +86,6 @@ extension AIMPSkinAIMP3 {
             // Held as an AIMP 4 form's are (`AIMPControlClass`).
             let digits = AIMPControlClass.Digits(places: spec.digits.flatMap { Int($0) },
                                                  indent: min(max(spec.indent.flatMap { Int($0) } ?? 0, -4_096), 4_096))
-            func visible(_ argb: UInt32?) -> UInt32? { argb.flatMap { $0 >> 24 != 0 ? $0 : nil } }
             if spec.isPlaylist { return .playlist(playlist(spec.playlist ?? [:])) }
             switch spec.type {
             case .button: return key(.button)
@@ -107,7 +105,7 @@ extension AIMPSkinAIMP3 {
             case .coverArt: return .coverArt(.init(coverFrame: nil, blur: nil))
             case .visualDisplay:
                 return .visualization(.init(columns: 16, indent: 1, color: nil, peakColumns: nil, peakSegment: 1), cover: nil)
-            case .equalizer: return .equalizer(preamp: visible(spec.preamp), curve: visible(spec.curve))
+            case .equalizer: return .equalizer(preamp: AIMPSkinColor.visible(argb: spec.preamp), curve: AIMPSkinColor.visible(argb: spec.curve))
             case .scrollBar: return .playlistScrollBar(thumb: spec.thumb)
             case .panel: return key(.picture)
             }
@@ -115,22 +113,12 @@ extension AIMPSkinAIMP3 {
 
         /// What it shows, as an AIMP 4 control's `Caption`, `Template`, `Font` and `Alignment` read.
         private func text(_ spec: Spec, bindings: AIMPSkinBindings) -> AIMPSkinControl.Text {
-            func expanded(_ text: String) -> String { AIMPSkinLanguage.expanded(text, strings: index.strings) }
             var font = AIMPSkinFont(flat: spec.font) ?? .standard
             if font.name.isEmpty { font.name = AIMPSkinFont.standard.name }
-            let display: AIMPSkinControl.Text.Display
-            if let caption = spec.caption {
-                display = .caption(expanded(caption))
-            } else if let file = bindings.links.first(where: { $0.pin == "FileInfo" && $0.target == "DisplayValue" }) {
-                display = .file(expanded(spec.template ?? file.textFormat ?? "%T"))
-            } else if let link = bindings["DisplayValue"] {
-                display = .number(link, template: (spec.template ?? link.textFormat).map(expanded))
-            } else {
-                display = spec.template.map { .template(expanded($0)) } ?? .none
-            }
             let alignment = AIMPSkinTextAlign(spec.alignment)
-            return AIMPSkinControl.Text(font: font, display: display,
-                                        running: bindings["DisplayValue"] == nil ? spec.template.map(expanded) ?? "%IF(%R,%R - ,)%T" : nil,
+            return AIMPSkinControl.Text(font: font,
+                                        display: .resolve(caption: spec.caption, template: spec.template, bindings: bindings, index: index),
+                                        running: AIMPSkinControl.Text.running(template: spec.template, bindings: bindings, index: index),
                                         alignment: alignment, declaresAlignment: spec.alignment != nil, isLeftJustified: alignment == .left,
                                         wraps: false, sizesHeight: false, declaresAutoSize: false)
         }
@@ -139,14 +127,10 @@ extension AIMPSkinAIMP3 {
         /// colours Delphi numbers.
         private func playlist(_ resources: [String: String]) -> AIMPSkinControl.Playlist {
             typealias Row = AIMPSkinControl.Playlist.Row
-            func font(_ state: String, line: String = "ItemLine1") -> AIMPSkinFont? {
+            func color(_ key: String) -> AIMPSkinColor? { resources[key].flatMap { Int64($0) }.map { .argb(AIMPSkinColor.argb(delphi: $0)) } }
+            let fonts = AIMPSkinControl.Playlist.fonts { state, line in
                 AIMPSkinFont(flat: resources[line + "Font" + (state == "Normal" ? "" : state)])
             }
-            func color(_ key: String) -> AIMPSkinColor? { resources[key].flatMap { Int64($0) }.map { .argb(AIMPSkinColor.argb(delphi: $0)) } }
-            let normal = font("Normal") ?? AIMPSkinFont(name: "Tahoma", height: 13, bold: false, color: 0xFFC0_C0C0)
-            var small = normal
-            small.height = max(9, normal.height - 2)
-            let detail = font("Normal", line: "ItemLine2") ?? small
             // A background that is no number names a colour resource, as an AIMP 4 list's would.
             let background = color("BackgroundColor") ?? resources["BackgroundColor"].flatMap { $0.isEmpty ? nil : .resource($0) }
             var fills: [Row: AIMPSkinColor] = [:]
@@ -155,22 +139,11 @@ extension AIMPSkinAIMP3 {
             fills[.selected] = color("ItemHighlightColorSelected")
             var playlist = AIMPSkinControl.Playlist(
                 picture: resources["Skin"], background: background, rowPicture: nil,
-                fonts: Dictionary(uniqueKeysWithValues: Row.allCases.map { ($0, font($0.rawValue) ?? normal) }), fills: fills,
-                detailFonts: Dictionary(uniqueKeysWithValues: Row.allCases.map { ($0, font($0.rawValue, line: "ItemLine2") ?? detail) }),
-                headerFont: font("Normal", line: "Header") ?? normal, headerPicture: nil,
+                fonts: fonts.rows, fills: fills, detailFonts: fonts.details, headerFont: fonts.header, headerPicture: nil,
                 expandButtons: resources["HeaderExpandButtons"], marks: resources["ItemMarks"],
                 switches: resources["ItemSwitches"], headerSwitches: resources["ItemSwitches"])
             playlist.classic = index.dialect.classicPlaylist
             return playlist
         }
-    }
-}
-
-extension AIMPSkinItem.Layout {
-    /// The same, docked as `dock` says (nil: no `Alignment` at all, down from the top).
-    func withDock(_ dock: AIMPSkinDock?) -> AIMPSkinItem.Layout {
-        AIMPSkinItem.Layout(isTabbedGroup: isTabbedGroup, dock: dock, level: level, margins: margins, size: size, sizeMinimal: sizeMinimal,
-                            sizeMaximal: sizeMaximal, autoHide: autoHide, autoHideThreshold: autoHideThreshold, autoSize: autoSize,
-                            isRow: isRow, savedShown: savedShown, fixedWidth: fixedWidth, fixedHeight: fixedHeight)
     }
 }

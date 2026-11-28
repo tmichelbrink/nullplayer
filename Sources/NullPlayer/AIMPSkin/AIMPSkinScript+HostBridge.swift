@@ -82,7 +82,11 @@ extension AIMPSkinScript {
         /// The equalizer's `PreampValue` and `BandValue<n>` (AIMP's band n).
         case preamp
         case band(Int)
+        /// A concatenator's `Expression`, its text's template.
+        case expression
         case other
+
+        private static let marginPrefix = "PlaceInfo.Margins.", bandPrefix = "BandValue"
 
         init(_ name: String) {
             switch name {
@@ -100,10 +104,11 @@ extension AIMPSkinScript {
             case "Tag": self = .tag
             case "DisplayText": self = .displayText
             case "PreampValue": self = .preamp
+            case "Expression": self = .expression
             default:
-                if name.hasPrefix("PlaceInfo.Margins.") {
-                    self = .margin(["Left", "Top", "Right", "Bottom"].firstIndex(of: String(name.dropFirst(18))))
-                } else if name.hasPrefix("BandValue"), let band = Int(name.dropFirst(9)) {
+                if name.hasPrefix(Self.marginPrefix) {
+                    self = .margin(["Left", "Top", "Right", "Bottom"].firstIndex(of: String(name.dropFirst(Self.marginPrefix.count))))
+                } else if name.hasPrefix(Self.bandPrefix), let band = Int(name.dropFirst(Self.bandPrefix.count)) {
                     self = .band(band)
                 } else {
                     self = .other
@@ -317,16 +322,14 @@ extension AIMPSkinScript.Run {
                 above = flow.parent(of: next)
             }
             engine.state.script[name].parent = parent.name
+        case (_, .expression) where object.provider?.kind == .concatenator:
+            guard value.textBytes <= Self.storedTextLimit else { return }
+            engine.state.script[name].expression = value.string
         default:
             // Any other property of a control, item or list: kept, and drawn
             // (`AIMPSkinState.Object.properties`). A colour given as a Delphi colour (`$F1F1F1`,
             // no alpha) is opaque. Of anything else (a form, a provider, a name the skin lacks) it
             // is AIMP's own, which nothing here draws: the run goes on.
-            if path == "Expression", object.provider?.kind == .concatenator {
-                guard value.textBytes <= Self.storedTextLimit else { return }
-                engine.state.script[name].expression = value.string
-                return
-            }
             // A skin's paths are a few short names (`Resources.ItemBackgroundColors.Playing`); a
             // longer one is no property of AIMP's, and setting it would nest a property per name.
             guard object.element != nil || object.list != nil, path.utf8.count <= Self.longestPropertyPath,

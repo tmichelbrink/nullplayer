@@ -65,7 +65,6 @@ extension AIMPSkinMainView {
 
     /// The size the next load of this skin's form starts at.
     private func keep(_ size: CGSize) {
-        guard let skin = runtime?.skin else { return }
-        AIMPSkinSizing.save(size, skin: skin, form: formName)
+        runtime?.records?.setSize(size, form: formName)
     }
 }

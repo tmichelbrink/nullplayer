@@ -27,15 +27,15 @@ is decided here.
    - skin keys drawn over a list (Chroma's add/remove/sort buttons on its table) sit under the
      opaque browser and cannot be reached; a glass layer over the list (Alchemy) blurs only the
      fill.
+2. **The library browser's tab is not kept across launches in AIMP mode.**
+   `WindowManager.plexBrowserBrowseMode` reads `.wal`'s embedded surface only; the routing series
+   skipped S3 (`embeddedLibrary` on `SkinSurfaceRouter`), which would let AIMP's host answer too.
 3. **Behaviour changes in the skin playlist's menus** (follow-up 11): `pmSorting` now opens the
    builder's Misc section (Sort ▸, File Info, EQ profile, row fields) instead of AIMP's flat sort
    list (which had By Duration and Shuffle); `pmAdd` uses the builder's URL / folder / files prompts.
 4. **The deck growing carries NullPlayer's windows too:** `carryWindowsDockedBelow` moves every snap
    target docked under the deck (NullPlayer's playlist or EQ under it), where AIMP's own
    `followBottomEdge` moved only the skin's forms.
-2. **The library browser's tab is not kept across launches in AIMP mode.**
-   `WindowManager.plexBrowserBrowseMode` reads `.wal`'s embedded surface only; the routing series
-   skipped S3 (`embeddedLibrary` on `SkinSurfaceRouter`), which would let AIMP's host answer too.
 5. **A script's speed snaps to 1× near it** (item 6, one value command): the host's 1× detent
    (±3%) now applies to `prvSpeed`/`prvTempo` set by a script too, as it did to the knob and to
    `prvPitch` scripts. A script's EQ and preamp writes are clamped to ±12 dB at 0–1, as the engine
@@ -138,10 +138,11 @@ slider frame, AM0006), Dark Lagoon (ACSP version byte 0x20).
     layout's `Look`, key-frame rules, settle loops, raw geometry and painter boilerplate (C5–C11,
     C14, C15).
 
-17. **Certification leftovers** (cert kit run 2026-11-27, 505 of 722 certified): keys a skin shows
+17. **Certification leftovers** (local certification run 2026-11-27, 505 of 722 certified): keys a skin shows
     only behind a delayer or a page the probe's click run does not reach (Lumin's `Button_Size_Inc`,
     Mirillis's `Button16` behind `masa2`), and state frames no host state reaches. Probe reach, not
-    rendering; listed so a later run can tell them from new gaps.18. **`laNone` measure vs layout** (CodeRabbit, fork review #6, C36): the measure stacks `laNone`
+    rendering; listed so a later run can tell them from new gaps.
+18. **`laNone` measure vs layout** (CodeRabbit, fork review #6, C36): the measure stacks `laNone`
     items where the layout overlays them (`AIMPSkinAlignment`). Aligning the measure changes the
     natural and minimum size of every skin using `laNone`, so it needs a corpus render sweep first.
 19. **Play-key glow on DS and Zelon:** NullPlayer draws a glowing ring around the play key where

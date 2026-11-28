@@ -5,30 +5,33 @@ import Foundation
 // scripts read, then the forms themselves.
 
 extension AIMPSkinIndex {
-    /// `unopened`: the forms the skin declares that NullPlayer opens no window for. Their items are
-    /// known, though never laid out: what they hold still reads as AIMP keeps it (AIMP Modern v3.63's
-    /// visualizer modes are the pages of a tabbed group in its hidden `QFI` form, the first shown).
+    /// `unopened`: the forms the skin declares that NullPlayer opens no window for, by name, with
+    /// their document where the skin has one. Their items are known, though never laid out: what
+    /// they hold still reads as AIMP keeps it (AIMP Modern v3.63's visualizer modes are the pages of
+    /// a tabbed group in its hidden `QFI` form, the first shown).
     init(main: AIMPNode, companions: [AIMPSkin.Companion], forms: [String: AIMPNode] = [:], schema: AIMPNode?, sites: [String: AIMPSkinDockSites.Marked] = [:],
-         resources: [String: AIMPSkinResource] = [:], strings: [String: String] = [:], unopened: [AIMPNode] = [],
+         resources: [String: AIMPSkinResource] = [:], strings: [String: String] = [:],
+         unopened: [(name: String, form: AIMPNode?)] = [],
          dialect: AIMPSkinDialect = .modern) {
         self.init(names: Names(), companions: companions, sites: sites.mapValues(\.site),
                   sizing: Self.sizing(main: main, companions: companions, schema: schema),
                   resources: resources, strings: strings, dialect: dialect)
         let nodes = ([main] + companions.compactMap { forms[$0.name] }).flatMap { $0.descendants() }
+        let schemaNodes = schema?.descendants() ?? []
         // Providers ask too (M5's delayer swaps its wave bar's times for its hover page while the
         // pointer is over `LayoutSplitView3`): read only from the forms, it read as always under it.
-        hoverSources = Set((nodes + (schema?.descendants() ?? [])).filter { $0.tag == "link" && $0["SourcePin"] == "IsActive" }
+        hoverSources = Set((nodes + schemaNodes).filter { $0.tag == "link" && $0["SourcePin"] == "IsActive" }
             .compactMap { $0["Source"] })
-        for node in nodes + (schema?.descendants() ?? []) {
+        for node in nodes + schemaNodes {
             let text = node.tag == "property" && node["name"] == "Expression" ? node["value"] : node["Expression"]
             if let text, names.expressions[text] == nil, let compiled = AIMPSkinExpression(text) { names.expressions[text] = compiled }
         }
-        onLoaded = schema?.descendants().first { $0.tag == "form" && $0["name"] == "AIMPMainForm" }?.properties["OnLoaded"]?["value"]
+        onLoaded = schemaNodes.first { $0.tag == "form" && $0["name"] == "AIMPMainForm" }?.properties["OnLoaded"]?["value"]
         let providerNodes = schema?.child("providers")?.children("provider") ?? []
         for node in providerNodes {
             if let name = node["name"], names.providers[name] == nil { names.providers[name] = AIMPProviderClass(node["class"]) }
         }
-        for node in nodes + unopened.flatMap({ $0.descendants() }) where node.tag == "item" {
+        for node in nodes + unopened.compactMap(\.form).flatMap({ $0.descendants() }) where node.tag == "item" {
             guard let name = node["name"] else { continue }
             let layout = AIMPSkinItem.Layout(node)
             // Its saved visibility is the first item's of the name, the one lookups find: an unopened
@@ -82,7 +85,7 @@ extension AIMPSkinIndex {
             }
         }
         var fired = Set<String>(), readers = Set<String>()
-        for node in nodes + (schema?.descendants() ?? []) where node.tag == "link" {
+        for node in nodes + schemaNodes where node.tag == "link" {
             guard let source = node["Source"] else { continue }
             let fires = node["TargetPin"] == "Action" || node["TargetPin"] == "ActionOnHold"
             if node["SourcePin"] == "Position", fires, node["Expression"] == nil { fired.insert(source) } else { readers.insert(source) }
@@ -119,6 +122,18 @@ extension AIMPSkinIndex {
         hold(main: mainForm, companions: companionForms, holders: sites.mapValues { read($0.holder) })
         for node in menuNodes {
             if let name = node["name"] { customMenus[name] = AIMPSkinCustomMenu(node, index: self) }
+        }
+        // What the forms NullPlayer does not open hold (M5's tray mini player, its lyrics window): a
+        // key wired into one of them asks for what NullPlayer does not have. Not a tabbed group whose
+        // pages the shown windows read: turning it changes what they show (AIMP Modern's visualizer
+        // modes, kept in its hidden `QFI` form).
+        for (name, form) in unopened {
+            elsewhere.insert(name)
+            elsewhere.formUnion(form?.descendants().compactMap { $0["name"] } ?? [])
+        }
+        let shownSources = Set(nodes.filter { $0.tag == "link" }.compactMap { $0["Source"] })
+        for (group, pages) in groups where elsewhere.contains(group) && pages.contains(where: shownSources.contains) {
+            elsewhere.subtract([group] + pages)
         }
     }
 

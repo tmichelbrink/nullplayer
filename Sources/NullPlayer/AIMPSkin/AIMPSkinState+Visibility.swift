@@ -5,9 +5,7 @@ extension AIMPSkinDataflow {
     /// link left out as drawing leaves it (`isMirror`), any other link to the mirror kept; nil with
     /// none. An override of its `Visible` holds until this changes (`Engine.pushVisibility`).
     func visibilityGate(_ name: String) -> Double? {
-        let gates = (skin.index.byName[name]?.gates ?? []).filter { !isMirror($0, of: name) }
-        guard !gates.isEmpty else { return nil }
-        return gates.allSatisfy { value(of: $0) != 0 } ? 1 : 0
+        gatesOpen(skin.index.byName[name]?.gates ?? [], of: name).map { $0 ? 1 : 0 }
     }
 }
 

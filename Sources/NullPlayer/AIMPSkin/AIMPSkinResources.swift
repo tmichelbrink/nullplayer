@@ -73,12 +73,12 @@ extension AIMPSkinFont.Declaration {
     }
 
     /// Which of `Name`, `Height`, `Style` and `Color` it sets, as `AIMPSkinFont(declared:over:)` reads them.
-    var declaredSettings: Set<String> {
-        var settings: Set<String> = []
-        if let name = values["Name"], !name.isEmpty { settings.insert("Name") }
-        if let height = values["Height"].flatMap(Int.init), height != .min { settings.insert("Height") }
-        if values["Style"] != nil { settings.insert("Style") }
-        if values["Color"].flatMap({ Int64($0) }) != nil { settings.insert("Color") }
+    var declaredSettings: AIMPSkinFont.Settings {
+        var settings: AIMPSkinFont.Settings = []
+        if let name = values["Name"], !name.isEmpty { settings.insert(.name) }
+        if let height = values["Height"].flatMap(Int.init), height != .min { settings.insert(.height) }
+        if values["Style"] != nil { settings.insert(.style) }
+        if values["Color"].flatMap({ Int64($0) }) != nil { settings.insert(.color) }
         return settings
     }
 }

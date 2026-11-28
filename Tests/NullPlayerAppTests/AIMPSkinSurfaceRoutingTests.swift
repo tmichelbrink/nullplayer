@@ -10,7 +10,7 @@ final class AIMPSkinSurfaceRoutingTests: XCTestCase {
 
     func testASkinDrawsTheListsItHasItsOwnOf() throws {
         let folder = try Self.temporaryFolder()
-        let controller = AIMPSkinMainWindowController(importer: Self.importer(folder), windowStore: Self.windowStore())
+        let controller = AIMPSkinMainWindowController(importer: importer(folder), store: store())
         defer { controller.prepareForUITeardown() }
         for surface in SkinSurface.allCases {
             XCTAssertFalse(controller.drawsSurface(surface), "the unskinned panel draws none: \(surface)")
@@ -35,7 +35,7 @@ final class AIMPSkinSurfaceRoutingTests: XCTestCase {
     /// place, and it never gets a window.
     func testADockedPlaylistIsRoutedInPlace() throws {
         let folder = try Self.temporaryFolder()
-        let controller = AIMPSkinMainWindowController(importer: Self.importer(folder), windowStore: Self.windowStore())
+        let controller = AIMPSkinMainWindowController(importer: importer(folder), store: store())
         defer { controller.prepareForUITeardown() }
         let url = folder.appendingPathComponent("Docked Playlist.acs5")
         controller.present((try AIMPSkinLoader.load(data: Self.skinWithOwnPlaylist(docked: true)), url), error: nil)
@@ -44,7 +44,7 @@ final class AIMPSkinSurfaceRoutingTests: XCTestCase {
         XCTAssertTrue(controller.isShowingSurface(.playlist))
         controller.revealSurface(.playlist, toggle: true, restoredFrame: nil)
         XCTAssertFalse(controller.isShowingSurface(.playlist))
-        XCTAssertTrue(controller.skinOwnedWindows.isEmpty)
+        XCTAssertTrue(controller.managedSkinWindows.isEmpty)
     }
 
     /// A dock site reads visible only while it holds its form, docked and shown, as the layout
@@ -64,10 +64,10 @@ final class AIMPSkinSurfaceRoutingTests: XCTestCase {
     /// then runs once, after the skin is up. The equalizer never waits.
     func testAListShowWaitsForTheFirstSkin() throws {
         let folder = try Self.temporaryFolder()
-        let importer = Self.importer(folder)
+        let importer = self.importer(folder)
         try Self.skinWithOwnPlaylist().write(to: folder.appendingPathComponent("Own Playlist.acs5"))
         importer.selection.select("Own Playlist")
-        let controller = AIMPSkinMainWindowController(importer: importer, windowStore: Self.windowStore())
+        let controller = AIMPSkinMainWindowController(importer: importer, store: store())
         defer { controller.prepareForUITeardown() }
 
         var opened: [Bool] = []
@@ -85,7 +85,7 @@ final class AIMPSkinSurfaceRoutingTests: XCTestCase {
     /// made only once wanted (the deck here is never on screen), and gone with it.
     func testASkinSwitchCarriesWhetherItsOwnPlaylistIsOpen() throws {
         let folder = try Self.temporaryFolder()
-        let controller = AIMPSkinMainWindowController(importer: Self.importer(folder), windowStore: Self.windowStore())
+        let controller = AIMPSkinMainWindowController(importer: importer(folder), store: store())
         defer { controller.prepareForUITeardown() }
         let url = folder.appendingPathComponent("Own Playlist.acs5")
         func switchSkin() throws { controller.present((try AIMPSkinLoader.load(data: Self.skinWithOwnPlaylist()), url), error: nil) }
@@ -94,11 +94,11 @@ final class AIMPSkinSurfaceRoutingTests: XCTestCase {
         // controller is not it, so the first skin starts closed, as NullPlayer's playlist is.
         try switchSkin()
         XCTAssertFalse(controller.isShowingSurface(.playlist), "the first skin carries NullPlayer's closed playlist")
-        XCTAssertEqual(controller.skinOwnedWindows.count, 0, "not wanted yet")
+        XCTAssertEqual(controller.managedSkinWindows.count, 0, "not wanted yet")
 
         controller.present(nil, error: nil)
         XCTAssertFalse(controller.drawsSurface(.playlist))
-        XCTAssertEqual(controller.skinOwnedWindows.count, 0, "gone with the skin")
+        XCTAssertEqual(controller.managedSkinWindows.count, 0, "gone with the skin")
     }
 
     // MARK: - Helpers
@@ -109,22 +109,17 @@ final class AIMPSkinSurfaceRoutingTests: XCTestCase {
         return url
     }
 
-    static func windowStore() -> SkinWindowStore {
-        SkinWindowStore(defaults: UserDefaults(suiteName: "AIMPSkinOwnWindowsTests-\(UUID().uuidString)") ?? .standard, keys: .aimp)
+    private func store() -> AIMPSkinStore {
+        AIMPSkinStore(defaults: scopedDefaults())
     }
 
-    private static func importer(_ folder: URL) -> AIMPSkinImporter {
-        let suite = "AIMPSkinOwnWindowsTests-\(UUID().uuidString)"
-        return AIMPSkinImporter(directoryURL: folder, defaults: UserDefaults(suiteName: suite) ?? .standard)
+    private func importer(_ folder: URL) -> AIMPSkinImporter {
+        AIMPSkinImporter(directoryURL: folder, defaults: scopedDefaults())
     }
 
     /// A project file (`ACSJ`): an empty main form, and a playlist window of the skin's own;
     /// `docked` puts the playlist in a dock site on the main form instead.
     nonisolated static func skinWithOwnPlaylist(docked: Bool = false) -> Data {
-        func utf16LE(_ text: String) -> Data {
-            Data([UInt8(text.utf16.count & 0xFF), UInt8(text.utf16.count >> 8)]) + (text.data(using: .utf16LittleEndian) ?? Data())
-        }
-        func u32(_ value: Int) -> Data { withUnsafeBytes(of: UInt32(value).littleEndian) { Data($0) } }
         let entries = [
             ("AIMPMainForm.xml", docked
                 ? #"<layout><items><item class="LayoutDockSite" name="Site"><properties><property name="Alignment" value="laClient"/><property name="ControlName" value="PlaylistWindow"/></properties></item></items></layout>"#
@@ -132,12 +127,6 @@ final class AIMPSkinSurfaceRoutingTests: XCTestCase {
             ("Schema.xml", #"<schema><forms><form name="PlaylistWindow" master="AIMPMainForm"/></forms></schema>"#),
             ("PlaylistWindow.xml", #"<form name="PlaylistWindow"><control name="List" class="Playlist" link="Playlist"/></form>"#),
         ]
-        let meta = utf16LE("Test") + utf16LE("") + utf16LE("") + [0]
-        var data = Data("ACSJ".utf8) + Data(count: 9) + u32(meta.count) + meta + u32(entries.count)
-        for (name, text) in entries {
-            let body = Data(text.utf8)
-            data += utf16LE(name) + u32(body.count) + body
-        }
-        return data
+        return AIMPTestProject.data(entries)
     }
 }

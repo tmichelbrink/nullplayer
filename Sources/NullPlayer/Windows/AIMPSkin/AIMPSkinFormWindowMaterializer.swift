@@ -10,7 +10,7 @@ import AppKit
 ///   asked for; its window is made the first time the form is visible, undocked and has content
 ///   while the deck shows. A form no one opens has no window, so nothing docks, minimizes, raises or
 ///   snaps to it.
-/// - **Placed once:** where the user last left it (`SkinWindowStore`), else where the skin declares
+/// - **Placed once:** where the user last left it (`AIMPSkinStore`), else where the skin declares
 ///   (`AIMPSkin.Companion.origin`, the `Schema.xml` `Placement` or the layout's side), then always
 ///   `WindowManager.rescuedOrigin`, so a window never opens out of reach. `AIMP_PLACE_TRACE=1` logs it.
 /// - **Docking is `WindowManager`'s:** the windows are snap targets of its AIMP branch
@@ -18,7 +18,7 @@ import AppKit
 /// - **A form in a dock site has no window:** the renderer draws it in its site, and its `Visible` key
 ///   shows or hides it there (`AIMPSkinDockSites`).
 ///
-/// Per skin, `SkinWindowStore` (`Keys.aimp`) keeps each window's top-left and whether each form
+/// Per skin, the runtime's `AIMPSkinStore.Skin` keeps each window's top-left and whether each form
 /// other than the playlist and library was last shown. Those two follow NullPlayer's playlist and
 /// library, whose state is `AppStateManager`'s (`SkinSurfaceRouter`).
 @MainActor
@@ -33,9 +33,8 @@ final class AIMPSkinFormWindowMaterializer: NSObject, NSWindowDelegate {
     /// The windows made so far, by form name.
     private var windows: [String: FormWindow] = [:]
     private weak var runtime: AIMPSkinRuntime?
-    /// The skin's identity in `store`; nil while no skin is up.
-    private var skinKey: String?
-    private let store: SkinWindowStore
+    /// What is kept of the skin running (its runtime's); nil while none is up, or for one that keeps nothing.
+    private var records: AIMPSkinStore.Skin?
     /// Whether each recordable form was last shown, as stored for this skin.
     private var recorded: [String: Bool] = [:]
     /// Off until the skin is up, so neither a teardown's hides nor a load's carry are recorded.
@@ -46,10 +45,6 @@ final class AIMPSkinFormWindowMaterializer: NSObject, NSWindowDelegate {
     /// still on screen.
     var onFormHidden: ((AIMPSkinMainView) -> Void)?
 
-    init(store: SkinWindowStore) {
-        self.store = store
-    }
-
     /// The form windows made so far, shown or not, for `WindowManager`'s AIMP branches.
     var materializedAuxiliaryWindows: [NSWindow] { windows.values.map(\.window) }
 
@@ -58,15 +53,15 @@ final class AIMPSkinFormWindowMaterializer: NSObject, NSWindowDelegate {
 
     // MARK: - The skin's forms
 
-    /// Puts away the outgoing skin's windows and makes a view for each of `skin`'s forms that opens a
-    /// window (none for nil), drawing from `runtime` like `main`, whose menus they share. `skinName`
-    /// keys what is stored for the skin.
-    func rebuild(_ skin: AIMPSkin?, skinName: String?, runtime: AIMPSkinRuntime?, like main: AIMPSkinMainView) {
+    /// Puts away the outgoing skin's windows and makes a view for each of the forms of `runtime`'s
+    /// skin that opens a window (none for nil), drawing from `runtime` like `main`, whose menus they
+    /// share. What is kept of the skin is the runtime's (`AIMPSkinRuntime.records`).
+    func rebuild(runtime: AIMPSkinRuntime?, like main: AIMPSkinMainView) {
         teardown()
         self.runtime = runtime
-        skinKey = skin == nil ? nil : skinName
-        recorded = skinKey.map(store.visibility(skin:)) ?? [:]
-        for companion in skin?.companions ?? [] where companion.opensWindow {
+        records = runtime?.records
+        recorded = records?.visibility ?? [:]
+        for companion in runtime?.skin.companions ?? [] where companion.opensWindow {
             let view = AIMPSkinMainView()
             view.formName = companion.name
             // Until it has a window it draws only to measure what it shows.
@@ -76,6 +71,7 @@ final class AIMPSkinFormWindowMaterializer: NSObject, NSWindowDelegate {
             view.extraMenuItems = main.extraMenuItems
             // Teac Audio System's PRESETS key is on its equalizer window.
             view.popupMenu = main.popupMenu
+            view.playlistCommands = main.playlistCommands
             view.onLibraryArea = main.onLibraryArea
             view.onContentChange = { [weak self] in self?.onContentChange?() }
             views[companion.name] = view
@@ -104,7 +100,7 @@ final class AIMPSkinFormWindowMaterializer: NSObject, NSWindowDelegate {
         windows = [:]
         views = [:]
         runtime = nil
-        skinKey = nil
+        records = nil
         recorded = [:]
     }
 
@@ -164,10 +160,10 @@ final class AIMPSkinFormWindowMaterializer: NSObject, NSWindowDelegate {
     private static func isRecordable(_ form: AIMPSkin.Companion) -> Bool { form.opensWindow && form.role == .other }
 
     private func record(_ visible: Bool, form name: String, skin: AIMPSkin) {
-        guard let skinKey, recorded[name.lowercased()] != visible,
+        guard let records, recorded[name.lowercased()] != visible,
               let form = skin.companions.first(where: { $0.name == name }), Self.isRecordable(form) else { return }
         recorded[name.lowercased()] = visible
-        store.setVisibility(visible, window: name, skin: skinKey)
+        records.setVisibility(visible, window: name)
     }
 
     // MARK: - Size and place
@@ -197,7 +193,7 @@ final class AIMPSkinFormWindowMaterializer: NSObject, NSWindowDelegate {
     /// Last, a window out of reach is moved onto a screen.
     private func place(_ window: NSWindow, as form: AIMPSkin.Companion, beside deck: NSWindow, scale: CGFloat) {
         var frame = window.frame
-        if let skinKey, let topLeft = store.origin(skin: skinKey, window: form.name) {
+        if let topLeft = records?.origin(window: form.name) {
             frame.origin = NSPoint(x: topLeft.x, y: topLeft.y - frame.height)
         } else {
             frame.origin = form.origin(size: frame.size, beside: deck.frame, scale: scale)
@@ -283,7 +279,7 @@ final class AIMPSkinFormWindowMaterializer: NSObject, NSWindowDelegate {
             WindowManager.shared.applySnappedPosition(window, to: WindowManager.shared.windowWillMove(window, to: window.frame.origin))
         }
         WindowManager.shared.postWindowLayoutDidChange()
-        if let skinKey { store.setOrigin(CGPoint(x: window.frame.minX, y: window.frame.maxY), skin: skinKey, window: name) }
+        records?.setOrigin(CGPoint(x: window.frame.minX, y: window.frame.maxY), window: name)
     }
 
     /// A form window brought forward brings the deck and the rest with it, a turn later, once a
@@ -300,9 +296,4 @@ final class AIMPSkinFormWindowMaterializer: NSObject, NSWindowDelegate {
     func windowDidChangeOcclusionState(_ notification: Notification) {
         runtime?.updateClock()
     }
-}
-
-extension SkinWindowStore.Keys {
-    /// AIMP's records, beside `.wmz`'s.
-    static let aimp = Self(origins: "aimpViewOrigins", openWindows: "aimpOpenViews", visibility: "aimpWindowVisibility")
 }

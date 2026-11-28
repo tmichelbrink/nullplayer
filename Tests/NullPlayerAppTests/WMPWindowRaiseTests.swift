@@ -17,8 +17,7 @@ final class WMPWindowRaiseTests: XCTestCase {
     /// Which families have skin-owned windows, and which controllers hand them over: no other family
     /// even looks for a skin's own windows (`skinOwnedWindowsProvider` asks the family first).
     func testOnlyWMPWinampModernAndAIMPHaveSkinOwnedWindows() {
-        let families: [PlayerUIControllerFamily] = [.classic, .nullPlayerModern, .winampModern, .wmp, .audion, .sonique, .aimp]
-        XCTAssertEqual(families.filter(\.hasSkinOwnedWindows), [.winampModern, .wmp, .aimp])
+        XCTAssertEqual(PlayerUIControllerFamily.allCases.filter(\.hasSkinOwnedWindows), [.winampModern, .wmp, .aimp])
         let controllers: [(AnyClass, Bool)] = [(WMPMainWindowController.self, true), (WinampModernMainWindowController.self, true),
                                                (AIMPSkinMainWindowController.self, true),
                                                (MainWindowController.self, false), (ModernMainWindowController.self, false),

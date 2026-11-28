@@ -724,7 +724,7 @@ extension MenuActions {
             guard AppCapabilities.supports(.soniqueSkinMode) else { return nil }
             return SoniqueSkinImporter().selection.name.map { .sonique(name: $0) }
         case .aimp:
-            guard AppFeature.aimpSkinMode.isOffered else { return nil }
+            guard AppCapabilities.supports(.aimpSkinMode) else { return nil }
             return AIMPSkinImporter().selection.name.map { .aimp(name: $0) }
         }
     }

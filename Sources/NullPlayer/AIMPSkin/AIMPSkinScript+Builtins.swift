@@ -123,7 +123,7 @@ extension AIMPSkinScript {
             case .ord: return value(.number(Double(text(0).unicodeScalars.first?.value ?? 0)))
             case .insert:
                 // Held to `Run.textLimit` as `+` is: `Insert(S, S, 1)` in a loop doubles `S` each pass.
-                guard text(0).utf8.count + text(1).utf8.count <= Run.textLimit else { throw Budget.Spent(what: "text length") }
+                try Run.checkTextLength(text(0).utf8.count + text(1).utf8.count)
                 var target = Array(text(1))
                 target.insert(contentsOf: Array(text(0)), at: Swift.min(Swift.max(1, integer(2)) - 1, target.count))
                 return (.none, [1: .string(String(target))])
@@ -322,7 +322,7 @@ extension AIMPSkinScript {
             default: text = precision.map { String(value.string.prefix($0)) } ?? value.string
             }
             if width > text.count { text = String(repeating: " ", count: width - text.count) + text }
-            guard out.utf8.count + text.utf8.count <= Run.textLimit else { throw Budget.Spent(what: "text length") }
+            try Run.checkTextLength(out.utf8.count + text.utf8.count)
             out += text
         }
         return out

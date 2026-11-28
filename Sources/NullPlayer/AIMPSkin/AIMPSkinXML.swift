@@ -240,11 +240,6 @@ extension AIMPNode {
 
     /// A `Bindings` property holding `links`.
     static func bindings(_ links: AIMPNode...) -> AIMPNode { element("property", ["name": "Bindings"], links) }
-
-    /// A `Bindings` link: `target` reads `source`'s `pin`.
-    static func binding(_ source: String, _ pin: String, _ target: String) -> AIMPNode {
-        element("link", ["Source": source, "SourcePin": pin, "TargetPin": target])
-    }
 }
 
 extension AIMPNode {

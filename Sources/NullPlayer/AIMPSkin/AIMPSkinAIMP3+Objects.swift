@@ -32,7 +32,7 @@ extension AIMPSkinAIMP3.Shape {
             var back = spec
             back.type = .textDisplay
             back.links = []
-            back = Spec(renamed: back, name + "Back")
+            back.name = name + "Back"
             return [back, front]
         }
         switch object.kind {
@@ -277,13 +277,5 @@ extension AIMPSkinAIMP3.Shape {
         guard parts.count > 1, Int(parts[1].trimmingCharacters(in: .whitespaces)) == 0, dark else { return font }
         parts[1] = "16777215"
         return parts.joined(separator: ",")
-    }
-}
-
-extension AIMPSkinAIMP3.Spec {
-    /// `spec` under another name.
-    init(renamed spec: AIMPSkinAIMP3.Spec, _ name: String) {
-        self = spec
-        self.name = name
     }
 }

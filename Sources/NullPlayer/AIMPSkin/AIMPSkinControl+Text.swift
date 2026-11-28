@@ -33,6 +33,35 @@ extension AIMPSkinControl {
             case concatenation(inputs: [AIMPSkinLink], template: String)
             /// A number (the clock, the position): through a template, else as AIMP writes it.
             case number(AIMPSkinLink, template: String?)
+
+            /// What a control shows, whichever format wrote it: its `Caption`; else a `FileInfo`
+            /// binding through its `Template` (else the link's `TextFormat`); else a text provider
+            /// bound to `DisplayValue`, else the bound number through a template; else its own
+            /// `Template`. `@Lng:` strings inside any are filled in (`Akai GX-635D - @Lng:10;`, Red
+            /// Bias's `@Lng:15; %PlayCount`: "Played: 3").
+            static func resolve(caption: String?, template: String?, bindings: AIMPSkinBindings, index: AIMPSkinIndex) -> Display {
+                func expanded(_ text: String) -> String { AIMPSkinLanguage.expanded(text, strings: index.strings) }
+                if let caption { return .caption(expanded(caption)) }
+                if let file = bindings.links.first(where: { $0.pin == "FileInfo" && $0.target == "DisplayValue" }) {
+                    return .file(expanded(template ?? file.textFormat ?? "%T"))
+                }
+                if let link = bindings["DisplayValue"] {
+                    if let source = link.source, let provider = index.providers[source], provider.kind == .concatenator {
+                        // No `Expression`: its first input's text.
+                        return .concatenation(inputs: provider.bindings.links, template: expanded(provider.template ?? "%TextValue1"))
+                    }
+                    // A template over the bound number (`%time(MS;:;)`).
+                    return .number(link, template: (template ?? link.textFormat).map(expanded))
+                }
+                return template.map { .template(expanded($0)) } ?? .none
+            }
+        }
+
+        /// What a `RunningLine` with nothing bound to its `DisplayValue` scrolls: its `Template`,
+        /// else the playing track (`running`).
+        static func running(template: String?, bindings: AIMPSkinBindings, index: AIMPSkinIndex) -> String? {
+            guard bindings["DisplayValue"] == nil else { return nil }
+            return template.map { AIMPSkinLanguage.expanded($0, strings: index.strings) } ?? "%IF(%R,%R - ,)%T"
         }
     }
 
@@ -68,6 +97,21 @@ extension AIMPSkinControl {
         let headerSwitches: String?
         /// AIMP 2's list: one line a track, no group headers (`AIMPSkinDialect.classicPlaylist`).
         var classic = false
+
+        /// Each row's font, its second line's and the header's, from what the skin declares
+        /// (`declared(state, line)`, `line` `ItemLine1`, `ItemLine2` or `Header`), whichever format
+        /// wrote it. A row with none of its own takes the normal one's, over the list's own default,
+        /// Tahoma 13; with none of its own, the second line is the first's font, smaller.
+        static func fonts(_ declared: (_ state: String, _ line: String) -> AIMPSkinFont?)
+            -> (rows: [Row: AIMPSkinFont], details: [Row: AIMPSkinFont], header: AIMPSkinFont) {
+            let normal = declared("Normal", "ItemLine1") ?? AIMPSkinFont(name: "Tahoma", height: 13, bold: false, color: 0xFFC0_C0C0)
+            var small = normal
+            small.height = max(9, normal.height - 2)
+            let detail = declared("Normal", "ItemLine2") ?? small
+            return (Dictionary(uniqueKeysWithValues: Row.allCases.map { ($0, declared($0.rawValue, "ItemLine1") ?? normal) }),
+                    Dictionary(uniqueKeysWithValues: Row.allCases.map { ($0, declared($0.rawValue, "ItemLine2") ?? detail) }),
+                    declared("Normal", "Header") ?? normal)
+        }
     }
 
     /// The colours of the library's group tree and table (`Style` in `.acs4`, `StyleContent` in
@@ -126,50 +170,6 @@ enum AIMPSkinTextAlign: Sendable {
         case "taCenter": self = .center
         case "taRightJustify": self = .right
         default: return nil
-        }
-    }
-}
-
-extension AIMPSkinFont {
-    /// `.acs3`'s one-value font, `name,colour,height,style`: a Delphi colour and a style set
-    /// (bit 0 bold).
-    init?(flat value: String?) {
-        let parts = (value ?? "").split(separator: ",", omittingEmptySubsequences: false).map(String.init)
-        guard parts.count == 4, let colour = Int64(parts[1]), let height = Int(parts[2]), height != .min, let style = Int(parts[3]) else { return nil }
-        self.init(name: parts[0], height: abs(height), bold: style & 1 != 0, color: AIMPSkinColor.argb(delphi: colour))
-        emHeight = height < 0
-    }
-
-    /// AIMP's default font, where a skin names none: Tahoma (macOS ships it), whose narrow letters
-    /// the skins are measured against (RealPlayer 11's "M.Library" key).
-    static let standard = AIMPSkinFont(name: "Tahoma", height: 11, bold: false, color: 0xFFFF_FFFF)
-
-    /// A font resource from its `chain` (`AIMPSkin.resource`): each `Resource` over the one it names,
-    /// and what none says AIMP's for a resource.
-    init(resource chain: [AIMPSkinResource.Entry]) {
-        self = chain.reduce(AIMPSkinFont(name: "", height: 12, bold: false, color: 0xFFFF_FFFF)) {
-            AIMPSkinFont(declared: $1.font, over: $0, clearIsDelphi: false)
-        }
-        if name.isEmpty { name = Self.standard.name }
-    }
-
-    /// `Name`, `Height`, `Style` and `Color` where `node` declares them, over `base`; a colour is
-    /// ARGB, or, `clearIsDelphi` (a form's own fonts), with no alpha a Delphi colour (`66051`: near
-    /// black), opaque.
-    init(declared declaration: Declaration, over base: AIMPSkinFont, clearIsDelphi: Bool) {
-        self = base
-        let declared = declaration.values
-        if let name = declared["Name"], !name.isEmpty { self.name = name }
-        // `Int.min` has no magnitude `abs` can give.
-        if let height = declared["Height"].flatMap(Int.init), height != .min {
-            self.height = abs(height)
-            emHeight = height < 0
-        }
-        if let style = declared["Style"] { bold = style.contains("fsBold") }
-        if let id = declaration.colorID, !id.isEmpty { colorID = id }
-        if let number = declared["Color"].flatMap({ Int64($0) }) {
-            let argb = UInt32(truncatingIfNeeded: number)
-            color = clearIsDelphi && argb >> 24 == 0 ? AIMPSkinColor.argb(delphi: number) : argb
         }
     }
 }

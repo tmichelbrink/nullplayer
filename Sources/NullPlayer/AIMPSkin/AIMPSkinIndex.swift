@@ -126,42 +126,20 @@ struct AIMPSkinIndex: Sendable {
         case item(AIMPSkinItem)
         case control(AIMPSkinControl)
 
-        var name: String? {
+        /// The item or control, as what the two share (its name, `class`, `Tag`, written
+        /// margins and `Visibility` bindings).
+        var element: any AIMPSkinElement {
             switch self {
-            case .item(let item): return item.name
-            case .control(let control): return control.name
+            case .item(let item): return item
+            case .control(let control): return control
             }
         }
 
-        /// Its `class`, `Tag` and `PlaceInfo` margins as the skin wrote them, which a script reads.
-        var className: String? {
-            switch self {
-            case .item(let item): return item.className
-            case .control(let control): return control.className
-            }
-        }
-
-        var tag: String? {
-            switch self {
-            case .item(let item): return item.tag
-            case .control(let control): return control.tag
-            }
-        }
-
-        var writtenMargins: [Double] {
-            switch self {
-            case .item(let item): return item.writtenMargins
-            case .control(let control): return control.writtenMargins
-            }
-        }
-
-        /// Its `Visibility` bindings.
-        var gates: [AIMPSkinLink] {
-            switch self {
-            case .item(let item): return item.gates
-            case .control(let control): return control.gates
-            }
-        }
+        var name: String? { element.name }
+        var className: String? { element.className }
+        var tag: String? { element.tag }
+        var writtenMargins: [Double] { element.writtenMargins }
+        var gates: [AIMPSkinLink] { element.gates }
     }
 
     /// A `Schema.xml` provider, read once: its class, bindings and the settings the dataflow and
@@ -185,10 +163,11 @@ struct AIMPSkinIndex: Sendable {
 
 
     /// An index a reader builds itself: the names links resolve against, dock sites, sizing,
-    /// resources and strings; the forms follow, read against it (`hold`).
+    /// resources and strings, and the items that start hidden (`hiddenItems`, with the companions
+    /// that do); the forms follow, read against it (`hold`).
     init(names: Names, companions: [AIMPSkin.Companion] = [], sites: [String: AIMPSkinDockSites.Site] = [:],
          sizing: [String: Sizing] = [:], resources: [String: AIMPSkinResource] = [:], strings: [String: String] = [:],
-         dialect: AIMPSkinDialect = .modern) {
+         dialect: AIMPSkinDialect = .modern, hidden: Set<String> = []) {
         self.names = names
         self.resources = resources
         self.dialect = dialect
@@ -196,6 +175,7 @@ struct AIMPSkinIndex: Sendable {
         self.sites = sites
         self.sizing = sizing
         siteOf = Dictionary(sites.map { ($0.value.form, $0.key) }, uniquingKeysWith: { first, _ in first })
+        hiddenItems = hidden
         for companion in companions {
             self.names.items.insert(companion.name)
             self.companions.insert(companion.name)

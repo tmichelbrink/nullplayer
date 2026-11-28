@@ -9,13 +9,13 @@ extension SkinFileMainWindow {
     private static var shown: Self? { WindowManager.shared.mainWindowController as? Self }
 
     static func switchToFamily() {
-        guard feature.isOffered, WindowManager.shared.uiMode != mode else { return }
+        guard AppCapabilities.supports(feature), WindowManager.shared.uiMode != mode else { return }
         WindowManager.shared.reloadUI(to: mode)
     }
 
     /// In place inside the family; otherwise the selection is saved and entering the family loads it.
     static func chooseSkin(named name: String) {
-        guard feature.isOffered else { return }
+        guard AppCapabilities.supports(feature) else { return }
         if let shown {
             shown.selectSkin(named: name)
         } else {
@@ -25,7 +25,7 @@ extension SkinFileMainWindow {
     }
 
     static func loadSkinFromFile() {
-        guard feature.isOffered else { return }
+        guard AppCapabilities.supports(feature) else { return }
         if let shown {
             shown.importFromPanel()
         } else {

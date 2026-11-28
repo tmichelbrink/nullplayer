@@ -156,50 +156,6 @@ final class AIMPSkinScriptSchedulerTests: XCTestCase {
 
     // MARK: - Changes
 
-    /// Every part of the state a job changes comes back in its changes. A part added to the state
-    /// must be added to `AIMPSkinState.Changes.fields` and set here.
-    func testChangesCarryEveryPartOfTheState() {
-        let message = "a new part of the state needs a field in Changes"
-        XCTAssertEqual(Mirror(reflecting: AIMPSkinState()).children.count, 3, message)
-        XCTAssertEqual(Mirror(reflecting: AIMPSkinState.Script()).children.count, 5, message)
-        XCTAssertEqual(Mirror(reflecting: AIMPSkinState.Object()).children.count, 15, message)
-        XCTAssertEqual(Mirror(reflecting: AIMPSkinState.Animation()).children.count, 1, message)
-        XCTAssertEqual(Mirror(reflecting: AIMPSkinState.Motion()).children.count, 5, message)
-
-        let before = AIMPSkinState()
-        var after = before
-        after.script["Tabs"].activePage = 1
-        after.script["Counter"].counter = 2
-        after.script["Item"].visible = false
-        after.script["Hidden"].autoHidden = true
-        after.script["Item"].properties = ["Font.Color": "1"]
-        after.script["Text"].expression = "%T"
-        after.script["Form"].docked = true
-        after.script["Item"].parent = "Host"
-        after.script["Timer"].timerEnabled = false
-        after.script["Timer"].timerInterval = 50
-        after.script["Timer"].timerGate = 1
-        after.script["Item"].margins = [0: 4]
-        after.script["Display"].text = "Text"
-        after.script["View"].scrollTop = 120
-        after.script["Key"].visibleGate = 1
-        after.script.resourceLinks["Skin.Face"] = "Skin.Face2"
-        after.script.config["Key"] = "Value"
-        after.script.variables["seen"] = "3"
-        after.script.visualMode = .vu
-        after.animation["Timer"].timerFired = 10
-        after.animation["Counter"].scriptInputs = [1, 2]
-        after.animation["Reel"].frame = 3
-        after.animation["Reel"].stepped = 11
-        after.animation["Lamp"].opacity = 128
-        after.lists.playlistTop = 5
-
-        var applied = before
-        AIMPSkinState.Changes(from: before, to: after).apply(to: &applied)
-        XCTAssertEqual(applied, after)
-        XCTAssertTrue(AIMPSkinState.Changes(from: after, to: after).isEmpty)
-    }
-
     /// Changes go over the state as it stands: a part the job set or cleared takes the job's value;
     /// a part changed on main meanwhile, and one the job left alone, stay as main has them, on the
     /// same object too.

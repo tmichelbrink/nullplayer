@@ -368,8 +368,8 @@ extension AIMPSkinScript {
         /// `in` tests a set, and a comparison compares text unless a number meets a number (`'1.0' =
         /// 1` holds, `'10' < '9'` too, as Delphi's variants compare).
         private func apply(_ op: BinaryOperator, _ left: Value, _ right: Value) throws -> Value {
-            if op == .add, case .string = left { return try joined(left.string, right.string) }
-            if op == .add, case .string = right { return try joined(left.string, right.string) }
+            if op == .numeric(.add), case .string = left { return try joined(left.string, right.string) }
+            if op == .numeric(.add), case .string = right { return try joined(left.string, right.string) }
             func truth(_ condition: Bool) -> Value { .number(condition ? 1 : 0) }
             guard let numeric = op.numeric else {
                 guard case .array(let members) = right else { return .number(0) }
@@ -399,11 +399,17 @@ extension AIMPSkinScript {
         /// that doubles a string in a loop would reach gigabytes long before its step budget ran out.
         static let textLimit = 64 << 10
 
+        /// Stops the run, as if out of budget, when text of `count` bytes would pass `textLimit`;
+        /// a skin's `except` does not catch it.
+        static func checkTextLength(_ count: Int) throws {
+            guard count <= textLimit else { throw Budget.Spent(what: "text length") }
+        }
+
         /// `left` and `right` joined, unless that passes `textLimit`, charged to the budget: the run
         /// stops as if out of budget, and a skin's `except` does not catch it.
         private func joined(_ left: String, _ right: String) throws -> Value {
             let count = left.utf8.count + right.utf8.count
-            guard count <= Self.textLimit else { throw Budget.Spent(what: "text length") }
+            try Self.checkTextLength(count)
             try engine.budget.charge(count)
             return .string(left + right)
         }

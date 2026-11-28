@@ -96,7 +96,9 @@ final class AIMPSkinAudioEngineHost {
         appearanceObserver = nil
     }
 
-    /// The player now. Reads only what the engine and this host already hold.
+    /// The player now, from what the engine and this host already hold. The one thing it changes is
+    /// the mute's end: a volume moved off 0 elsewhere since the mute is noticed here, as the host
+    /// sees no other volume change.
     func snapshot() -> AIMPSkinPlayerSnapshot {
         var player = AIMPSkinPlayerSnapshot()
         player.nightMode = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
@@ -320,8 +322,6 @@ final class AIMPSkinAudioEngineHost {
         switch command {
         case .action(let action): perform(action, window: window)
         case .seek(let seconds): seek(toSeconds: seconds)
-        case .removeRow(let index):
-            if engine.playlist.indices.contains(index) { engine.removeTrack(at: index) }
         case .playRow(let index):
             if engine.playlist.indices.contains(index) { engine.playTrack(at: index) }
         case .set(let provider, let value): set(provider, to: value)

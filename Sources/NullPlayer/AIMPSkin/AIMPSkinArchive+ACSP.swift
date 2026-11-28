@@ -30,7 +30,7 @@ extension AIMPSkinArchive {
     }
 
     /// NUL-padded text in the Windows code page AIMP 2 wrote (Cyrillic, for most of the catalog).
-    private static func text<Bytes: Collection>(_ bytes: Bytes) -> String where Bytes.Element == UInt8 {
+    static func text<Bytes: Collection>(_ bytes: Bytes) -> String where Bytes.Element == UInt8 {
         let used = bytes.prefix { $0 != 0 }
         return String(bytes: used, encoding: .windowsCP1251) ?? String(decoding: used, as: UTF8.self)
     }

@@ -59,13 +59,7 @@ final class AIMPSkinPainter {
     }
 
     private func children(of placed: AIMPSkinLayout.Item, _ layer: Layer) {
-        if layer == .controls {
-            for control in placed.controls {
-                if let cut = control.cut { context.saveGState(); context.clip(to: cut) }
-                self.control(control)
-                if control.cut != nil { context.restoreGState() }
-            }
-        }
+        if layer == .controls { placed.controls.forEach(drawClipped) }
         for child in placed.items { item(child, layer) }
     }
 
@@ -96,11 +90,14 @@ final class AIMPSkinPainter {
             }
             print("  CONTROL \(control.name ?? "?") \(control.className ?? "?") \(Int(rect.minX)),\(Int(rect.minY)) \(Int(rect.width))x\(Int(rect.height)) \(links.joined(separator: " "))")
         }
-        for child in placed.controls {
-            if let cut = child.cut { context.saveGState(); context.clip(to: cut) }
-            self.control(child)
-            if child.cut != nil { context.restoreGState() }
-        }
+        placed.controls.forEach(drawClipped)
+    }
+
+    /// `placed`, within its `cut` where it has one (the item or control holding it).
+    private func drawClipped(_ placed: AIMPSkinLayout.Control) {
+        if let cut = placed.cut { context.saveGState(); context.clip(to: cut) }
+        control(placed)
+        if placed.cut != nil { context.restoreGState() }
     }
 
     /// A control whose picture names a mask frame shows itself and the controls in it only inside
@@ -143,10 +140,13 @@ final class AIMPSkinPainter {
         case .slider(let slider, let fraction, let thumb): drawSlider(slider, image: image, fraction: fraction, thumb: thumb, in: rect)
         case .rating(let rating): drawRating(image, rating: rating, in: rect)
         // Its picture under (Pioneer RT-707's frame), the background over it, the spectrum over that.
-        case .spectrogram(let background, let picture):
+        case .spectrogram(let background, let content, let flippedHorizontally, let flippedVertically):
             paint(image, in: rect)
             canvas.fill(rect, argb: background)
-            if let picture { canvas.drawUpright(picture, in: CGRect(origin: rect.origin, size: CGSize(width: picture.width, height: picture.height))) }
+            let feedback = flow.host.feedback
+            if let picture = AIMPSkinSpectrogram.image(feedback.spectrogram, clock: feedback.clock,
+                                                       width: Int(rect.width), height: Int(rect.height), content: content,
+                                                       flippedHorizontally: flippedHorizontally, flippedVertically: flippedVertically) { canvas.drawUpright(picture, in: CGRect(origin: rect.origin, size: CGSize(width: picture.width, height: picture.height))) }
         case .pageSelector(let count, let shown): drawPageSelector(image, count: count, shown: shown, in: rect)
         case .playlist(let style, let rows, let shown, let headers):
             paint(image, in: rect)
@@ -173,7 +173,7 @@ final class AIMPSkinPainter {
         case .equalizer(let preamp, let curve): drawEqualizer(preamp: preamp, curve: curve, image: image, in: rect)
         case .coverArt(let cover): drawCoverArt(cover, mask: control.maskFrame, image: image, in: rect)
         case .glass(let blur, let tint): drawBlurredGlass(blur: blur, tint: tint, mask: control.maskFrame, image: image, in: rect)
-        case .waveform(let peaks, let played, let background, let content, let rest, let thumb):
+        case .trackWaveform(let peaks, let played, let background, let content, let rest, let thumb):
             canvas.fill(rect, argb: background)
             paint(image, in: rect)
             drawWaveform(peaks, played: played, content: content ?? 0xFFFF_FFFF, rest: rest, in: rect)
@@ -183,7 +183,7 @@ final class AIMPSkinPainter {
             }
         // AIMP's oscilloscope (the GX-F90's WAVE page, TEAC CD-RW890's two channels): NullPlayer has
         // the spectrum, not the samples, so the trace is its bands as waves, as loud as the output.
-        case .waveForm(let trace): drawWaveForm(trace, image: image, in: rect)
+        case .spectrumWaves(let trace): drawWaveForm(trace, image: image, in: rect)
         case .visualization(let spectrum, let cover):
             // AIMP's visualization paints its whole box over whatever the skin put behind it for when
             // none runs (RealPlayer 11's "NO VISUAL" picture, the display's own picture: Red Bias

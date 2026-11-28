@@ -6,6 +6,10 @@ import Foundation
 protocol AIMPSkinElement: AnyObject {
     /// The node's `name`, as the skin wrote it (it may be empty).
     var name: String? { get }
+    /// Its `class`, `Tag` and `PlaceInfo` margins as the skin wrote them, which a script reads.
+    var className: String? { get }
+    var tag: String? { get }
+    var writtenMargins: [Double] { get }
     /// `Visibility` bindings: the element hides while any reads 0.
     var gates: [AIMPSkinLink] { get }
     /// Not saved hidden (`Visible`/`InitialVisible` False), or with `AutoHide`, which shows it
@@ -77,14 +81,14 @@ final class AIMPSkinItem: AIMPSkinElement, Sendable {
     struct Layout: Sendable {
         let isTabbedGroup: Bool
         /// `Alignment`, read once; nil where the item has none: it runs down from the top.
-        let dock: AIMPSkinDock?
+        var dock: AIMPSkinDock?
         /// `AlignmentLevel`: lower docks first, against its edge.
         let level: Int
         /// `AlignmentMargins` (l, t, r, b), which sit outside the item.
         let margins: AIMPSkinImage.Margins?
         /// `Size`, `SizeMinimal` and `SizeMaximal`, read once; nil unless two numbers are given.
         let size: CGSize?
-        let sizeMinimal: CGSize?
+        var sizeMinimal: CGSize?
         let sizeMaximal: CGSize?
         let autoHide: Bool
         /// `AutoHideParentSizeThreshold`, when one is given above 0.
@@ -181,9 +185,12 @@ enum AIMPSkinColor: Sendable, Equatable {
     /// The property's own ARGB, nil for none or a clear one: what a list's rows and an equalizer
     /// display's lines are drawn in, where a clear colour draws nothing.
     static func visible(_ property: AIMPNode?) -> UInt32? {
-        guard case .argb(let argb)? = AIMPSkinColor(property), argb >> 24 != 0 else { return nil }
-        return argb
+        guard case .argb(let argb)? = AIMPSkinColor(property) else { return nil }
+        return visible(argb: argb)
     }
+
+    /// `argb`, nil for none or a clear one.
+    static func visible(argb: UInt32?) -> UInt32? { argb.flatMap { $0 >> 24 != 0 ? $0 : nil } }
 
     /// `.acs3`'s colour, a Delphi number as the property's `value` (`ColorContent`, the playlist's
     /// `ItemHighlightColorPlaying`), as ARGB.

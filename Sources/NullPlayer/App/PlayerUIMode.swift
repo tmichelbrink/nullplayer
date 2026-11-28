@@ -14,7 +14,7 @@ import Foundation
 /// - `wmp`: the Windows Media Player `.wmz`/`.wms` family.
 /// - `audion`: Panic Audion faces (folders of `index.json` + PNGs).
 /// - `sonique`: Sonique 1.x skins (`.sgf`).
-enum PlayerUIControllerFamily {
+enum PlayerUIControllerFamily: CaseIterable {
     case classic
     case nullPlayerModern
     case winampModern
@@ -65,6 +65,28 @@ enum PlayerUIControllerFamily {
         case .classic, .nullPlayerModern, .audion, .sonique: return false
         }
     }
+
+    /// The skin enforces its own least main-window size (`.wal`'s `minimum_w`/`minimum_h`, `.wmz`'s
+    /// `WMPResizeLimits`, an AIMP form's layout), so `WindowManager` never pins the window's
+    /// `minSize` to its current size.
+    var sizesOwnMainWindow: Bool {
+        switch self {
+        case .winampModern, .wmp, .aimp: return true
+        case .classic, .nullPlayerModern, .audion, .sonique: return false
+        }
+    }
+
+    /// The environment flag that logs where this family's windows are placed (`<flag>=1`), and the
+    /// tag its own lines carry.
+    var placeTrace: (flag: String, tag: String) {
+        switch self {
+        case .wmp: return ("WMP_PLACE_TRACE", "wmp")
+        case .audion: return ("AUDION_PLACE_TRACE", "audion")
+        case .sonique: return ("SONIQUE_PLACE_TRACE", "sonique")
+        case .aimp: return ("AIMP_PLACE_TRACE", "aimp")
+        case .winampModern, .classic, .nullPlayerModern: return ("WINAMP_MODERN_PLACE_TRACE", "wal")
+        }
+    }
 }
 
 enum PlayerUIMode: String, CaseIterable {
@@ -113,7 +135,7 @@ enum PlayerUIMode: String, CaseIterable {
         case .wmp: return AppCapabilities.supports(.wmpSkinMode)
         case .audion: return AppCapabilities.supports(.audionFaceMode)
         case .sonique: return AppCapabilities.supports(.soniqueSkinMode)
-        case .aimp: return AppFeature.aimpSkinMode.isOffered
+        case .aimp: return AppCapabilities.supports(.aimpSkinMode)
         case .classic, .nullPlayerModern, .winampModern: return true
         }
     }

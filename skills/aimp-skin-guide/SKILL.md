@@ -51,16 +51,16 @@ controls are driven by `AIMP_RENDER_LIVE=1`, then `AIMP_RENDER_CLICK`, `AIMP_REN
     (`AIMPSkinControl.ID`, numbered by the index), never its name. The skin's other windows are
     `AIMPSkinFormWindowMaterializer`'s, on `WMPViewWindowMaterializer`'s pattern: a view per form
     made with the skin (so `hasContent` is known), a window only once the form is visible, undocked
-    and drawing while the deck shows; placed once, where the user last left it (`SkinWindowStore`,
-    family `aimp`), else where the skin declares (`Companion.origin`) kept wholly on the deck's
+    and drawing while the deck shows; placed once, where the user last left it (`AIMPSkinStore`,
+    by the skin's installed name), else where the skin declares (`Companion.origin`) kept wholly on the deck's
     screen and beside, not over, the skin's other windows (`clearOf`), then
     `WindowManager.rescuedOrigin` (`AIMP_PLACE_TRACE=1` logs it); a docked form has no window. The
     store also keeps, per skin, whether each form other than the playlist and library was last
-    shown, seeded before the load scripts run. When the deck grows in place,
+    shown, seeded before the load scripts run, a sizable form's size and the visualization mode. When the deck grows in place,
     `WindowManager.carryWindowsDockedBelow` moves what hangs under it. The controller presents skins
     and wires them. Popup menus are `AIMPSkinPopup`.
   - One `AIMPSkinAudioEngineHost` per window controller maps AIMP actions and providers to the
-    player and is stopped with the mode. Its `snapshot` only reads (`AIMPSkinPlayerSnapshot`); track
+    player and is stopped with the mode. Its `snapshot` reads (`AIMPSkinPlayerSnapshot`), changing only the mute's end; track
     starts and finishes are counted, and background fetches begun, on the engine's events. The
     skin's library lists keep no library model: they are NullPlayer's library browser, one per skin
     (`AIMPSkinLibraryHost` over `EmbeddedLibraryBrowserSurface`), mounted over the lists' area in

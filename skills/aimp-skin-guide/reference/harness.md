@@ -50,7 +50,8 @@ pipe: a long `swift test` piped into a filter drops blocks.
 `swift test --filter AIMPCorpusLoadTests` loads every installed skin (or `AIMP_CORPUS_PATH`) against
 `Tests/NullPlayerAppTests/Fixtures/AIMPSkin/corpus-baseline.tsv`, keyed by sha256: a skin recorded `ok`
 that fails, or runs fewer of its scripts, fails the suite; an untyped rejection always does; a skin
-absent from the baseline never does. It prints `AIMP corpus: <loaded>/<n> loaded, <r> rejected, <u>
+absent from the baseline never does. The baseline records the maintainer's local corpus: against
+another corpus, most skins are unranked and only the untyped-rejection check bites. It prints `AIMP corpus: <loaded>/<n> loaded, <r> rejected, <u>
 unranked`. Re-record after improving the engine, never to turn red green:
 
 ```bash

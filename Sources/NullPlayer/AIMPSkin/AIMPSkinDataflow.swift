@@ -30,6 +30,29 @@ struct AIMPSkinDataflow {
         var items: [Key: Double] = [:]
         var pages: [Key: Int] = [:]
         var texts: [Key: String] = [:]
+
+        /// What `table` holds for `name` at `depth`, else `make()`'s answer, kept there.
+        func cached<Value>(_ table: ReferenceWritableKeyPath<Memo, [Key: Value]>, _ name: String, depth: Int,
+                           _ make: () -> Value) -> Value {
+            let key = Key(depth: depth, name: name)
+            if let known = self[keyPath: table][key] { return known }
+            let made = make()
+            self[keyPath: table][key] = made
+            return made
+        }
+    }
+
+    /// How deep each read through the dataflow may go before it reads nothing: a skin's bindings
+    /// can read through each other in a loop, and a crafted skin through thousands of levels.
+    enum DepthLimit {
+        /// Any value (`value(_:)`).
+        static let value = 32
+        /// A tabbed group turned by its pages' own `Visibility` gates.
+        static let pageGates = 16
+        /// Concatenators feeding concatenators, for their inputs and their text.
+        static let concatenators = 8
+        /// An animator following another's frame.
+        static let animatorLeaders = 4
     }
 
     /// Past this many numbers a concatenator's inputs are watched as one hash of them: a tree of
@@ -61,11 +84,7 @@ struct AIMPSkinDataflow {
     /// The page a group shows: what its `ActivePage` binding reads, else what a key or script
     /// turned it to, else the first.
     func activePage(_ group: String, depth: Int = 0) -> Int {
-        let key = Memo.Key(depth: depth, name: group)
-        if let known = memo.pages[key] { return known }
-        let page = readPage(group, depth: depth)
-        memo.pages[key] = page
-        return page
+        memo.cached(\.pages, group, depth: depth) { readPage(group, depth: depth) }
     }
 
     private func readPage(_ group: String, depth: Int) -> Int {
@@ -87,17 +106,13 @@ struct AIMPSkinDataflow {
     /// showing a page turns its group to it (M5's two transport rows, one shown for each value of
     /// `modernplaybtn`). A mirrored page's binding is a push, not a condition (`AIMPSkinIndex.mirrors`).
     private func shownPage(_ group: String, depth: Int) -> Int? {
-        guard depth < 16, let pages = skin.index.pageGates[group] else { return nil }
+        guard depth < DepthLimit.pageGates, let pages = skin.index.pageGates[group] else { return nil }
         return pages.firstIndex { gates in gates.allSatisfy { value(of: $0, depth: depth + 1) != 0 } }
     }
 
     /// An item's visibility (`value(.item)`).
     private func itemValue(_ name: String, depth: Int) -> Double {
-        let key = Memo.Key(depth: depth, name: name)
-        if let known = memo.items[key] { return known }
-        let value = readItemValue(name, depth: depth)
-        memo.items[key] = value
-        return value
+        memo.cached(\.items, name, depth: depth) { readItemValue(name, depth: depth) }
     }
 
     private func readItemValue(_ name: String, depth: Int) -> Double {
@@ -112,8 +127,7 @@ struct AIMPSkinDataflow {
         // An item saved hidden (`InitialVisible` False) stays so whatever its bindings read, as AIMP
         // 5.40 opens Black & White, Metro Color and AIMPify: showing it (as a binding reading true
         // would suggest) drew their hidden mini player and second tab strip.
-        let gates = (skin.index.byName[name]?.gates ?? []).filter { !isMirror($0, of: name) }
-        if !gates.isEmpty, !gates.allSatisfy({ value(of: $0, depth: depth + 1) != 0 }) { return 0 }
+        if gatesOpen(skin.index.byName[name]?.gates ?? [], of: name, depth: depth + 1) == false { return 0 }
         return (!skin.index.hiddenItems.contains(name) && isOnActivePage(name, depth: depth + 1)) ? 1 : 0
     }
 
@@ -123,6 +137,14 @@ struct AIMPSkinDataflow {
     func isOnActivePage(_ item: String, depth: Int = 0) -> Bool {
         guard let tab = skin.index.tabOf[item] else { return true }
         return activePage(tab.group, depth: depth) == tab.index
+    }
+
+    /// Whether every one of `gates`, `item`'s `Visibility` bindings, reads non-zero, its mirror's
+    /// link left out (`isMirror`); nil when there are none.
+    func gatesOpen(_ gates: [AIMPSkinLink], of item: String?, depth: Int = 0) -> Bool? {
+        let gates = gates.filter { !isMirror($0, of: item) }
+        guard !gates.isEmpty else { return nil }
+        return gates.allSatisfy { value(of: $0, depth: depth) != 0 }
     }
 
     /// Whether `gate` is `item`'s binding to its mirrored page (`AIMPSkinIndex.mirrors`): a push
@@ -145,21 +167,20 @@ struct AIMPSkinDataflow {
     /// Worked out once per concatenator and depth for this state, as commutators' values are: one read
     /// by many inputs is not expanded again on every path to it.
     func inputs(of link: AIMPSkinLink, depth: Int = 0) -> [Double] {
-        guard case .concatenator(let name) = link.read, depth < 8 else { return [value(of: link)] }
-        let key = Memo.Key(depth: depth, name: name)
-        if let known = memo.inputs[key] { return known }
-        var numbers = (skin.index.providers[name]?.bindings.links ?? []).flatMap { input -> [Double] in
-            let numbers = inputs(of: input, depth: depth + 1)
-            guard input.pin == "FileInfo" else { return numbers }
-            return numbers + [Double(host.player.templateFingerprint(input.textFormat ?? "%T"))]
+        guard case .concatenator(let name) = link.read, depth < DepthLimit.concatenators else { return [value(of: link)] }
+        return memo.cached(\.inputs, name, depth: depth) {
+            var numbers = (skin.index.providers[name]?.bindings.links ?? []).flatMap { input -> [Double] in
+                let numbers = inputs(of: input, depth: depth + 1)
+                guard input.pin == "FileInfo" else { return numbers }
+                return numbers + [Double(host.player.templateFingerprint(input.textFormat ?? "%T"))]
+            }
+            if numbers.count > Self.mostInputs {
+                var hasher = Hasher()
+                for number in numbers { hasher.combine(number) }
+                numbers = [Double(hasher.finalize())]
+            }
+            return numbers
         }
-        if numbers.count > Self.mostInputs {
-            var hasher = Hasher()
-            for number in numbers { hasher.combine(number) }
-            numbers = [Double(hasher.finalize())]
-        }
-        memo.inputs[key] = numbers
-        return numbers
     }
 
     /// `source`'s `pin`, named at run time (a script's `BindingsGetDataAsInteger`, a counter's
@@ -169,7 +190,7 @@ struct AIMPSkinDataflow {
     }
 
     func value(_ source: AIMPSkinSource, depth: Int = 0) -> Double {
-        guard depth < 32 else { return 0 }
+        guard depth < DepthLimit.value else { return 0 }
         switch source {
         case .page(let group): return Double(activePage(group, depth: depth))
         case .pointerOver(let name, let otherwise):
@@ -196,11 +217,7 @@ struct AIMPSkinDataflow {
         case .libraryScanning: return host.player.libraryScanning ? 1 : 0
         // By depth as well: a value cut short near the depth limit is not one read from higher up.
         case .commutator(let name):
-            let key = Memo.Key(depth: depth, name: name)
-            if let known = memo.values[key] { return known }
-            let result = commutatorValue(name, depth: depth)
-            memo.values[key] = result
-            return result
+            return memo.cached(\.values, name, depth: depth) { commutatorValue(name, depth: depth) }
         // Text joined from its values, read as the number it spells, else 0 (Antares' source digit:
         // `%IFEqual(…)` to 0 for a file, 2 for radio). A trigger watches its inputs (`inputs(of:)`).
         case .concatenator(let name):

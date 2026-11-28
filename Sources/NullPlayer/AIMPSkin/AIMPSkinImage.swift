@@ -119,8 +119,8 @@ struct AIMPSkinImage: Sendable {
     func frame(_ index: Int) -> CGImage? {
         guard let source = pixels?.frame(index) else { return nil }
         guard let tint else { return source }
-        return Self.tintings.value(Tinting(source: ObjectIdentifier(source), tint: tint)) {
-            Tinted(source: source, image: Self.multiply(source, by: tint))
+        return Self.tintings.value(Tinting(source: ObjectIdentifier(source), tint: tint), isValid: { $0.isMade(from: source) }) {
+            AIMPDerivedImage(source: source, image: Self.multiply(source, by: tint))
         }.image
     }
 
@@ -137,17 +137,11 @@ struct AIMPSkinImage: Sendable {
         let tint: UInt32
     }
 
-    /// A tinted frame, holding its source so no other frame takes its identity while it is kept.
-    private struct Tinted: Sendable {
-        let source: CGImage
-        let image: CGImage?
-    }
-
     /// Tinted frames, by frame and colour, shared by every picture: a theme's few colours over a
-    /// skin's panels. Held to 128 MiB, each charged for its tinted output and the source frame it
-    /// keeps alive.
-    private static let tintings = AIMPSkinCache<Tinting, Tinted>(limit: 256, byteLimit: 128 << 20) {
-        ($0.image?.aimpCacheBytes ?? 0) + $0.source.aimpCacheBytes
+    /// skin's panels. Held to 128 MiB of tinted output; each holds its source frame weakly
+    /// (`AIMPDerivedImage`), so the strip that frame shares is the pixel budget's to let go.
+    private static let tintings = AIMPSkinCache<Tinting, AIMPDerivedImage>(limit: 256, byteLimit: 128 << 20) {
+        $0.image?.aimpCacheBytes ?? 0
     }
 
     private static func multiply(_ source: CGImage, by argb: UInt32) -> CGImage? {

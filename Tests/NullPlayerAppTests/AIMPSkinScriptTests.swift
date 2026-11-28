@@ -298,24 +298,17 @@ final class AIMPSkinScriptTests: XCTestCase {
     /// A link handle is the link, not the pin it was added under: `L` moved to pin `B` and a second
     /// `LinkAdd('A')` are two links, and setting `L` afterwards does not reach the second one.
     func testALinkHandleKeepsItsLinkWhenItsPinIsReused() throws {
-        func call(_ object: String, _ method: String, _ args: String...) -> String {
-            "<dsgn><node text=\"\(object)\"/><node text=\"\(method)\"/>"
-                + args.map { "<expr><string text=\"'\($0)'\"/></expr>" }.joined() + "</dsgn>"
-        }
-        func assign(_ name: String, _ value: String) -> String {
-            "<assignstmt><dsgn><node text=\"\(name)\"/></dsgn><expr>\(value)</expr></assignstmt>"
-        }
-        func get(_ object: String, _ attribute: String) -> String { call(object, "Get", attribute) }
+        func get(_ object: String, _ attribute: String) -> String { Self.call(object, "Get", attribute) }
         let engine = try Self.run("""
         <program><procedure><name text="Execute"/><compoundstmt>
-          \(assign("B", "<dsgn><node text=\"TASEBindings\"/><node text=\"Create\"/></dsgn>"))
-          \(assign("L", call("B", "LinkAdd", "A")))
-          <callstmt>\(call("L", "Set", "TargetPin", "B"))</callstmt>
-          \(assign("M", call("B", "LinkAdd", "A")))
-          <callstmt>\(call("M", "Set", "Source", "Second"))</callstmt>
-          <callstmt>\(call("L", "Set", "Source", "First"))</callstmt>
-          \(assign("N", call("B", "LinkFind", "B")))
-          \(assign("Where", get("L", "TargetPin") + "<op text=\"+\"/>" + get("L", "Source") + "<op text=\"+\"/>"
+          \(Self.assign("B", "<dsgn><node text=\"TASEBindings\"/><node text=\"Create\"/></dsgn>"))
+          \(Self.assign("L", Self.call("B", "LinkAdd", "A")))
+          <callstmt>\(Self.call("L", "Set", "TargetPin", "B"))</callstmt>
+          \(Self.assign("M", Self.call("B", "LinkAdd", "A")))
+          <callstmt>\(Self.call("M", "Set", "Source", "Second"))</callstmt>
+          <callstmt>\(Self.call("L", "Set", "Source", "First"))</callstmt>
+          \(Self.assign("N", Self.call("B", "LinkFind", "B")))
+          \(Self.assign("Where", get("L", "TargetPin") + "<op text=\"+\"/>" + get("L", "Source") + "<op text=\"+\"/>"
               + get("M", "TargetPin") + "<op text=\"+\"/>" + get("M", "Source") + "<op text=\"+\"/>" + get("N", "Source")))
         </compoundstmt></procedure></program>
         """)
@@ -325,19 +318,13 @@ final class AIMPSkinScriptTests: XCTestCase {
     /// `nil` compares with a link handle by identity: `LinkFind` of a pin with a link is not `nil`,
     /// of one without is.
     func testLinkFindComparesWithNilByIdentity() throws {
-        func call(_ object: String, _ method: String, _ arg: String) -> String {
-            "<dsgn><node text=\"\(object)\"/><node text=\"\(method)\"/><expr><string text=\"'\(arg)'\"/></expr></dsgn>"
-        }
-        func assign(_ name: String, _ value: String) -> String {
-            "<assignstmt><dsgn><node text=\"\(name)\"/></dsgn><expr>\(value)</expr></assignstmt>"
-        }
-        let isNil = { (pin: String) in call("B", "LinkFind", pin) + "<op text=\"=\"/><dsgn><node text=\"nil\"/></dsgn>" }
+        let isNil = { (pin: String) in Self.call("B", "LinkFind", pin) + "<op text=\"=\"/><dsgn><node text=\"nil\"/></dsgn>" }
         let engine = try Self.run("""
         <program><procedure><name text="Execute"/><compoundstmt>
-          \(assign("B", "<dsgn><node text=\"TASEBindings\"/><node text=\"Create\"/></dsgn>"))
-          \(assign("L", call("B", "LinkAdd", "A")))
-          \(assign("Given", isNil("A")))
-          \(assign("Seen", isNil("Missing")))
+          \(Self.assign("B", "<dsgn><node text=\"TASEBindings\"/><node text=\"Create\"/></dsgn>"))
+          \(Self.assign("L", Self.call("B", "LinkAdd", "A")))
+          \(Self.assign("Given", isNil("A")))
+          \(Self.assign("Seen", isNil("Missing")))
         </compoundstmt></procedure></program>
         """)
         XCTAssertEqual(engine.state.script.variables["given"], "0", "a link that exists is not nil")
@@ -589,6 +576,17 @@ final class AIMPSkinScriptTests: XCTestCase {
         try AIMPNode.parse(Data(xml.utf8), name: "test.xml")
     }
 
+    /// FastScript's tree (`.fsxml`) of `object.method('arg'…)`.
+    static func call(_ object: String, _ method: String, _ args: String...) -> String {
+        "<dsgn><node text=\"\(object)\"/><node text=\"\(method)\"/>"
+            + args.map { "<expr><string text=\"'\($0)'\"/></expr>" }.joined() + "</dsgn>"
+    }
+
+    /// FastScript's tree of `name := value`, `value` a tree itself.
+    static func assign(_ name: String, _ value: String) -> String {
+        "<assignstmt><dsgn><node text=\"\(name)\"/></dsgn><expr>\(value)</expr></assignstmt>"
+    }
+
     /// `program` compiled and run once from a fresh state; its results are the skin's variables.
     private static func run(_ program: String) throws -> AIMPSkinScript.Engine {
         let engine = try engine()
@@ -605,24 +603,13 @@ final class AIMPSkinScriptTests: XCTestCase {
     /// their results from: what a script needs of a skin.
     static func skin(form: String = #"<form name="AIMPMainForm"/>"#, entries more: [(String, String)] = [],
                      scripts: [String: String] = [:], files: [(String, Data)] = []) throws -> AIMPSkin {
-        func utf16LE(_ text: String) -> Data {
-            Data([UInt8(text.utf16.count & 0xFF), UInt8(text.utf16.count >> 8)]) + (text.data(using: .utf16LittleEndian) ?? Data())
-        }
-        func u32(_ value: Int) -> Data { withUnsafeBytes(of: UInt32(value).littleEndian) { Data($0) } }
         let schema = """
         <schema><variables><variable name="Defaulted" value="0"/><variable name="Given" value="0"/><variable name="Seen" value="0"/>
           <variable name="Where" value="" valueType="String"/></variables></schema>
         """
         let entries = ([("AIMPMainForm.xml", form), ("Schema.xml", schema)] + more).map { ($0, Data($1.utf8)) }
             + (try scripts.sorted { $0.key < $1.key }.map { ("\($0.key).fsxml", fsxml(try node($0.value))) }) + files
-        // The header (13 bytes), the metadata block (u32 length: name, author, about, no preview),
-        // the entry count and the entries.
-        let meta = utf16LE("Test") + utf16LE("") + utf16LE("") + [0]
-        var data = Data("ACSJ".utf8) + Data(count: 9) + u32(meta.count) + meta + u32(entries.count)
-        for (name, payload) in entries {
-            data += utf16LE(name) + u32(payload.count) + payload
-        }
-        return try AIMPSkinLoader.load(data: data)
+        return try AIMPSkinLoader.load(data: AIMPTestProject.data(entries))
     }
 
     /// `tree` as AIMP stores a compiled script (`FSXMLBIN`, `AIMPSkinScript.parse`).

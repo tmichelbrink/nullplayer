@@ -21,9 +21,7 @@ extension AIMPSkinDataflow {
         if let name = element.name, let set = state.script[name].visible { return set }
         // A mirrored page shows as its group's active one (the pages turn together), not as any page.
         if let name = element.name, skin.index.mirrors[name] != nil, !isOnActivePage(name) { return false }
-        let gates = element.gates.filter { !isMirror($0, of: element.name) }
-        guard !gates.isEmpty else { return AIMPSkinAlignment.startsShown(element, in: skin.index) }
-        return gates.allSatisfy { value(of: $0) != 0 }
+        return gatesOpen(element.gates, of: element.name) ?? AIMPSkinAlignment.startsShown(element, in: skin.index)
     }
 
     /// A binding's value for `pin` (`DisplayValue`), nil when nothing is bound to `pin`.
@@ -111,13 +109,11 @@ extension AIMPSkinDataflow {
     /// Concatenator `name`'s text: its `Expression`, as a script set it or the skin wrote it (no
     /// `Expression`: its first input's text).
     func concatenatorText(_ name: String, depth: Int = 0) -> String {
-        guard depth < 8, let provider = skin.index.providers[name] else { return "" }
-        let key = Memo.Key(depth: depth, name: name)
-        if let known = memo.texts[key] { return known }
-        let expression = state.script[name].expression ?? provider.template ?? "%TextValue1"
-        let text = concatenation(provider.bindings.links, template: AIMPSkinLanguage.expanded(expression, strings: skin.strings), depth: depth)
-        memo.texts[key] = text
-        return text
+        guard depth < DepthLimit.concatenators, let provider = skin.index.providers[name] else { return "" }
+        return memo.cached(\.texts, name, depth: depth) {
+            let expression = state.script[name].expression ?? provider.template ?? "%TextValue1"
+            return concatenation(provider.bindings.links, template: AIMPSkinLanguage.expanded(expression, strings: skin.strings), depth: depth)
+        }
     }
 
     /// A `RunningLine` scrolls the playing track when nothing else is bound to it.
@@ -157,7 +153,7 @@ extension AIMPSkinDataflow {
         if own, let name = control.name, let frame = state.animation[name].frame { return min(max(frame, 0), frames - 1) }
         // Another animator's frame (Technics SL-1200's blurred disc turns with its hidden plain one).
         if let link, link.pin == "AnimationFrameIndex", let source = link.source,
-           let leader = skin.index.animators[source], depth < 4 {
+           let leader = skin.index.animators[source], depth < DepthLimit.animatorLeaders {
             let leaderFrames = max(1, image(leader.picture)?.frameCount ?? 1)
             let frame = Double(animatorFrame(leader, own: false, frames: leaderFrames, depth: depth + 1))
             return min(max(AIMPSkinScript.integer(link.shaped(frame)), 0), frames - 1)

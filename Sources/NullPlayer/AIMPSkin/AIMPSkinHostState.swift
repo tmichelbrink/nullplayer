@@ -13,8 +13,10 @@ struct AIMPSkinHostState: Sendable {
     /// changes: the window asks every frame.
     var playlistMatches: PlaylistMatches?
 
+    /// The rows `search` leaves of the playlist build `generation` (`Playlist.generation`).
     struct PlaylistMatches: Equatable, Sendable {
         let search: String
+        let generation: Int
         let indices: [Int]
     }
 
@@ -24,7 +26,9 @@ struct AIMPSkinHostState: Sendable {
         let rows = player.playlist.rows
         let words = search.lowercased().split(separator: " ")
         guard !words.isEmpty else { return Array(rows.indices) }
-        if let playlistMatches, playlistMatches.search == search { return playlistMatches.indices }
+        if let playlistMatches, playlistMatches.search == search, playlistMatches.generation == player.playlist.generation {
+            return playlistMatches.indices
+        }
         return rows.indices.filter { index in
             let title = rows[index].title.lowercased()
             return words.allSatisfy { title.contains($0) }
@@ -154,7 +158,7 @@ struct AIMPSkinPlayerSnapshot: Equatable, Sendable {
     var balance = 0.5
     /// 0…1, for every other bound value (effects): the middle, unless a knob has been turned
     /// (`otherValues`: NullPlayer has no TrueBass or flanger, so the knob only keeps its place).
-    var otherValue = 0.5
+    static let otherValue = 0.5
     var otherValues: [String: Double] = [:]
     /// The system's dark appearance, as AIMP's `NightMode` reads Windows': the theme a modern skin
     /// picks when left on automatic (Tascam Fireone's, Soot's).
@@ -221,6 +225,8 @@ struct AIMPSkinPlayerSnapshot: Equatable, Sendable {
         /// Moves whenever the rows do.
         var generation = 0
 
+        /// By identity, not by value: two playlists are the same while their build is
+        /// (`generation`), so comparing snapshots never walks the rows.
         static func == (lhs: Playlist, rhs: Playlist) -> Bool { lhs.generation == rhs.generation }
     }
 
@@ -244,8 +250,8 @@ struct AIMPSkinPlayerSnapshot: Equatable, Sendable {
         case .speed: return speed
         case .pitch: return pitch
         case .equalizerBand(let band): return eqGains.indices.contains(band) ? eqGains[band] : 0.5
-        case .named(let name): return otherValues[name] ?? (AIMPSkinProvider.soundEffects.contains(name) ? 0 : otherValue)
-        case nil: return otherValue
+        case .named(let name): return otherValues[name] ?? (AIMPSkinProvider.soundEffects.contains(name) ? 0 : Self.otherValue)
+        case nil: return Self.otherValue
         }
     }
 }

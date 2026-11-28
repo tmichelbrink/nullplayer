@@ -61,8 +61,9 @@ final class AIMPSkinLayout {
         case rating(Int)
         /// A page selector's cells, `count` of them, `shown` lit.
         case pageSelector(count: Int, shown: Int)
-        /// A spectrogram's background and its picture of the spectrum over time.
-        case spectrogram(background: UInt32?, picture: CGImage?)
+        /// A spectrogram's background, and what its picture of the spectrum over time is drawn in:
+        /// the painter rasterises it (`AIMPSkinSpectrogram.image`), the layout only says how.
+        case spectrogram(background: UInt32?, content: UInt32, flippedHorizontally: Bool, flippedVertically: Bool)
         /// NullPlayer's playlist, the rows the quick search leaves (`shown`), and those in view.
         case playlist(AIMPSkinControl.Playlist, rows: Rows, shown: [Int], headers: [Int: GroupHeader])
         /// The library's tree or table: only the list's fill, which NullPlayer's library browser
@@ -79,9 +80,12 @@ final class AIMPSkinLayout {
         case equalizer(preamp: UInt32?, curve: UInt32?)
         case coverArt(AIMPControlClass.Cover)
         case glass(blur: Double?, tint: AIMPSkinColor?)
-        /// The track's waveform, `played` (0–1) of it lit, in ARGB colours.
-        case waveform(peaks: [UInt16], played: Double, background: UInt32?, content: UInt32?, rest: UInt32? = nil, thumb: AIMPSkinImage? = nil)
-        case waveForm(AIMPControlClass.Trace)
+        /// The track's waveform, `played` (0–1) of it lit, in ARGB colours (a `WaveformDisplay`,
+        /// or a seek bar bound to `Waveform`).
+        case trackWaveform(peaks: [UInt16], played: Double, background: UInt32?, content: UInt32?, rest: UInt32? = nil,
+                           thumb: AIMPSkinImage? = nil)
+        /// The spectrum's bands drawn as moving waves (a `WaveFormDisplay`).
+        case spectrumWaves(AIMPControlClass.Trace)
         case visualization(AIMPControlClass.Spectrum, cover: Int?)
         case spectrum(AIMPControlClass.Spectrum)
     }
@@ -189,12 +193,14 @@ final class AIMPSkinLayout {
     }
 
     /// Least sizes take every page of a tabbed group, not the one it shows (`leastSize`): for a
-    /// window whose shown pages measure nothing before its scripts run (IpplePlay's).
-    var leastByEveryPage = false
+    /// window whose shown pages measure nothing before its scripts run (IpplePlay's). Fixed for the
+    /// layout's life, as the sizes it keeps are measured by it.
+    let leastByEveryPage: Bool
 
-    init(flow: AIMPSkinDataflow, interaction: AIMPSkinInteraction = .init()) {
+    init(flow: AIMPSkinDataflow, interaction: AIMPSkinInteraction = .init(), leastByEveryPage: Bool = false) {
         self.flow = flow
         self.interaction = interaction
+        self.leastByEveryPage = leastByEveryPage
     }
 
     /// A form, or its item `rootName`, laid out at `size`; nil for a form or item the skin lacks.
@@ -245,9 +251,7 @@ final class AIMPSkinLayout {
     /// window, leaves the split view to the playlist).
     func shownItems(of item: AIMPSkinItem) -> [AIMPSkinItem] {
         AIMPSkinAlignment.participants(heldItems(item), of: item, pages: .active { self.flow.activePage($0) }, index: skin.index) { item in
-            guard item.isDockSite else { return flow.isShown(item) }
-            guard let form = item.name.flatMap({ skin.index.sites[$0]?.form }) else { return false }
-            return flow.isDocked(form) && flow.isVisible(form) && flow.isShown(item)
+            siteHolds(item) && flow.isShown(item)
         }
     }
 

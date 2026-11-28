@@ -16,10 +16,8 @@ enum AIMPSkinCommand: Hashable, Sendable, CustomStringConvertible {
     /// A script's own units are turned into it where the script sets them (`AIMPSkinProvider.value(script:)`).
     /// An effect NullPlayer lacks (`prvReverb`…) is kept so its knob reads it back.
     case set(AIMPSkinProvider, Double)
-    /// A row of the skin's own playlist, double-clicked or entered.
+    /// A row of the skin's own playlist, double-clicked or entered in its quick search.
     case playRow(Int)
-    /// A row of the skin's own playlist taken out (Delete, its menu).
-    case removeRow(Int)
 
     /// The form the action trace and the harness print.
     var description: String {
@@ -28,7 +26,6 @@ enum AIMPSkinCommand: Hashable, Sendable, CustomStringConvertible {
         case .seek(let seconds): return "seek:\(seconds)"
         case .set(let provider, let value): return "set:\(provider):\(value)"
         case .playRow(let row): return "play:\(row)"
-        case .removeRow(let row): return "remove:\(row)"
         }
     }
 }

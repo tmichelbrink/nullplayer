@@ -182,10 +182,8 @@ extension AIMPSkinLayout {
         case .libraryTable(let style):
             let style = style.resolved(flow.visibleColor)
             return (.libraryArea(fill: style.fill), target(AIMPSkinList.libraryTable.rawValue, .libraryArea(style)))
-        case .playlistScrollBar(let thumb):
-            return scrollBar(control, thumb: thumb, in: rect, playlistRows: 10)
-        // Sized once its view is laid out (`withScrollBars`).
-        case .viewScrollBar:
+        // Sized once its list or view is laid out (`withScrollBars`).
+        case .playlistScrollBar, .viewScrollBar:
             return (.scrollBar(thumb: nil, length: 0, share: nil), [])
         // A list's quick search box: a click types into it; while the window's field types over
         // it, the field shows the text.
@@ -232,17 +230,14 @@ extension AIMPSkinLayout {
         case .coverArt(let cover): return (.coverArt(cover), [])
         case .glass(let blur, let tint): return (.glass(blur: blur, tint: tint), [])
         case .waveform(let background, let content):
-            return (.waveform(peaks: host.player.waveform, played: host.player.position, background: flow.color(background),
+            return (.trackWaveform(peaks: host.player.waveform, played: host.player.position, background: flow.color(background),
                               content: flow.color(content)),
                     target(name, .seek))
-        case .waveForm(let trace): return (.waveForm(trace), [])
+        case .waveForm(let trace): return (.spectrumWaves(trace), [])
         case .spectrogram(let spectrogram):
-            let picture = AIMPSkinSpectrogram.image(host.feedback.spectrogram, clock: host.feedback.clock,
-                                                    width: Int(rect.width), height: Int(rect.height),
-                                                    content: flow.color(spectrogram.content) ?? 0xFFFF_FFFF,
-                                                    flippedHorizontally: spectrogram.flippedHorizontally,
-                                                    flippedVertically: spectrogram.flippedVertically)
-            return (.spectrogram(background: flow.color(spectrogram.background), picture: picture), [])
+            return (.spectrogram(background: flow.color(spectrogram.background), content: flow.color(spectrogram.content) ?? 0xFFFF_FFFF,
+                                 flippedHorizontally: spectrogram.flippedHorizontally,
+                                 flippedVertically: spectrogram.flippedVertically), [])
         case .visualization(let spectrum, let cover): return (.visualization(spectrum, cover: cover), [])
         case .spectrum(let spectrum): return (.spectrum(spectrum), [])
         case .selector:
@@ -251,7 +246,7 @@ extension AIMPSkinLayout {
         // wave progress bars): played part in `ColorProgress`, else AIMP's orange; the rest in
         // `Color`, else a half-clear grey the bar's times read over; its thumb, a line, where it plays.
         case .slider(let slider) where slider.isSeek && control.bindings["Waveform"] != nil && !host.player.waveform.isEmpty:
-            return (.waveform(peaks: host.player.waveform, played: host.player.position, background: nil,
+            return (.trackWaveform(peaks: host.player.waveform, played: host.player.position, background: nil,
                               content: flow.visibleColor(slider.progressColor) ?? 0xFFFF_970A,
                               rest: flow.visibleColor(slider.color) ?? 0x8080_8080,
                               thumb: flow.image(slider.thumb)), target(name, .seek))
@@ -271,9 +266,10 @@ extension AIMPSkinLayout {
         let lists = flow.state.lists
         let total = flow.host.playlistIndices(matching: lists.playlistSearch).count, maxTop = max(0, total - playlistRows)
         let picture = flow.image(thumb)
-        let length = min(rect.height, max(picture?.frameSize.height ?? 8, rect.height * CGFloat(playlistRows) / CGFloat(max(1, total))))
         let top = min(max(0, lists.playlistTop), maxTop)
-        return (.scrollBar(thumb: picture, length: length, share: maxTop > 0 ? CGFloat(top) / CGFloat(maxTop) : nil),
+        let (length, share) = Self.thumb(picture, length: rect.height, visible: CGFloat(playlistRows), total: CGFloat(total),
+                                         top: CGFloat(top), maxTop: CGFloat(maxTop))
+        return (.scrollBar(thumb: picture, length: length, share: share),
                 [AIMPSkinTarget(control: control.id, name: "PlaylistScrollBar", kind: .playlistScroll(maxTop: maxTop, thumb: length), rect: rect)])
     }
 
@@ -281,10 +277,19 @@ extension AIMPSkinLayout {
     private func viewScrollBar(_ control: AIMPSkinControl, view: String, scroll: Scroll, thumb: String?,
                                in rect: CGRect) -> (Look, [AIMPSkinTarget]) {
         let picture = flow.image(thumb)
-        let length = min(rect.height, max(picture?.frameSize.height ?? 8, rect.height * scroll.visible / max(1, scroll.content)))
-        return (.scrollBar(thumb: picture, length: length, share: scroll.maxTop > 0 ? scroll.top / scroll.maxTop : nil),
+        let (length, share) = Self.thumb(picture, length: rect.height, visible: scroll.visible, total: scroll.content,
+                                         top: scroll.top, maxTop: scroll.maxTop)
+        return (.scrollBar(thumb: picture, length: length, share: share),
                 [AIMPSkinTarget(control: control.id, name: view + "ScrollBar",
                                 kind: .viewScroll(view: view, maxTop: scroll.maxTop, thumb: length), rect: rect)])
+    }
+
+    /// A scroll bar's thumb on a track `length` long: as long as the share in view (`visible` of
+    /// `total`), no shorter than its picture (else 8), no longer than the track; and how far along
+    /// it is (`top` of `maxTop`), nil when there is nowhere to scroll.
+    private static func thumb(_ picture: AIMPSkinImage?, length: CGFloat, visible: CGFloat, total: CGFloat,
+                              top: CGFloat, maxTop: CGFloat) -> (length: CGFloat, share: CGFloat?) {
+        (min(length, max(picture?.frameSize.height ?? 8, length * visible / max(1, total))), maxTop > 0 ? top / maxTop : nil)
     }
 
     /// `tree` with each playlist scroll bar sized by the rows of the playlist laid out last before

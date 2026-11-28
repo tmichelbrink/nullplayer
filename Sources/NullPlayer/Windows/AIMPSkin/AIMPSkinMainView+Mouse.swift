@@ -51,7 +51,7 @@ extension AIMPSkinMainView {
         if let long = target.longClick {
             press.hold(repeats: false) { [weak self] in self?.runtime?.setCounter(long.counter, to: long.value) }
         } else if let hold = target.holdAction {
-            press.hold(repeats: true) { [weak self] in self?.runtime?.onAction?(.action(hold)) }
+            press.hold(repeats: true) { [weak self] in self?.runtime?.perform(.action(hold)) }
         }
         pressDown(target, with: event)
         // A held key's handler runs as the button goes down, its `up` as it comes up (Soot's
@@ -87,7 +87,7 @@ extension AIMPSkinMainView {
             skinState.lists.select(index, extending: event.modifierFlags.contains(.shift),
                                    toggling: event.modifierFlags.contains(.command),
                                    shown: host.playlistIndices(matching: skinState.lists.playlistSearch))
-            if event.clickCount >= 2 { runtime?.onAction?(.playRow(index)) }
+            if event.clickCount >= 2 { runtime?.perform(.playRow(index)) }
         case .playlistScroll: scrollPlaylist(target, to: canvasPoint(event))
         case .viewScroll: scrollView(target, to: canvasPoint(event))
         case .search(let list): search.begin(list, in: target.rect)
@@ -175,7 +175,7 @@ extension AIMPSkinMainView {
     func wheel(over target: AIMPSkinTarget?, steps: Int) {
         if let target, turn(target, by: steps) { return }
         guard formName == nil else { return }
-        runtime?.onAction?(.set(.volume, min(1, max(0, host.player.volume + Double(steps) * 0.05))))
+        runtime?.perform(.set(.volume, min(1, max(0, host.player.volume + Double(steps) * 0.05))))
     }
 
     /// The wheel over a control, `steps` notches up (positive) or down; false when it takes none.
@@ -215,11 +215,7 @@ extension AIMPSkinMainView {
         case .page(let group, let step):
             // A selector over a tabbed group (Pioneer's TAPE switch) steps a page a notch, to its ends.
             guard step.wheel == .next, let runtime else { return false }
-            let flow = runtime.flow
-            let count = flow.skin.index.groups[group]?.count ?? 0
-            guard count > 0 else { return false }
-            runtime.showPage(group, min(max(flow.activePage(group) + steps, 0), count - 1))
-            return true
+            return runtime.stepPage(group, by: steps)
         default:
             return false
         }
@@ -279,8 +275,8 @@ extension AIMPSkinMainView {
     /// A slider, knob or seek bar moved to `value`, 0–1, asked of the player.
     func move(_ target: AIMPSkinTarget, to value: Double) {
         switch target.kind {
-        case .seek: runtime?.onAction?(.set(.position, value))
-        case .slider(let provider?, _), .knob(let provider?): runtime?.onAction?(.set(provider, value))
+        case .seek: runtime?.perform(.set(.position, value))
+        case .slider(let provider?, _), .knob(let provider?): runtime?.perform(.set(provider, value))
         default: break
         }
     }
@@ -360,7 +356,7 @@ extension AIMPSkinMainView {
         case .toggle(let item):
             runtime?.toggle(item)
             refitShownItems()
-        case .setValue(let provider, let value): runtime?.onAction?(.set(provider, value))
+        case .setValue(let provider, let value): runtime?.perform(.set(provider, value))
         // A menu the skin builds (AIMP Modern's menu bar), else the one it names (`pmEqualizer`: the
         // presets), else the player's.
         case .menu(.custom(let name)?):
@@ -412,9 +408,9 @@ extension AIMPSkinMainView {
         case .visualNext, .visualPrev: runtime?.stepVisual(by: action == .visualNext ? 1 : -1)
         case .searchQuick, .searchAdvanced:
             guard let box = inputFrame?.targets.first(where: { if case .search = $0.kind { true } else { false } }),
-                  case .search(let list) = box.kind else { return runtime?.onAction?(.action(action)) ?? () }
+                  case .search(let list) = box.kind else { runtime?.perform(.action(action)); return }
             search.begin(list, in: box.rect)
-        default: runtime?.onAction?(.action(action))
+        default: runtime?.perform(.action(action))
         }
     }
 
@@ -437,8 +433,8 @@ extension AIMPSkinMainView {
         case .counter(let name, let step):
             guard let position = step.position else { return }
             runtime?.setCounter(name, to: position)
-        case .setValue(let provider, let value): runtime?.onAction?(.set(provider, value))
-        case .action(let action): runtime?.onAction?(.action(action))
+        case .setValue(let provider, let value): runtime?.perform(.set(provider, value))
+        case .action(let action): runtime?.perform(.action(action))
         default: super.rightMouseDown(with: event)
         }
     }
@@ -454,16 +450,12 @@ extension AIMPSkinMainView {
     }
 
     override func keyDown(with event: NSEvent) {
-        // Delete takes the selected rows out of the skin's own playlist; Return plays the first.
-        let selection = skinState.lists.playlistSelection
-        if !selection.isEmpty, inputFrame?.targets.contains(where: { if case .playlist = $0.kind { true } else { false } }) == true {
-            if [KeyCode.delete, KeyCode.forwardDelete].contains(event.keyCode) {
-                // From the bottom, so each row is where it was.
-                for row in selection.sorted(by: >) { runtime?.onAction?(.removeRow(row)) }
-                skinState.lists.select(nil)
-                return
-            }
-            if event.keyCode == KeyCode.return, let first = selection.min() { return runtime?.onAction?(.playRow(first)) ?? () }
+        // Delete takes the selected rows out of the skin's own playlist; Return plays the first. As
+        // its menu's Remove and Play do (`AIMPSkinPlaylistMenuTarget`): never a row the search hides.
+        if let commands = playlistCommands, !skinState.lists.playlistSelection.isEmpty,
+           inputFrame?.targets.contains(where: { if case .playlist = $0.kind { true } else { false } }) == true {
+            if [KeyCode.delete, KeyCode.forwardDelete].contains(event.keyCode) { return commands.removeSelected(nil) }
+            if event.keyCode == KeyCode.return { return commands.playSelected(nil) }
         }
         if !MainWindowKeys.perform(event) { super.keyDown(with: event) }
     }

@@ -43,7 +43,8 @@ final class AIMPSkinPixelBudget: @unchecked Sendable {
     /// Under the lock.
     fileprivate func admit(_ pixels: AIMPSkinPixels, count: Int) {
         while resident + count > limit {
-            guard let (id, oldest) = decoded.filter({ $0.key != ObjectIdentifier(pixels) })
+            // Scanned in place: no filtered copy of the table per picture let go.
+            guard let (id, oldest) = decoded.lazy.filter({ $0.key != ObjectIdentifier(pixels) })
                 .min(by: { ($0.value.pixels?.lastUse ?? 0) < ($1.value.pixels?.lastUse ?? 0) }) else { break }
             oldest.pixels?.evict()
             resident -= oldest.count

@@ -94,6 +94,10 @@ enum AIMPFormRole: Equatable {
             : lower.contains("right") || name.hasPrefix("RSpeaker") ? .right : .below
     }
 
+    /// Whether a companion is a speaker cabinet, which, as tall as the deck or taller, stands level
+    /// with its bottom (`AIMPSkin.Companion.origin`).
+    static func isSpeaker(_ name: String) -> Bool { name.lowercased().contains("speaker") }
+
     /// Windows NullPlayer shows its own of, so the skin's form is not opened: the info and lyrics
     /// windows, the visualization, the tray's panel, the drop wheel, quick file info, and the
     /// skin-drawn menu (NullPlayer's menu stands in).

@@ -20,8 +20,9 @@ final class AIMPSkinWorker: @unchecked Sendable {
     private var suspensions = 0
 
     /// A serial worker: what is handed to `async` runs one at a time, in order, on its own thread.
+    /// The thread runs for the worker's life and holds it: a worker is never let go.
     init(name: String, qos: QualityOfService) {
-        let thread = Thread { [unowned self] in self.run() }
+        let thread = Thread { self.run() }
         thread.name = name
         thread.qualityOfService = qos
         thread.stackSize = Self.stackSize
@@ -35,7 +36,8 @@ final class AIMPSkinWorker: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// Holds back what is handed to `async` until as many `resume`s (as a dispatch queue's).
+    /// Holds back what is handed to `async` until as many `resume`s (as a dispatch queue's). A test
+    /// seam (`AIMPSkinScriptSchedulerTests`): nothing in the app suspends a worker.
     func suspend() {
         lock.lock()
         suspensions += 1
@@ -44,6 +46,7 @@ final class AIMPSkinWorker: @unchecked Sendable {
 
     func resume() {
         lock.lock()
+        precondition(suspensions > 0, "AIMPSkinWorker.resume without a suspend")
         suspensions -= 1
         lock.signal()
         lock.unlock()

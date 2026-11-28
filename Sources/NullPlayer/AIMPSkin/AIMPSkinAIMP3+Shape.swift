@@ -220,7 +220,7 @@ extension AIMPSkinAIMP3 {
             // An item with no picture is as big as what docks in it, and no smaller than its `MinSize`.
             let content = layout.floored(texture.flatMap { picture($0)?.frameSize } ?? Self.aggregate(items))
             if texture == nil, siteMinimum == nil, content.width > 0 || content.height > 0 {
-                layout = layout.withMinimum(CGSize(width: Int(content.width), height: Int(content.height)))
+                layout.sizeMinimal = CGSize(width: Int(content.width), height: Int(content.height))
             }
             controls += self.controls(in: name, size: content)
             let own = layout.floored(texture.flatMap { picture($0)?.frameSize } ?? Self.aggregate(items))
@@ -234,7 +234,7 @@ extension AIMPSkinAIMP3 {
         }
 
         /// An item's docking as AIMP 4 would declare it, nothing else said.
-        static func layout(dock: AIMPSkinDock, level: Int = 0, margins: AIMPSkinImage.Margins? = nil, sizeMinimal: CGSize? = nil,
+        static func layout(dock: AIMPSkinDock?, level: Int = 0, margins: AIMPSkinImage.Margins? = nil, sizeMinimal: CGSize? = nil,
                            sizeMaximal: CGSize? = nil, autoSize: Bool = true, shown: Bool = true,
                            fixedWidth: Bool = false, fixedHeight: Bool = false) -> AIMPSkinItem.Layout {
             AIMPSkinItem.Layout(isTabbedGroup: false, dock: dock, level: level, margins: margins, size: nil, sizeMinimal: sizeMinimal,
@@ -258,14 +258,5 @@ extension AIMPSkinAIMP3 {
             spec.font = activeTab ?? "Tahoma,0,12,0"
             return [spec]
         }
-    }
-}
-
-extension AIMPSkinItem.Layout {
-    /// The same, no smaller than `minimum`.
-    func withMinimum(_ minimum: CGSize) -> AIMPSkinItem.Layout {
-        AIMPSkinItem.Layout(isTabbedGroup: isTabbedGroup, dock: dock, level: level, margins: margins, size: size, sizeMinimal: minimum,
-                            sizeMaximal: sizeMaximal, autoHide: autoHide, autoHideThreshold: autoHideThreshold, autoSize: autoSize,
-                            isRow: isRow, savedShown: savedShown, fixedWidth: fixedWidth, fixedHeight: fixedHeight)
     }
 }

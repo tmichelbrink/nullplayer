@@ -105,7 +105,7 @@ keep the margins' proportion. Margins on an unanchored side are stale from the e
 | `Animator` | a filmstrip: `AnimationFrameIndex` when bound; else, while its `Accessibility` binding is non-zero (or, unbound, while playing), one frame per `AnimationInterval` ms (none set: it holds its first frame, AIMP's default), reversed while `AnimationReversed` is |
 | `TimeDisplay` | a 13-frame strip (0–9, separator, minus, blank) showing the bound seconds as `MM:SS` in `Digits` places |
 | `SpectrumDisplay` | `ColumnsCount` bars `ColumnsIndent` apart, heights from the spectrum, in `Color` |
-| `VisualDisplay` (AIMP 2: `MultiDisplay`) | the visualization screen, in the mode `AIMPVisualMode` holds: NullPlayer's spectrum (the default), a scope, analog VU meters (PeppyMeter's `vintage` face), or off, which leaves the skin's picture behind it (Hameleon's logo) showing. `acVisualNext` / `acVisualPrev` (AIMP 2's VisNext and VisPrev keys) step it; the choice is kept per skin (`AIMPSkinVisual.<skin>`); `AIMP_RENDER_VISUAL=<mode>` renders one |
+| `VisualDisplay` (AIMP 2: `MultiDisplay`) | the visualization screen, in the mode `AIMPVisualMode` holds: NullPlayer's spectrum (the default), a scope, analog VU meters (PeppyMeter's `vintage` face), or off, which leaves the skin's picture behind it (Hameleon's logo) showing. `acVisualNext` / `acVisualPrev` (AIMP 2's VisNext and VisPrev keys) step it; the choice is kept per skin (`AIMPSkinStore`); `AIMP_RENDER_VISUAL=<mode>` renders one |
 | `CoverArtDisplay` | the playing track's artwork filling its rect inside its mask frame, blurred by `BlurLevel` (Soot's backdrop) |
 | `BlurredGlass` | what is drawn under it so far, blurred by `BlurLevel` (0–100), inside its skin's `MaskFrame` (on the control's `Skin` or its resource), tinted by its `Color` |
 | `SpectrogramDisplay` | the spectrum over the last seconds (`AIMPSkinSpectrogram`): newest at the right edge (`FlipHorizontally`: left), 33.5 px a second; frequency up from the bottom (`FlipVertically`: down) on AIMP's scale (100 Hz 1.8% up, 1 kHz 17.4%, 10 kHz 75.5%, the top near 22 kHz); `ColorBackground` blended toward `ColorContent` by level, over its `Skin`. Its link makes no difference (Dark's `LevelL` panels show the same). The runtime keeps 30 s of the 75-band spectrum, only for a skin with one |
@@ -264,7 +264,7 @@ folder or files), `pmMLMisc` and
 ## Where windows open
 
 A form's window opens, the first time, where the user last left it with this skin
-(`SkinWindowStore`); otherwise where `Schema.xml`'s `Placement` on its form says
+(`AIMPSkinStore`); otherwise where `Schema.xml`'s `Placement` on its form says
 (`AIMPSkin.Companion.DeclaredPlacement`):
 `value` 0 left of the deck, 1 above, 2 right, 3 below; `margins` (l, t, r, b): beside the deck the
 window stands `t` below its top (Vilma M-212C's right speaker, -626: bottoms level), above or below it

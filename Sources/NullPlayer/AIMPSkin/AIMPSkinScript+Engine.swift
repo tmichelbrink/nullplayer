@@ -16,7 +16,9 @@ extension AIMPSkinScript {
         let skin: AIMPSkin
         let host: AIMPSkinHostState
         /// Set by the scripts as they run (`AIMPSkinScript.Run` and its host bridge).
-        var state: AIMPSkinState
+        var state: AIMPSkinState {
+            didSet { cachedFlow = nil }
+        }
         private(set) var actions: [AIMPSkinCommand] = []
         let budget: Budget
         /// Scripted counters whose scripts are running: one that sets itself only moves.
@@ -32,8 +34,15 @@ extension AIMPSkinScript {
             self.budget = budget
         }
 
-        /// The dataflow over the state as it stands, so a value a script set reads back as set.
-        var flow: AIMPSkinDataflow { AIMPSkinDataflow(skin: skin, host: host, state: state) }
+        /// The dataflow over the state as it stands, so a value a script set reads back as set:
+        /// one, with its memo, until the state next changes.
+        var flow: AIMPSkinDataflow {
+            if let cachedFlow { return cachedFlow }
+            let made = AIMPSkinDataflow(skin: skin, host: host, state: state)
+            cachedFlow = made
+            return made
+        }
+        private var cachedFlow: AIMPSkinDataflow?
 
         /// A script by name: compiled as the skin loaded (`AIMPSkinScript.Library`).
         func program(_ name: String) -> Program? { skin.scripts.programs[name.lowercased()] }
@@ -131,62 +140,66 @@ extension AIMPSkinScript {
                 var changed = false
                 for (name, provider) in providers where provider.kind == .counter(scripted: true) {
                     guard let script = provider.script else { continue }
-                    // One bound to nothing runs once as the skin loads, on where it stands, so what it
-                    // sets up holds from the start (M5's layout script docks its library and playlist):
-                    // run only on a click, its windows stood empty until the layout was changed. A
-                    // command a key fires runs on the press alone (`AIMPSkinIndex.commandCounters`).
-                    guard let link = provider.bindings["Position"] else {
-                        guard state.animation[name].scriptInputs == nil, !budget.isSpent,
-                              !skin.index.commandCounters.contains(name) else { continue }
+                    let moved: Moved
+                    if let link = provider.bindings["Position"] {
+                        moved = runIfMoved(name, inputs: flow.inputs(of: link)) { _ in
+                            guard let program = program(script) else { return false }
+                            return stopsOnLimit { try runCounter(name, program, at: flow.value(of: link)) }
+                        }
+                    } else {
+                        // One bound to nothing runs once as the skin loads, on where it stands, so what
+                        // it sets up holds from the start (M5's layout script docks its library and
+                        // playlist): run only on a click, its windows stood empty until the layout was
+                        // changed. A command a key fires runs on the press alone
+                        // (`AIMPSkinIndex.commandCounters`).
+                        guard state.animation[name].scriptInputs == nil, !skin.index.commandCounters.contains(name) else { continue }
                         let position = Double(state.script[name].counter ?? provider.positionDefault)
-                        state.animation[name].scriptInputs = [position]
-                        changed = true
-                        guard let program = program(script) else { continue }
-                        // Out of budget, it has not run: it runs on a later tick, as a bound one does.
-                        droppingRequests {
-                            if stopsOnLimit({ try runCounter(name, program, at: position) }) {
-                                state.animation[name].scriptInputs = nil
-                            }
-                        }
-                        continue
-                    }
-                    let inputs = flow.inputs(of: link)
-                    let previous = state.animation[name].scriptInputs
-                    guard previous != inputs else { continue }
-                    // Out of budget, the input stays unseen, so its script runs on a later tick.
-                    guard !budget.isSpent else { break }
-                    state.animation[name].scriptInputs = inputs
-                    changed = true
-                    guard let program = program(script) else { continue }
-                    droppingRequests(if: previous == nil) {
-                        if stopsOnLimit({ try runCounter(name, program, at: flow.value(of: link)) }) {
-                            state.animation[name].scriptInputs = previous
+                        moved = runIfMoved(name, inputs: [position]) { _ in
+                            guard let program = program(script) else { return false }
+                            return stopsOnLimit { try runCounter(name, program, at: position) }
                         }
                     }
+                    if moved == .spent { break }
+                    if moved == .ran { changed = true }
                 }
                 // Event handlers bound to a value run when it moves: `prvPlayerState`'s `OnTrackStarted`
                 // and `OnTrackFinished` (a count the host keeps), or a provider (Mayak-232's
                 // `SetSliderTrigger`, the volume and balance: its knobs follow them).
                 for (name, provider) in providers where provider.kind == .eventHandler {
                     guard let link = provider.bindings["Handler"] else { continue }
-                    let input = flow.inputs(of: link)
-                    let previous = state.animation[name].scriptInputs
-                    guard previous != input else { continue }
-                    guard !budget.isSpent else { break }
-                    state.animation[name].scriptInputs = input
-                    changed = true
-                    // As the skin loads, a value trigger sets it up from where things stand; of the events
-                    // (`On…`, and a provider's `Action`: the user moved it), only a track start has
-                    // happened, if something is playing (SL-1200 drops its arm and wipes the cover art in;
-                    // Soot's volume ring waits for the volume to move).
-                    if previous == nil, let event = link.pin, event.hasPrefix("On") || event == "Action",
-                       event != "OnTrackStarted" || host.player.playState != .playing { continue }
-                    droppingRequests(if: previous == nil) {
-                        if handle(name, sender: name) { state.animation[name].scriptInputs = previous }
+                    let moved = runIfMoved(name, inputs: flow.inputs(of: link)) { firstRun in
+                        // As the skin loads, a value trigger sets it up from where things stand; of the
+                        // events (`On…`, and a provider's `Action`: the user moved it), only a track start
+                        // has happened, if something is playing (SL-1200 drops its arm and wipes the
+                        // cover art in; Soot's volume ring waits for the volume to move).
+                        if firstRun, let event = link.pin, event.hasPrefix("On") || event == "Action",
+                           event != "OnTrackStarted" || host.player.playState != .playing { return false }
+                        return handle(name, sender: name)
                     }
+                    if moved == .spent { break }
+                    if moved == .ran { changed = true }
                 }
                 if !changed { break }
             }
+        }
+
+        /// What `runIfMoved` did with a script: its input had not moved; the budget is spent, so
+        /// the input stays unseen and the script runs on a later tick; or it ran.
+        private enum Moved { case still, spent, ran }
+
+        /// Runs `run` for script `name` when its `inputs` moved since it last ran, recording them
+        /// first. Its first run (as the skin loads) only sets things up: what it asks of the player
+        /// is dropped. `run` gets whether this is that first run, and answers whether a limit
+        /// stopped it, in which case the input is put back unseen, to run again on a later tick.
+        private func runIfMoved(_ name: String, inputs: [Double], _ run: (_ firstRun: Bool) -> Bool) -> Moved {
+            let previous = state.animation[name].scriptInputs
+            guard previous != inputs else { return .still }
+            guard !budget.isSpent else { return .spent }
+            state.animation[name].scriptInputs = inputs
+            droppingRequests(if: previous == nil) {
+                if run(previous == nil) { state.animation[name].scriptInputs = previous }
+            }
+            return .ran
         }
 
         /// A control or item a script showed or hid (`Set('Visible', …)`) goes back to its
@@ -215,25 +228,26 @@ extension AIMPSkinScript {
         /// on a later tick (rather than the outer one standing, its input seen, and the move lost).
         /// Any other failure stays the counter script's.
         func movingCounter(_ name: String, to value: Int) throws {
-            let before = state
-            let turned = flow.value(name, "Position") != Double(value)
-            state.script[name].counter = value
-            // The windows it shows and hides follow it as it turns (`AIMPSkinIndex.windowCounters`).
-            if turned {
-                for each in skin.index.windowCounters[name] ?? [] {
-                    state.override(visible: each.link.shaped(Double(value)) != 0, of: each.form, gateFrom: flow)
+            try atomically {
+                let turned = flow.value(name, "Position") != Double(value)
+                state.script[name].counter = value
+                // The windows it shows and hides follow it as it turns (`AIMPSkinIndex.windowCounters`).
+                if turned {
+                    for each in skin.index.windowCounters[name] ?? [] {
+                        state.override(visible: each.link.shaped(Double(value)) != 0, of: each.form, gateFrom: flow)
+                    }
                 }
-            }
-            guard let provider = skin.index.providers[name], provider.kind == .counter(scripted: true),
-                  let script = provider.script, let program = program(script) else { return }
-            do {
-                try runCounter(name, program, at: Double(value))
-            } catch let spent as Budget.Spent {
-                state = before
-                throw spent
-            } catch {
-                // A script error in the counter's script ends that script where it was raised, as
-                // `setCounter` always has; it is not the moving script's to stop on.
+                guard let provider = skin.index.providers[name], provider.kind == .counter(scripted: true),
+                      let script = provider.script, let program = program(script) else { return }
+                do {
+                    try runCounter(name, program, at: Double(value))
+                } catch let spent as Budget.Spent {
+                    // Stopped by a limit: the counter is put back with all it did (`atomically`).
+                    throw spent
+                } catch {
+                    // A script error in the counter's script ends that script where it was raised, as
+                    // `setCounter` always has; it is not the moving script's to stop on.
+                }
             }
         }
 

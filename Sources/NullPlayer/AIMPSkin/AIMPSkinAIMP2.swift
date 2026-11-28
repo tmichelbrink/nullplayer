@@ -85,10 +85,7 @@ struct AIMPSkinAIMP2 {
             return []
         }
         let bytes = [UInt8](data)
-        func name(_ range: Range<Int>) -> String {
-            let used = bytes[range].prefix { $0 != 0 }
-            return (String(bytes: used, encoding: .windowsCP1251) ?? String(decoding: used, as: UTF8.self)).lowercased()
-        }
+        func name(_ range: Range<Int>) -> String { AIMPSkinArchive.text(bytes[range]).lowercased() }
         return stride(from: 0, to: bytes.count - 63, by: 64).compactMap { start in
             let target = name(start..<(start + 32)), source = name((start + 32)..<(start + 64))
             guard target.hasSuffix(".bmp"), source.hasSuffix(".bmp") else { return nil }

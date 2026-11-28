@@ -67,7 +67,7 @@ final class AIMPSkinFormWindowMaterializerTests: XCTestCase {
 
         let screen = try XCTUnwrap(NSScreen.main?.visibleFrame)
         let left = CGPoint(x: screen.minX + 40, y: screen.maxY - 60)
-        store.setOrigin(left, skin: "Test", window: "Speaker")
+        store.setOrigin(left, window: "Speaker")
         (materializer, runtime) = try make(store)
         try waitForContent(materializer, runtime)
         runtime.state.script["Speaker"].visible = true
@@ -76,7 +76,7 @@ final class AIMPSkinFormWindowMaterializerTests: XCTestCase {
         XCTAssertEqual(NSPoint(x: window.frame.minX, y: window.frame.maxY), left, "where the user left it")
         materializer.teardown()
 
-        store.setOrigin(CGPoint(x: -100_000, y: -100_000), skin: "Test", window: "Speaker")
+        store.setOrigin(CGPoint(x: -100_000, y: -100_000), window: "Speaker")
         (materializer, runtime) = try make(store)
         defer { materializer.teardown() }
         try waitForContent(materializer, runtime)
@@ -125,31 +125,31 @@ final class AIMPSkinFormWindowMaterializerTests: XCTestCase {
         runtime.state.script["Speaker"].visible = true
         materializer.update(runtime.flow, deck: deck)
         materializer.teardown()
-        XCTAssertEqual(store.visibility(skin: "Test"), ["speaker": true])
+        XCTAssertEqual(store.visibility, ["speaker": true])
 
         (materializer, runtime) = try make(store)
         defer { materializer.teardown() }
         var state = AIMPSkinState()
         materializer.restoreVisibility(of: runtime.skin, into: &state)
         XCTAssertEqual(state.script["Speaker"].visible, true, "seeded over the skin's InitialVisible")
-        XCTAssertTrue(store.visibility(skin: "Other").isEmpty, "another skin's are its own")
+        XCTAssertTrue(AIMPSkinStore(defaults: store.defaults).skin("Other").visibility.isEmpty, "another skin's are its own")
     }
 
     // MARK: - Helpers
 
-    private func store() -> SkinWindowStore {
-        SkinWindowStore(defaults: UserDefaults(suiteName: "AIMPSkinFormWindowMaterializerTests-\(UUID().uuidString)") ?? .standard,
-                        keys: .aimp)
+    /// What is kept of the test skin, installed as "Test".
+    private func store() -> AIMPSkinStore.Skin {
+        AIMPSkinStore(defaults: scopedDefaults()).skin("Test")
     }
 
-    private func make(_ store: SkinWindowStore, docked: Bool = false, below: [String] = [])
+    private func make(_ store: AIMPSkinStore.Skin, docked: Bool = false, below: [String] = [])
         throws -> (AIMPSkinFormWindowMaterializer, AIMPSkinRuntime) {
         let skin = try Self.skin(docked: docked, below: below)
-        let runtime = AIMPSkinRuntime(skin: skin, player: .probe)
+        let runtime = AIMPSkinRuntime(skin: skin, player: .probe, records: store)
         runtime.scripts.timing = .inline
         deckView.runtime = runtime
-        let materializer = AIMPSkinFormWindowMaterializer(store: store)
-        materializer.rebuild(skin, skinName: "Test", runtime: runtime, like: deckView)
+        let materializer = AIMPSkinFormWindowMaterializer()
+        materializer.rebuild(runtime: runtime, like: deckView)
         return (materializer, runtime)
     }
 
@@ -191,17 +191,5 @@ final class AIMPSkinFormWindowMaterializerTests: XCTestCase {
     }
 
     /// A project file (`ACSJ`) of `entries`.
-    nonisolated static func project(_ entries: [(String, String)]) -> Data {
-        func utf16LE(_ text: String) -> Data {
-            Data([UInt8(text.utf16.count & 0xFF), UInt8(text.utf16.count >> 8)]) + (text.data(using: .utf16LittleEndian) ?? Data())
-        }
-        func u32(_ value: Int) -> Data { withUnsafeBytes(of: UInt32(value).littleEndian) { Data($0) } }
-        let meta = utf16LE("Test") + utf16LE("") + utf16LE("") + [0]
-        var data = Data("ACSJ".utf8) + Data(count: 9) + u32(meta.count) + meta + u32(entries.count)
-        for (name, text) in entries {
-            let body = Data(text.utf8)
-            data += utf16LE(name) + u32(body.count) + body
-        }
-        return data
-    }
+    nonisolated static func project(_ entries: [(String, String)]) -> Data { AIMPTestProject.data(entries) }
 }

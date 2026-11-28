@@ -46,9 +46,6 @@ enum AIMPSkinAIMP3 {
         }
         return layouts
     }
-
-    // MARK: - Layout documents
-
 }
 
 extension AIMPSkinAIMP3.Layout {

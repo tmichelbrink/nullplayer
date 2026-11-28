@@ -61,6 +61,23 @@ final class AIMPSkinCache<Key: Hashable & Sendable, Value: Sendable>: Sendable {
     var count: Int { stored.withLock { $0.values.count } }
 }
 
+/// A picture made from a frame (a slicing, a tint), kept with its source held weakly: a frame shares
+/// its whole decoded strip's data, which a strong hold would keep alive past the pixel budget letting
+/// it go, uncounted. One whose source is gone is made again (`isMade(from:)`), so another picture
+/// at the old one's address is not taken for it.
+final class AIMPDerivedImage: @unchecked Sendable {
+    private weak var source: CGImage?
+    let image: CGImage?
+
+    init(source: CGImage, image: CGImage?) {
+        self.source = source
+        self.image = image
+    }
+
+    /// Whether it was made from `source`, which is still alive.
+    func isMade(from source: CGImage) -> Bool { self.source === source }
+}
+
 extension CGImage {
     /// The raster's bytes, as an `AIMPSkinCache`'s `cost` counts them.
     var aimpCacheBytes: Int { bytesPerRow * height }

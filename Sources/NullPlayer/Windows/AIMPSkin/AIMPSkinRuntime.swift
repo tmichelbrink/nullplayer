@@ -64,7 +64,8 @@ final class AIMPSkinRuntime {
         return false
     }
 
-    /// What the skin asks of the player: from a key, a control, a timer or a script.
+    /// Where what the skin asks of the player goes (from a key, a control, a timer or a script): the
+    /// window controller's wiring. A view sends its commands through `perform`.
     var onAction: ((AIMPSkinCommand) -> Void)?
     /// The state moved (the controller shows and hides the skin's windows by it).
     var onStateChange: (() -> Void)?
@@ -74,19 +75,24 @@ final class AIMPSkinRuntime {
     /// Where the skin's scripts run: off the main thread, each job from the state the last left.
     private(set) lazy var scripts = AIMPSkinScriptScheduler(skin: skin) { [weak self] in self?.state ?? AIMPSkinState() }
 
+    /// What is kept of this skin across launches (its windows, sizes, visualization mode), by its
+    /// installed name; nil keeps nothing (the probe's and tests' runtimes).
+    let records: AIMPSkinStore.Skin?
+
     /// `player`: the player now (a new skin's scripts load against it).
-    init(skin: AIMPSkin, player: AIMPSkinPlayerSnapshot) {
+    init(skin: AIMPSkin, player: AIMPSkinPlayerSnapshot, records: AIMPSkinStore.Skin? = nil) {
         self.skin = skin
         self.player = player
+        self.records = records
         matchPlaylist()
-        state.script.visualMode = AIMPVisualMode.saved(skin: skin.name) ?? .spectrum
+        state.script.visualMode = records?.visualMode ?? .spectrum
     }
 
     /// Steps the visualization screen (`acVisualNext`, `acVisualPrev`) and keeps the choice for the skin.
     func stepVisual(by steps: Int) {
         let mode = state.script.visualMode.stepped(by: steps)
         state.script.visualMode = mode
-        mode.save(skin: skin.name)
+        records?.setVisualMode(mode)
     }
 
     /// What the player shows now. A changed playlist (a new build of it) chooses no row, unless
@@ -150,10 +156,10 @@ final class AIMPSkinRuntime {
     }
 
     /// The quick search's matches, worked out once per playlist and search: the window asks every
-    /// frame. The stale ones go first, as `host` answers from them.
+    /// frame. Stale ones (another search, an earlier playlist) are not answered from.
     private func matchPlaylist() {
-        playlistMatches = nil
-        playlistMatches = .init(search: state.lists.playlistSearch, indices: host.playlistIndices(matching: state.lists.playlistSearch))
+        let search = state.lists.playlistSearch
+        playlistMatches = .init(search: search, generation: player.playlist.generation, indices: host.playlistIndices(matching: search))
     }
 
     /// The views drawing this skin's forms; the deck's (`formName` nil) gives the clock its pointer.
@@ -388,6 +394,10 @@ final class AIMPSkinRuntime {
         run(jobs)
     }
 
+    /// A command the user's input asks of the player directly (a click, a drag, the wheel, a held
+    /// key, a list row played), not through a script.
+    func perform(_ command: AIMPSkinCommand) { onAction?(command) }
+
     // MARK: - Changing the state
 
     /// Moves a skin counter to `position` and runs what its scripts ask for.
@@ -421,6 +431,16 @@ final class AIMPSkinRuntime {
         showPage(group, ((next % count) + count) % count)
     }
 
+    /// Steps tabbed group `group` `steps` pages from the one shown, stopping at its ends (the wheel
+    /// over a selector); false for a group with no pages.
+    func stepPage(_ group: String, by steps: Int) -> Bool {
+        let flow = self.flow
+        let count = skin.index.groups[group]?.count ?? 0
+        guard count > 0 else { return false }
+        showPage(group, min(max(flow.activePage(group) + steps, 0), count - 1))
+        return true
+    }
+
     /// Shows page `page` of tabbed group `group`, a click's or the wheel's; a mirrored page's group
     /// turns with it (`AIMPSkinIndex.mirrors`).
     func showPage(_ group: String, _ page: Int) {
@@ -438,9 +458,16 @@ final class AIMPSkinRuntime {
     }
 
     /// Shows or hides a form or item over its bindings (`AIMPSkinState.override`).
-    func setVisible(_ name: String, _ visible: Bool) {
+    func setVisible(_ name: String, _ visible: Bool) { setVisible([(name, visible)]) }
+
+    /// Shows or hides several forms or items as one change, each over its bindings as they stood
+    /// before it.
+    func setVisible(_ changes: [(name: String, visible: Bool)]) {
+        guard !changes.isEmpty else { return }
         let flow = self.flow
-        state.override(visible: visible, of: name, gateFrom: flow)
+        var state = self.state
+        for change in changes { state.override(visible: change.visible, of: change.name, gateFrom: flow) }
+        self.state = state
     }
 }
 

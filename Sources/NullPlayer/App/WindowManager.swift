@@ -852,7 +852,7 @@ class WindowManager {
     
     /// Docking threshold - windows closer than this are considered docked
     /// Should be small so only truly touching windows are grouped
-    let dockThreshold: CGFloat = 3
+    private let dockThreshold: CGFloat = 3
     
     /// Hold threshold - how long (seconds) before a drag moves the connected group
     private let holdThreshold: TimeInterval = 0.4
@@ -894,7 +894,7 @@ class WindowManager {
     private var isMovingDockedWindows = false
     
     /// Flag to prevent feedback loop when snapping windows
-    var isSnappingWindow = false
+    private var isSnappingWindow = false
     private var programmaticFrameChangeToken = 0
 
     /// Guard against re-entrant classic stack tightening while applying repaired frames.
@@ -2465,14 +2465,7 @@ class WindowManager {
                 window.setFrameOrigin(origin)
                 isSnappingWindow = false
                 releaseClosedWindowSlots(under: window)
-                let traceKey = switch uiMode.controllerFamily {
-                case .wmp: "WMP_PLACE_TRACE"
-                case .audion: "AUDION_PLACE_TRACE"
-                case .sonique: "SONIQUE_PLACE_TRACE"
-                case .aimp: "AIMP_PLACE_TRACE"
-                case .winampModern, .classic, .nullPlayerModern: "WINAMP_MODERN_PLACE_TRACE"
-                }
-                if ProcessInfo.processInfo.environment[traceKey] == "1" {
+                if ProcessInfo.processInfo.environment[uiMode.controllerFamily.placeTrace.flag] == "1" {
                     NSLog("[place/tile] hosted %@", NSStringFromRect(window.frame))
                 }
                 postLayoutChangeNotification()
@@ -2534,16 +2527,32 @@ class WindowManager {
     /// were docked below it (directly or transitively). Only windows within
     /// `dockThreshold` of the closing window's bottom edge are moved.
     private func slideUpWindowsBelow(closingFrame: NSRect) {
-        let toMove = Self.windowsDocked(below: closingFrame, among: centerStackSubWindows, threshold: dockThreshold)
+        shiftWindowsDocked(below: closingFrame, among: centerStackSubWindows, by: closingFrame.height)
+    }
+
+    /// Keeps what hangs under `window` attached after it changed size in place: every snap target
+    /// docked below `oldFrame` moves by however far the window's bottom edge moved. For a skin window
+    /// that grows or shrinks itself with its top-left held (a panel opening in an AIMP skin).
+    func carryWindowsDockedBelow(_ window: NSWindow, from oldFrame: NSRect) {
+        let deltaY = window.frame.minY - oldFrame.minY
+        guard deltaY != 0 else { return }
+        shiftWindowsDocked(below: oldFrame, among: snapTargetWindows().filter { $0 !== window }, by: deltaY)
+    }
+
+    /// Moves the windows of `candidates` docked below `frame` (directly or transitively, within
+    /// `dockThreshold`) by `deltaY`, positive up: a programmatic move, so it runs under `isSnappingWindow` and
+    /// never starts a group drag.
+    private func shiftWindowsDocked(below frame: NSRect, among candidates: [NSWindow], by deltaY: CGFloat) {
+        let toMove = Self.windowsDocked(below: frame, among: candidates, threshold: dockThreshold)
         guard !toMove.isEmpty else { return }
 
         isSnappingWindow = true
         defer { isSnappingWindow = false }
 
         for win in toMove {
-            var frame = win.frame
-            frame.origin.y += closingFrame.height
-            win.setFrame(frame, display: true, animate: false)
+            var moved = win.frame
+            moved.origin.y += deltaY
+            win.setFrame(moved, display: true, animate: false)
         }
 
         postLayoutChangeNotification()
@@ -5273,7 +5282,7 @@ class WindowManager {
         // skin declares the same thing as `WMPResizeLimits`, enforced in its own
         // `windowWillResize`, and is excluded for the same reason. An AIMP skin sizes from its own
         // edges, never below its layout's least size (`AIMPSkinMainView+Sizing`), likewise.
-        if uiMode != .winampModern, uiMode.controllerFamily != .wmp, uiMode.controllerFamily != .aimp {
+        if !uiMode.controllerFamily.sizesOwnMainWindow {
             mainWindow.minSize = mainAdjustedSize
         }
 
@@ -6173,11 +6182,12 @@ class WindowManager {
               snapHostedFamilyToDefaultPositions(playerWindow: playerWindow, skinWindows: provider.managedSkinWindows.map(\.window))
         else { return }
 
-        if uiMode.controllerFamily == .wmp, ProcessInfo.processInfo.environment["WMP_PLACE_TRACE"] == "1" {
-            NSLog("[wmp/place] snap-to-default player %@", NSStringFromRect(playerWindow.frame))
+        let trace = uiMode.controllerFamily.placeTrace
+        if ProcessInfo.processInfo.environment[trace.flag] == "1" {
+            NSLog("[%@/place] snap-to-default player %@", trace.tag, NSStringFromRect(playerWindow.frame))
             for window in provider.managedSkinWindows.map(\.window) {
-                NSLog("[wmp/place] snap-to-default %@ %@",
-                      window.title, NSStringFromRect(window.frame))
+                NSLog("[%@/place] snap-to-default %@ %@",
+                      trace.tag, window.title, NSStringFromRect(window.frame))
             }
         }
     }
@@ -7193,7 +7203,7 @@ class WindowManager {
     }
 
     /// Post a windowLayoutDidChange notification, clearing per-cycle caches first.
-    func postLayoutChangeNotification() {
+    private func postLayoutChangeNotification() {
         adjacencyCache.removeAll(keepingCapacity: true)
         edgeOcclusionSegmentsCache.removeAll(keepingCapacity: true)
         sharpCornersCache.removeAll(keepingCapacity: true)
@@ -7417,7 +7427,7 @@ class WindowManager {
 
     /// Get windows that can be used as snapping targets.
     /// Includes Library browser and ProjectM for side-docking.
-    func snapTargetWindows() -> [NSWindow] {
+    private func snapTargetWindows() -> [NSWindow] {
         managedWindowRecords.compactMap { $0.snapTarget && $0.window.isVisible ? $0.window : nil }
     }
 

@@ -10,6 +10,7 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
     static let placeholderSize = AIMPSkinMainView.unskinnedSize
 
     private let importer: AIMPSkinImporter
+    private let store: AIMPSkinStore
     private let skinView = AIMPSkinMainView()
     /// The skin's other windows (speakers, amplifier, equalizer, its own playlist and library).
     private let forms: AIMPSkinFormWindowMaterializer
@@ -62,12 +63,13 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
             treeText: text, treeSelection: selection))
     }()
 
-    /// `importer`: the installed skins and selection; `windowStore`: where each skin's form windows
-    /// were left. A test passes its own of each.
+    /// `importer`: the installed skins and selection; `store`: what is kept of each skin (where its
+    /// form windows were left, its sizes). A test passes its own of each.
     init(importer: AIMPSkinImporter = AIMPSkinImporter(),
-         windowStore: SkinWindowStore = SkinWindowStore(defaults: .standard, keys: .aimp)) {
+         store: AIMPSkinStore = AIMPSkinStore(defaults: .standard)) {
         self.importer = importer
-        forms = AIMPSkinFormWindowMaterializer(store: windowStore)
+        self.store = store
+        forms = AIMPSkinFormWindowMaterializer()
         let window = SkinnedBorderlessWindow(contentRect: NSRect(origin: .zero, size: Self.placeholderSize),
                                              styleMask: [.borderless], backing: .buffered, defer: false)
         window.backgroundColor = .clear
@@ -102,6 +104,7 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
             self.playlistMenu.window = window
             return Self.popupMenu(popup, playlist: self.playlistMenu, clickedRow: clickedRow)
         }
+        skinView.playlistCommands = playlistMenu
         skinView.onDisplaySizeChange = { [weak self] in self?.fitWindow() }
         levelModel.onLevels = { [weak self] left, right in
             guard let self else { return }
@@ -113,9 +116,10 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
 
     required init?(coder: NSCoder) { nil }
 
-    /// A runtime for `skin`, wired to the player and to the skin's form windows.
-    private func makeRuntime(_ skin: AIMPSkin) -> AIMPSkinRuntime {
-        let runtime = AIMPSkinRuntime(skin: skin, player: currentPlayer())
+    /// A runtime for `skin`, installed at `url`, wired to the player and to the skin's form windows.
+    private func makeRuntime(_ skin: AIMPSkin, url: URL) -> AIMPSkinRuntime {
+        let runtime = AIMPSkinRuntime(skin: skin, player: currentPlayer(),
+                                      records: store.skin(url.deletingPathExtension().lastPathComponent))
         runtime.onStateChange = { [weak self] in self?.updateCompanionVisibility() }
         // The meters run with the skin's clock: playing, and on screen.
         runtime.onClockChange = { [weak self] running in
@@ -174,10 +178,10 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
         runtime?.stop()
         forms.teardown()
         libraryHost.teardown()
-        runtime = shown.map { makeRuntime($0.skin) }
+        runtime = shown.map { makeRuntime($0.skin, url: $0.url) }
         playlistMenu.runtime = runtime
         skinView.runtime = runtime
-        forms.rebuild(shown?.skin, skinName: shown?.url.deletingPathExtension().lastPathComponent, runtime: runtime, like: skinView)
+        forms.rebuild(runtime: runtime, like: skinView)
         // The forms the user last left open or closed with this skin, before its load scripts.
         if let runtime { forms.restoreVisibility(of: runtime.skin, into: &runtime.state) }
         updateCompanionVisibility()
@@ -196,7 +200,7 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
         let opens = opensAwaitingSkin
         opensAwaitingSkin = []
         opens.forEach { $0() }
-        for surface in nativeOpens { surface == .playlist ? WindowManager.shared.showPlaylist() : WindowManager.shared.showMediaLibrary() }
+        nativeOpens.forEach(Self.show)
     }
 
     // MARK: - Form windows
@@ -219,13 +223,18 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
         surface == .playlist ? WindowManager.shared.isPlaylistVisible : WindowManager.shared.isPlexBrowserVisible
     }
 
+    /// Opens `surface` as `WindowManager` routes it.
+    private static func show(_ surface: SkinSurface) {
+        surface == .playlist ? WindowManager.shared.showPlaylist() : WindowManager.shared.showMediaLibrary()
+    }
+
     /// Opens the incoming skin's playlist and library forms that are in `open` and closes the rest.
     /// Returns the surfaces in `open` the skin draws none of and NullPlayer's window does not show
     /// yet, to open once the skin is up. NullPlayer's windows beside the skin's own are closed after
     /// (`dismissFallbackSurfacesTheSkinProvides`).
     /// With no skin (one that failed to load), every surface open is NullPlayer's to open.
     private func carry(_ open: [SkinSurface]) -> [SkinSurface] {
-        var state = runtime?.state
+        var shown: [(name: String, visible: Bool)] = []
         var nativeOpens: [SkinSurface] = []
         for surface in Self.lists {
             let own = ownForms(surface)
@@ -233,9 +242,9 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
                 if open.contains(surface), !Self.isOpen(surface) { nativeOpens.append(surface) }
                 continue
             }
-            for form in own { if let flow = runtime?.flow { state?.override(visible: open.contains(surface), of: form.name, gateFrom: flow) } }
+            shown += own.map { ($0.name, open.contains(surface)) }
         }
-        if let state { runtime?.state = state }
+        runtime?.setVisible(shown)
         return nativeOpens
     }
 
@@ -260,11 +269,8 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
     /// A show or toggle of the skin's own forms. Where a form's window opens is the skin's and the
     /// user's (`AIMPSkinFormWindowMaterializer`), so `restoredFrame` is not used.
     func revealSurface(_ surface: SkinSurface, toggle: Bool, restoredFrame: NSRect?) {
-        guard var state = runtime?.state else { return }
         let open = toggle ? !isShowingSurface(surface) : true
-        let flow = runtime?.flow
-        for form in ownForms(surface) { if let flow { state.override(visible: open, of: form.name, gateFrom: flow) } }
-        runtime?.state = state
+        runtime?.setVisible(ownForms(surface).map { ($0.name, open) })
     }
 
     /// A playlist or library show waits for the first skin: until it is up, nothing says whether the
@@ -305,12 +311,9 @@ final class AIMPSkinMainWindowController: NSWindowController, NSWindowDelegate, 
     }
 
     /// The skin's form windows made so far, which `WindowManager` docks, raises and re-places
-    /// (`SkinOwnedWindowsProviding`).
-    var skinOwnedWindows: [NSWindow] { forms.materializedAuxiliaryWindows }
-
-    /// Snap targets only, never centre-stack members: a form is an authored canvas of its own
-    /// size, with no column to join.
-    var managedSkinWindows: [ManagedSkinWindow] { skinOwnedWindows.map { ManagedSkinWindow(window: $0) } }
+    /// (`SkinOwnedWindowsProviding`): snap targets only, never centre-stack members, as a form is an
+    /// authored canvas of its own size, with no column to join.
+    var managedSkinWindows: [ManagedSkinWindow] { forms.materializedAuxiliaryWindows.map { ManagedSkinWindow(window: $0) } }
 
     // MARK: - Host state
 

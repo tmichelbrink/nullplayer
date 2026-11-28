@@ -30,10 +30,18 @@ enum AppFeature {
 /// to know which edition that is.
 enum AppCapabilities {
     static func supports(_ feature: AppFeature) -> Bool {
+        #if !DEBUG
+        if unreleased.contains(feature) { return false }
+        #endif
         #if EDITION_CUSTOM
         return EditionPolicy.supports(feature)
         #else
         return true
         #endif
     }
+
+    /// Features no release build offers yet, whatever its edition: a skin family still in
+    /// development is in debug builds only until it is ready to ship (Audion faces were, until they
+    /// shipped).
+    static let unreleased: Set<AppFeature> = [.aimpSkinMode]
 }

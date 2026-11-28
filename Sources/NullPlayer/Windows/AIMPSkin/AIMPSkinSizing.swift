@@ -30,8 +30,8 @@ struct AIMPSkinSizing {
     }
 
     /// Sizes the form `formName` (nil: the main form) of `skin`, or the unskinned panel: its natural
-    /// size, else for a form the user may size the size they last gave it, else the skin's own.
-    mutating func load(_ skin: AIMPSkin?, form formName: String?) {
+    /// size, else for a form the user may size the size they last gave it (`saved`), else the skin's own.
+    mutating func load(_ skin: AIMPSkin?, form formName: String?, saved: CGSize? = nil) {
         minimum = skin?.naturalSize(form: formName) ?? AIMPSkinMainView.unskinnedSize
         edge = skin?.index.sizing[formName ?? ""]?.edge
         shownWidth = nil
@@ -41,7 +41,6 @@ struct AIMPSkinSizing {
         drag = nil
         fixedWidth = skin.flatMap { AIMPSkinRenderer.fixedWidth($0, form: formName, state: AIMPSkinState()) }
         let initial = skin.flatMap { AIMPSkinRenderer.initialSize($0, form: formName, natural: minimum) }
-        let saved = skin.flatMap { Self.savedSize(skin: $0, form: formName) }
         canvas = edge == nil ? minimum : saved.map(clamped) ?? initial.map(clamped) ?? minimum
     }
 
@@ -116,19 +115,5 @@ struct AIMPSkinSizing {
             canvas = CGSize(width: fixedWidth ?? max(minimum.width, (screen.width / scale).rounded(.down)),
                             height: max(minimum.height, (screen.height / scale).rounded(.down)))
         }
-    }
-
-    /// The size the user last gave `skin`'s form, kept by its name.
-    private static func savedSize(skin: AIMPSkin, form formName: String?) -> CGSize? {
-        UserDefaults.standard.string(forKey: key(skin: skin, form: formName)).map { NSSizeFromString($0) }
-            .flatMap { $0.width > 0 && $0.height > 0 ? $0 : nil }
-    }
-
-    static func save(_ size: CGSize, skin: AIMPSkin, form formName: String?) {
-        UserDefaults.standard.set(NSStringFromSize(size), forKey: key(skin: skin, form: formName))
-    }
-
-    private static func key(skin: AIMPSkin, form formName: String?) -> String {
-        "AIMPSkinSize." + skin.name + (formName.map { "." + $0 } ?? "")
     }
 }

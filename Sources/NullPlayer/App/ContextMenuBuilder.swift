@@ -864,7 +864,7 @@ class ContextMenuBuilder {
         if AppCapabilities.supports(.soniqueSkinMode) {
             uiMenu.addItem(skinFamilyItem(.sonique, menu: buildSoniqueSkinsMenu()))
         }
-        if AppFeature.aimpSkinMode.isOffered {
+        if AppCapabilities.supports(.aimpSkinMode) {
             uiMenu.addItem(skinFamilyItem(.aimp, menu: buildAIMPSkinsMenu()))
         }
         uiMenu.addItem(.separator())

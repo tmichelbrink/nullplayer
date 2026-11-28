@@ -10,7 +10,7 @@ final class AIMPSkinCatalogueTests: XCTestCase {
     override func setUpWithError() throws {
         folder = FileManager.default.temporaryDirectory.appendingPathComponent("aimp-catalogue-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        defaults = UserDefaults(suiteName: "AIMPSkinCatalogueTests-\(UUID().uuidString)")
+        defaults = scopedDefaults()
     }
 
     override func tearDownWithError() throws {

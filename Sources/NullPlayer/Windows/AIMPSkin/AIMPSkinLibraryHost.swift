@@ -59,10 +59,8 @@ final class AIMPSkinLibraryHost {
     /// decks' row-spacing key: `Style.RowContentOffsets.Top`/`Bottom` 8, 4 or 2 on `MLTable`): the
     /// points past the 2 + 2 the browser's own rows already leave. None set: the browser's own.
     nonisolated static func rowPadding(_ state: AIMPSkinState) -> CGFloat {
-        let properties = state.script[AIMPSkinList.libraryTable.rawValue].properties
-        let offset = { (side: String) in properties["Style.RowContentOffsets.\(side)"].flatMap(Double.init).map { min(max($0, 0), 64) } }
-        guard let top = offset("Top"), let bottom = offset("Bottom") else { return 0 }
-        return CGFloat(max(0, top + bottom - 4))
+        guard let offsets = state.libraryRowOffsets else { return 0 }
+        return CGFloat(max(0, offsets.top + offsets.bottom - 4))
     }
 
     /// The skin is going: the browser goes with it, its server work cancelled.
@@ -110,18 +108,15 @@ final class AIMPSkinLibraryHost {
     /// selection; whatever it leaves out from `fallback`. The selected text is made for its row's
     /// fill, not the list's: AIMP Modern v3.63's light blue, an accent on its blue list, was hard to read.
     static func style(_ colours: AIMPSkinControl.Library, over fallback: SkinnedSurfaceStyle) -> SkinnedSurfaceStyle {
-        let background = colours.fill.map(color) ?? fallback.background
-        let text = colours.rowText.map(color) ?? fallback.text
-        let selection = colours.selected.map(color) ?? fallback.selectionBackground
-        let selectionText = colours.selectedText.map(color) ?? fallback.selectionText
+        let background = colours.fill.flatMap(color) ?? fallback.background
+        let text = colours.rowText.flatMap(color) ?? fallback.text
+        let selection = colours.selected.flatMap(color) ?? fallback.selectionBackground
+        let selectionText = colours.selectedText.flatMap(color) ?? fallback.selectionText
         return SkinnedSurfaceStyle(roles: SkinnedSurfaceRoles(
             background: background, text: text, currentText: text, selectionBackground: selection,
             selectionText: selectionText, treeText: text, treeSelection: selection))
     }
 
     /// An AIMP colour (`0xAARRGGBB`).
-    private static func color(_ argb: UInt32) -> NSColor {
-        NSColor(srgbRed: CGFloat(argb >> 16 & 0xFF) / 255, green: CGFloat(argb >> 8 & 0xFF) / 255,
-                blue: CGFloat(argb & 0xFF) / 255, alpha: CGFloat(argb >> 24 & 0xFF) / 255)
-    }
+    private static func color(_ argb: UInt32) -> NSColor? { NSColor(cgColor: AIMPSkinText.color(argb)) }
 }

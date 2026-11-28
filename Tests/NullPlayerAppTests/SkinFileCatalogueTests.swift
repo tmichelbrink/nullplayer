@@ -77,19 +77,24 @@ final class SkinFileCatalogueTests: XCTestCase {
         XCTAssertNil(catalogue.selection.name, "selecting is the caller's")
     }
 
-    /// Two files of one skin name in a batch install as one skin, the first: the cleanup of one
-    /// must not delete the other.
+    /// Two files of one skin name in a batch, in any case, install as one skin, the first: the
+    /// cleanup of one must not delete the other.
     func testInstallAllTakesTheFirstFileOfAName() async throws {
         let source = folder.deletingLastPathComponent().appendingPathComponent("src-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: source) }
         let first = source.appendingPathComponent("Theme.\(Catalogue.fileExtensions[1])")
         let second = source.appendingPathComponent("Theme.\(Catalogue.fileExtensions[0])")
+        let other = source.appendingPathComponent("sub", isDirectory: true)
+        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+        let third = other.appendingPathComponent("theme.\(Catalogue.fileExtensions[1])")
         try Data("1".utf8).write(to: first)
         try Data("2".utf8).write(to: second)
-        let skins = try await Catalogue.installAll([first, second], into: catalogue.folder) { _ in }
+        try Data("3".utf8).write(to: third)
+        let skins = try await Catalogue.installAll([first, second, third], into: catalogue.folder) { _ in }
         XCTAssertEqual(skins.map(\.name), ["Theme"])
         XCTAssertEqual(files, [first.lastPathComponent])
+        XCTAssertEqual(try String(contentsOf: skins[0].url, encoding: .utf8), "1")
     }
 
     /// A skin installed over a file of its name in another case (`Deck.NEW`, put there by hand) is

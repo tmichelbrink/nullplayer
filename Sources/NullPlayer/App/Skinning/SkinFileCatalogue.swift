@@ -35,8 +35,6 @@ protocol SkinFileCatalogue: SkinFileImporting {
 }
 
 extension SkinFileCatalogue {
-    var directoryURL: URL { folder.url }
-
     func installedSkins() -> [InstalledSkinFile] {
         Self.skinFilesByName(in: folder).compactMap { name, files in files.first.map { InstalledSkinFile(name: name, url: $0) } }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
@@ -82,7 +80,8 @@ extension SkinFileCatalogue {
     static func installAll(_ files: [URL], into folder: SkinInstallFolder,
                            validate: (URL) async throws -> Void) async throws -> [InstalledSkinFile] {
         var names = Set<String>()
-        let files = files.filter { names.insert($0.deletingPathExtension().lastPathComponent).inserted }
+        // Without regard to case: on a case-insensitive volume `Theme.acs4` and `theme.acs4` are one file.
+        let files = files.filter { names.insert($0.deletingPathExtension().lastPathComponent.lowercased()).inserted }
         let skins = files.map { destination(of: $0, in: folder) }
         try await folder.commitAll(zip(files, skins).map { ($0, $1.url, "." + $1.url.pathExtension) }, validate: validate)
         for skin in skins {

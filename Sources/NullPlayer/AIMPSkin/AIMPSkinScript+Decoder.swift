@@ -5,13 +5,13 @@ extension AIMPSkinScript {
 
     /// `FSXMLBIN`, then nodes of `{ u16 + UTF-16LE tag, u16 + UTF-16LE attribute text, u32 child count }`.
     static func parse(_ data: Data) throws -> AIMPNode {
-        guard data.count > 8, data.prefix(8) == Data("FSXMLBIN".utf8) else { throw Unsupported(what: "not FSXMLBIN") }
+        guard data.count > 8, data.prefix(8) == Data("FSXMLBIN".utf8) else { throw Malformed(description: "not FSXMLBIN") }
         var reader = AIMPSkinBytes(data, code: .entryUnreadable)
         reader.offset = 8
         var nodes = 0
         func node(_ depth: Int) throws -> AIMPNode {
             nodes += 1
-            guard depth < AIMPSkinPolicy.xmlDepth, nodes < AIMPSkinPolicy.xmlNodes else { throw Unsupported(what: "too deep") }
+            guard depth < AIMPSkinPolicy.xmlDepth, nodes < AIMPSkinPolicy.xmlNodes else { throw Malformed(description: "too deep") }
             let tag = try reader.utf16(units: reader.u16())
             var attributes: [String: String] = [:]
             var rest = Substring(try reader.utf16(units: reader.u16()))

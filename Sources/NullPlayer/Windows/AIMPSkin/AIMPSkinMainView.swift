@@ -36,7 +36,7 @@ final class AIMPSkinMainView: NSView {
         playlistRowsShown = nil
         hasContent = false
         search.end()
-        sizing.load(runtime?.skin, form: formName)
+        sizing.load(runtime?.skin, form: formName, saved: runtime?.records?.size(form: formName))
         sizing.fit(runtime?.skin, form: formName, state: skinState)
         window?.invalidateCursorRects(for: self)
         hoverRects = [:]
@@ -67,6 +67,8 @@ final class AIMPSkinMainView: NSView {
     /// NullPlayer's menu like the one a key's `PopupMenu` names.
     /// `clickedRow` is the playlist row a right-click was over; `window` the one the menu opens on.
     var popupMenu: (@MainActor (_ popup: AIMPSkinPopup, _ clickedRow: Int?, _ window: NSWindow?) -> NSMenu)?
+    /// What the skin playlist's keys do to its selection (Delete, Return): its menus' commands.
+    weak var playlistCommands: AIMPSkinPlaylistMenuTarget?
     /// Window points per skin pixel.
     var uiScale: CGFloat = 1 { didSet { if uiScale != oldValue { needsDisplay = true } } }
     /// The form's size in skin pixels, and the user's sizing of it.

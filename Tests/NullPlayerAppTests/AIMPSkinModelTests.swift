@@ -833,16 +833,8 @@ final class AIMPSkinModelTests: XCTestCase {
         try AIMPNode.parse(Data(xml.utf8), name: "test.xml")
     }
 
-    /// A project file (`ACSJ`) of `entries`: the header (13 bytes), the metadata block (u32 length:
-    /// name, author, about, no preview), the entry count and the entries.
+    /// A project file (`ACSJ`) of `entries` (`AIMPTestProject`), loaded.
     private static func project(_ entries: [(String, Data)], languages: [String] = ["en"]) throws -> AIMPSkin {
-        func utf16LE(_ text: String) -> Data {
-            Data([UInt8(text.utf16.count & 0xFF), UInt8(text.utf16.count >> 8)]) + (text.data(using: .utf16LittleEndian) ?? Data())
-        }
-        func u32(_ value: Int) -> Data { withUnsafeBytes(of: UInt32(value).littleEndian) { Data($0) } }
-        let meta = utf16LE("Test") + utf16LE("") + utf16LE("") + [0]
-        var data = Data("ACSJ".utf8) + Data(count: 9) + u32(meta.count) + meta + u32(entries.count)
-        for (name, bytes) in entries { data += utf16LE(name) + u32(bytes.count) + bytes }
-        return try AIMPSkinLoader.load(data: data, languages: languages)
+        try AIMPSkinLoader.load(data: AIMPTestProject.data(entries), languages: languages)
     }
 }

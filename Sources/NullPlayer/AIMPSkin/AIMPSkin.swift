@@ -36,9 +36,6 @@ struct AIMPSkin: Sendable {
             self.role = role
             self.placement = placement ?? AIMPFormRole.side(ofForm: name)
         }
-        /// A speaker cabinet as tall as the deck or taller stands level with its bottom.
-        var isSpeaker: Bool { name.lowercased().contains("speaker") }
-
         /// Where its window (`size`) opens beside the deck's window (`deck`), in screen coordinates
         /// (y up): as `Schema.xml` declares, its offset times `scale`, else by `placement`: beside
         /// the deck tops level (a speaker taller than the deck bottoms level), below it or above it
@@ -61,7 +58,7 @@ struct AIMPSkin: Sendable {
             case .below: origin = CGPoint(x: deck.minX, y: deck.minY - size.height)
             }
             // Beside it only: a speaker below or above stays clear of the deck.
-            if isSpeaker, size.height > deck.height, placement == .left || placement == .right { origin.y = deck.minY }
+            if AIMPFormRole.isSpeaker(name), size.height > deck.height, placement == .left || placement == .right { origin.y = deck.minY }
             return origin
         }
 
@@ -210,130 +207,6 @@ final class AIMPSkinBlurredCovers: Sendable {
     }
 }
 
-/// A skin font (`TASEFont`): its face, pixel height, weight and ARGB colour.
-struct AIMPSkinFont: Equatable, Sendable {
-    var name: String
-    var height: Int
-    var bold: Bool
-    var color: UInt32
-    /// The height is the letters' (Windows' negative `Height`: `Tahoma,…,-11,0`), not the line's.
-    var emHeight = false
-    /// `ColorID`: a colour resource it takes its colour from, through the aliases a theme script
-    /// repointed (M5's text, `Skin.Color.Content.Text` light or dark), over `color`.
-    var colorID: String? = nil
-    /// The `TASEFont` resource it was read from, and what that gave, which a script may repoint
-    /// (`resolved(in:links:)`).
-    var resource: Resource? = nil
-
-    struct Resource: Equatable, Sendable {
-        let id: String
-        let name: String
-        let height: Int
-        let bold: Bool
-        let color: UInt32
-        /// The settings (`Name`, `Height`, `Style`, `Color`) the control declared over the resource
-        /// itself: they stay when the resource is repointed, even where they equal what it gave.
-        var declared: Set<String> = []
-    }
-
-    /// As drawn, through the resource aliases a script repointed (M5's and Soot's themes): what the
-    /// resource gave comes from the one it now names; what the skin set over it stays.
-    func resolved(in resources: [String: AIMPSkinResource], links: [String: String]) -> AIMPSkinFont {
-        var font = self
-        if let resource, !links.isEmpty, let chain = AIMPSkin.resource(resource.id, in: resources, links: links)?.chain, !chain.isEmpty {
-            let now = AIMPSkinFont(resource: chain)
-            let declared = resource.declared
-            if name == resource.name, !declared.contains("Name") { font.name = now.name }
-            if height == resource.height, !declared.contains("Height") { font.height = now.height }
-            if bold == resource.bold, !declared.contains("Style") { font.bold = now.bold }
-            if color == resource.color, !declared.contains("Color") { font.color = now.color }
-            if colorID == nil { font.colorID = now.colorID }
-        }
-        if let id = font.colorID, let argb = AIMPSkin.color(id, in: resources, links: links) { font.color = argb }
-        return font
-    }
-
-    /// The face at AIMP's pixel height, bold when asked; one neither the Mac nor the skin has
-    /// (`Segoe UI`) falls back to the system font. A height is Windows': a line's, ascent
-    /// and descent, unless `emHeight`; so the letters' size is the face's own share of it (Poppins
-    /// 0.57, Segoe UI 0.75, Tahoma 0.83: M5's "NOW PLAYING" in its 88-px box). Never below 8. Made
-    /// once per face, height and weight: text is set many times a frame. `shelf` is the fonts the
-    /// skin being drawn ships (`AIMPSkin.fontShelf`).
-    func ctFont(on shelf: AIMPSkinFonts.Shelf?) -> CTFont {
-        let key = Face(name: name, height: height, emHeight: emHeight, bold: bold, shelf: shelf?.id ?? 0)
-        if let made = Self.faces.withLockUnchecked({ $0[key] }) { return made }
-        let sample = Self.face(name, size: 100, bold: bold, shelf: shelf)
-        // A face the Mac stands in for (`Segoe UI` on most Macs) keeps AIMP's usual share, 0.8: its
-        // own line says nothing of the face the skin was drawn with.
-        let line = sample.found ? Self.windowsLine(sample.font) ?? (CTFontGetAscent(sample.font) + CTFontGetDescent(sample.font)) / 100 : 1.25
-        let size = max(8, (emHeight || line <= 0 ? CGFloat(height) : CGFloat(height) / line).rounded())
-        let face = Self.face(name, size: size, bold: bold, shelf: shelf).font
-        Self.faces.withLockUnchecked { faces in
-            // Every load of a skin with fonts makes a new shelf, and a face made from one holds its
-            // font data: past `faceLimit` the faces are let go and made again as drawn.
-            // Other shelves' faces go first (skins since reloaded); only then the rest.
-            if faces.count >= Self.faceLimit { faces = faces.filter { $0.key.shelf == key.shelf } }
-            if faces.count >= Self.faceLimit { faces.removeAll(keepingCapacity: true) }
-            faces[key] = face
-        }
-        return face
-    }
-
-    /// `name`, a family or a family and weight (`Segoe UI Semibold`: Segoe UI, bold); else the
-    /// system font.
-    private static func face(_ name: String, size: CGFloat, bold: Bool, shelf: AIMPSkinFonts.Shelf?) -> (font: CTFont, found: Bool) {
-        // A face the skin ships, bold from its own bold or semibold file: a lone shipped face cannot
-        // be made bold, so a bold ask without one is the Mac's to answer (Bliss's bold Segoe UI rows).
-        func shipped(_ name: String, _ bold: Bool) -> CTFont? {
-            let names = bold ? [name + " bold", name + " semibold", name] : [name]
-            guard let font = names.lazy.compactMap({ shelf?.font(named: $0) }).first else { return nil }
-            let face = CTFontCreateWithGraphicsFont(font, size, nil, nil)
-            let weight = (CTFontCopyTraits(face) as? [CFString: Any])?[kCTFontWeightTrait] as? CGFloat ?? 0
-            return !bold || CTFontGetSymbolicTraits(face).contains(.traitBold) || weight > 0.2 ? face : nil
-        }
-        func family(_ name: String, _ bold: Bool) -> CTFont? {
-            if let face = shipped(name, bold) { return face }
-            let font = CTFontCreateWithName(name as CFString, size, nil)
-            guard (CTFontCopyFamilyName(font) as String).caseInsensitiveCompare(name) == .orderedSame else { return nil }
-            return bold ? CTFontCreateCopyWithSymbolicTraits(font, size, nil, .traitBold, .traitBold) ?? font : font
-        }
-        if let font = family(name, bold) { return (font, true) }
-        for (suffix, heavy) in [(" Semibold", true), (" SemiBold", true), (" Bold", true), (" Medium", false), (" Light", false)]
-        where name.hasSuffix(suffix) {
-            if let font = family(String(name.dropLast(suffix.count)), bold || heavy) { return (font, true) }
-        }
-        let system = CTFontCreateUIFontForLanguage(bold ? .emphasizedSystem : .system, size, nil)
-        return (system ?? CTFontCreateWithName(name as CFString, size, nil), false)
-    }
-
-    /// The line Windows sets a face in, per em: its `OS/2` `usWinAscent` and `usWinDescent` over
-    /// its `head`'s units per em (Poppins 1.76 where its Mac line is 1.40); nil without them.
-    private static func windowsLine(_ font: CTFont) -> CGFloat? {
-        guard let os2 = CTFontCopyTable(font, CTFontTableTag(kCTFontTableOS2), []) as Data?,
-              let head = CTFontCopyTable(font, CTFontTableTag(kCTFontTableHead), []) as Data?,
-              os2.count >= 78, head.count >= 20 else { return nil }
-        func u16(_ data: Data, _ at: Int) -> Int { Int(data[data.startIndex + at]) << 8 | Int(data[data.startIndex + at + 1]) }
-        let units = u16(head, 18)
-        guard units > 0 else { return nil }
-        let line = CGFloat(u16(os2, 74) + u16(os2, 76)) / CGFloat(units)
-        return line > 0 ? line : nil
-    }
-
-    private struct Face: Hashable {
-        let name: String
-        let height: Int
-        let emHeight: Bool
-        let bold: Bool
-        /// The skin's own fonts it was looked up among (`AIMPSkinFonts.Shelf.id`), 0 for none.
-        let shelf: Int
-    }
-
-    /// The faces made, shared by every skin (CTFont is immutable and safe across threads).
-    private static let faces = OSAllocatedUnfairLock<[Face: CTFont]>(uncheckedState: [:])
-    /// More faces than a few skins' text sets (M5 sets a few dozen), so a skin drawn keeps its own.
-    private static let faceLimit = 512
-}
-
 enum AIMPSkinLoader {
     /// The font files one skin's shelf holds together: M5's three families are a few MB, so a skin
     /// whose fonts sum past this is a bomb, not a type specimen.
@@ -361,6 +234,18 @@ enum AIMPSkinLoader {
         return try load(data: data)
     }
 
+    /// Which reader a skin's forms take, decided once from its archive: AIMP 4 and 5's markup forms
+    /// (`AIMPMainForm.xml`, whatever the container), AIMP 3.0's `main.ini` and layout
+    /// (`AIMPSkinAIMP3`), or AIMP 2's `main.ini` in an `ACSP` container (`AIMPSkinAIMP2`).
+    private enum Generation {
+        case markup(AIMPNode)
+        case aimp3(INIFile)
+        case aimp2(INIFile)
+
+        var isMarkup: Bool { if case .markup = self { true } else { false } }
+        var isAIMP2: Bool { if case .aimp2 = self { true } else { false } }
+    }
+
     /// `languages`: the preferred languages, most wanted first, that `@Lng:N;` captions are read in.
     static func load(data: Data, languages: [String] = Locale.preferredLanguages) throws -> AIMPSkin {
         let archive = try AIMPSkinArchive.read(data)
@@ -369,8 +254,12 @@ enum AIMPSkinLoader {
 
         // An AIMP 3.0 skin has no form documents: its form is read from its layout and `main.ini` once
         // the pictures it is sized by are read (`AIMPSkinAIMP3`).
-        let mainForm = archive.mainINI == nil
-            ? try documents.throwing("AIMPMainForm.xml", missing: "The skin has no AIMPMainForm.", documents.node) : nil
+        let generation: Generation
+        if let ini = archive.mainINI {
+            generation = archive.format == .acsp ? .aimp2(ini) : .aimp3(ini)
+        } else {
+            generation = .markup(try documents.throwing("AIMPMainForm.xml", missing: "The skin has no AIMPMainForm.", documents.node))
+        }
 
         let strings = AIMPSkinLanguage.strings(in: documents, preferred: languages)
 
@@ -399,11 +288,12 @@ enum AIMPSkinLoader {
         // cut as `main.ini` says; each is filed as `.img`, which wins, then `.myimg`.
         let budget = AIMPSkinPixelBudget()
         // AIMP 2's bitmaps are laid out as its form is read (`AIMPSkinAIMP2.layOut`).
-        let layouts = archive.format != .acsp ? archive.mainINI.map(AIMPSkinAIMP3.bitmapLayouts) ?? [:] : [:]
+        let layouts: [String: AIMPSkinImage.Layout]
+        if case .aimp3(let ini) = generation { layouts = AIMPSkinAIMP3.bitmapLayouts(ini) } else { layouts = [:] }
         var images: [String: AIMPSkinImage] = [:]
         var inflated = 0
         for (name, entry) in archive.entries.sorted(by: { $0.key < $1.key }) {
-            guard let ext = [".img", ".myimg", ".bmp"].first(where: name.hasSuffix), archive.mainINI != nil || ext != ".bmp" else { continue }
+            guard let ext = [".img", ".myimg", ".bmp"].first(where: name.hasSuffix), !generation.isMarkup || ext != ".bmp" else { continue }
             let stem = String(name.dropLast(ext.count))
             if ext != ".img", archive.entries[stem + ".img"] != nil { continue }
             if ext == ".bmp", archive.entries[stem + ".myimg"] != nil { continue }
@@ -419,7 +309,7 @@ enum AIMPSkinLoader {
                     ? try AIMPSkinImage(bitmap: payload, name: entry.name, layout: layouts[stem] ?? .init(), budget: budget, source: source)
                     : try AIMPSkinImage(payload, name: entry.name, budget: budget, source: source)
                 // AIMP 2's are cut into frames as its form is read: their frames are checked then.
-                if archive.format != .acsp { try Self.checkFrames(of: image, name: entry.name) }
+                if !generation.isAIMP2 { try Self.checkFrames(of: image, name: entry.name) }
                 guard image.width * image.height <= budget.limit else {
                     throw AIMPSkinFinding(.pixelBudgetExceeded,
                                           "\(entry.name) alone has \(image.width * image.height) pixels, more than \(budget.limit).")
@@ -434,18 +324,17 @@ enum AIMPSkinLoader {
         let scripts = try AIMPSkinScript.Library(archive, inflated: &inflated, findings: &scriptFindings)
         scriptFindings.forEach(documents.record)
         let companions: [AIMPSkin.Companion], resources: [String: AIMPSkinResource], index: AIMPSkinIndex
-        if let mainForm {
+        switch generation {
+        case .markup(let mainForm):
             (companions, resources, index) = Self.markupForms(mainForm, documents: documents, strings: strings)
-        } else if let ini = archive.mainINI, archive.format == .acsp {
+        case .aimp2(let ini):
             resources = [:]
             (index, companions, images) = try AIMPSkinAIMP2(documents: documents, ini: ini, images: images, strings: strings)
                 .read(dialect: AIMPSkinDialect(archive))
             for (name, image) in images.sorted(by: { $0.key < $1.key }) { try Self.checkFrames(of: image, name: name) }
-        } else if let ini = archive.mainINI {
+        case .aimp3(let ini):
             (companions, resources) = ([], [:])
             index = try AIMPSkinAIMP3.read(documents, ini: ini, images: images, strings: strings, dialect: AIMPSkinDialect(archive))
-        } else {
-            throw AIMPSkinFinding(.noMainForm, "The skin has no AIMPMainForm.")
         }
         var skin = AIMPSkin(archive: archive, companions: companions, resources: resources,
                         strings: strings, images: images, findings: documents.findings, scripts: scripts, index: index)
@@ -515,21 +404,9 @@ enum AIMPSkinLoader {
             guard let name = entry["name"], name != "AIMPMainForm", !companions.contains(where: { $0.name == name }) else { return nil }
             return (name, documents.node(name + ".xml"))
         }
-        var index = AIMPSkinIndex(main: mainForm, companions: companions, forms: forms, schema: schema, sites: sites,
-                                  resources: resources, strings: strings, unopened: unopened.compactMap(\.form),
+        let index = AIMPSkinIndex(main: mainForm, companions: companions, forms: forms, schema: schema, sites: sites,
+                                  resources: resources, strings: strings, unopened: unopened,
                                   dialect: AIMPSkinDialect(archive))
-        // What the forms NullPlayer does not open hold (M5's tray mini player, its lyrics window): a
-        // key wired into one of them asks for what NullPlayer does not have. Not a tabbed group whose
-        // pages the shown windows read: turning it changes what they show (AIMP Modern's visualizer
-        // modes, kept in its hidden `QFI` form).
-        let read = Set(([mainForm] + companions.compactMap { forms[$0.name] }).flatMap { $0.descendants() }.filter { $0.tag == "link" }.compactMap { $0["Source"] })
-        for (name, form) in unopened {
-            index.elsewhere.insert(name)
-            index.elsewhere.formUnion(form?.descendants().compactMap { $0["name"] } ?? [])
-        }
-        for (group, pages) in index.groups where index.elsewhere.contains(group) && pages.contains(where: read.contains) {
-            index.elsewhere.subtract([group] + pages)
-        }
         return (companions, resources, index)
     }
 }
