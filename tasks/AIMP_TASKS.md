@@ -141,4 +141,12 @@ slider frame, AM0006), Dark Lagoon (ACSP version byte 0x20).
 17. **Certification leftovers** (cert kit run 2026-11-27, 505 of 722 certified): keys a skin shows
     only behind a delayer or a page the probe's click run does not reach (Lumin's `Button_Size_Inc`,
     Mirillis's `Button16` behind `masa2`), and state frames no host state reaches. Probe reach, not
-    rendering; listed so a later run can tell them from new gaps.
+    rendering; listed so a later run can tell them from new gaps.18. **`laNone` measure vs layout** (CodeRabbit, fork review #6, C36): the measure stacks `laNone`
+    items where the layout overlays them (`AIMPSkinAlignment`). Aligning the measure changes the
+    natural and minimum size of every skin using `laNone`, so it needs a corpus render sweep first.
+19. **Play-key glow on DS and Zelon:** NullPlayer draws a glowing ring around the play key where
+    AIMP 5.40's capture shows it dark (gate m9; predates the nine-frame key fix).
+20. **Unfocused list selection in AIMP mode:** the embedded library dims its selection while its
+    window is not key, upstream's rule for every family but `.wal` (`UnfocusedSelection`). Whether
+    AIMP 5.40 greys an unfocused selection is not yet checked under Wine; if it does not, `.aimp`
+    joins `.winampModern` there.
