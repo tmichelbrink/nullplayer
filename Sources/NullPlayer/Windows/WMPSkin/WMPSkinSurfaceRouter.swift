@@ -40,8 +40,10 @@ struct WMPSkinSurfaceRouter: SkinSurfaceRouter {
     /// A skin's view opens; its button never closes it.
     func toggleClosesSurface(_ surface: SkinSurface) -> Bool { false }
 
-    /// During the launch hold the skin has not said yet what it draws (`launchHoldTimeout`).
+    /// During the launch hold the skin has not said yet what it draws (`launchHoldTimeout`). Only for
+    /// a surface a WMP skin can draw: NullPlayer's own library window opens at once, as it always has.
     func deferUntilSkinLoads(_ surface: SkinSurface, _ open: @escaping () -> Void) -> Bool {
-        controller.deferUntilLaunchSettles(open)
+        guard Self.wmpSurface(surface) != nil else { return false }
+        return controller.deferUntilLaunchSettles(open)
     }
 }

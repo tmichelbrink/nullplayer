@@ -915,7 +915,7 @@ class AppStateManager {
         if runningMode == .wmp {
             (wm.mainWindowController as? WMPMainWindowController)?.reloadSelectedSkin()
         }
-        (wm.mainWindowController as? any SingleCanvasMainWindow)?.reloadSelectedSkin()
+        (wm.mainWindowController as? any SkinFileMainWindow)?.reloadSelectedSkin()
         
         // Restore audio output device
         if let deviceUID = state.selectedOutputDeviceUID {
@@ -1354,7 +1354,7 @@ class AppStateManager {
             controller.restoreFrame(correctedMainFrame ?? NSRectFromString(frameString),
                                     skinName: state.wmpSkinName, viewID: state.wmpViewID)
         } else if let frameString = state.mainWindowFrame,
-                  let controller = wm.mainWindowController as? any SingleCanvasMainWindow {
+                  let controller = wm.mainWindowController as? any SkinFileMainWindow {
             // The face or skin decides the size; the saved frame places its top-left.
             controller.restoreFrame(correctedMainFrame ?? NSRectFromString(frameString))
         } else if let frameString = state.mainWindowFrame,

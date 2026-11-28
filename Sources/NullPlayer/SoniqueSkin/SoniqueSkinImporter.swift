@@ -5,7 +5,7 @@ import Foundation
 /// thread as it is committed (`SkinInstallFolder`).
 struct SoniqueSkinImporter: SkinFileCatalogue {
     static let family = "Sonique"
-    static let fileExtension = "sgf"
+    static let fileExtensions = ["sgf"]
 
     let folder: SkinInstallFolder
     let selection: SkinSelection

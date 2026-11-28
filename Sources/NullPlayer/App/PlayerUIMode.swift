@@ -14,13 +14,14 @@ import Foundation
 /// - `wmp`: the Windows Media Player `.wmz`/`.wms` family.
 /// - `audion`: Panic Audion faces (folders of `index.json` + PNGs).
 /// - `sonique`: Sonique 1.x skins (`.sgf`).
-enum PlayerUIControllerFamily {
+enum PlayerUIControllerFamily: CaseIterable {
     case classic
     case nullPlayerModern
     case winampModern
     case wmp
     case audion
     case sonique
+    case aimp
 
     /// Draws a third-party skin format (`.wal`, `.wmz`, an Audion face), so the skin owns the player
     /// and NullPlayer's own windows float free beside it rather than in Classic's centre stack: tiled
@@ -29,7 +30,7 @@ enum PlayerUIControllerFamily {
     /// Its main window is the skin's own canvas, so its width is never a classic zoom.
     var hostsForeignSkin: Bool {
         switch self {
-        case .winampModern, .wmp, .audion, .sonique: return true
+        case .winampModern, .wmp, .audion, .sonique, .aimp: return true
         case .classic, .nullPlayerModern: return false
         }
     }
@@ -40,28 +41,50 @@ enum PlayerUIControllerFamily {
     /// is not one.
     var bringsOwnRuntime: Bool {
         switch self {
-        case .wmp, .audion, .sonique: return true
+        case .wmp, .audion, .sonique, .aimp: return true
         case .classic, .nullPlayerModern, .winampModern: return false
         }
     }
 
     /// The skin is one borderless canvas and nothing else (an Audion face, a Sonique skin): no
     /// windows of its own beside the player, and no column for NullPlayer's centre stack to hang off.
-    /// `.wal` and `.wmz` declare windows of their own, so they are not.
+    /// `.wal`, `.wmz` and AIMP declare windows of their own, so they are not.
     var isSingleCanvas: Bool {
         switch self {
         case .audion, .sonique: return true
-        case .classic, .nullPlayerModern, .winampModern, .wmp: return false
+        case .classic, .nullPlayerModern, .winampModern, .wmp, .aimp: return false
         }
     }
 
     /// The skin opens top-level windows of its own beside the player (`.wmz` views, `.wal`
-    /// containers), which its controller hands `WindowManager` through `SkinOwnedWindowsProviding`.
-    /// A single-canvas family (`isSingleCanvas`) has none.
+    /// containers, AIMP forms), which its controller hands `WindowManager` through
+    /// `SkinOwnedWindowsProviding`. A single-canvas family (`isSingleCanvas`) has none.
     var hasSkinOwnedWindows: Bool {
         switch self {
-        case .wmp, .winampModern: return true
+        case .wmp, .winampModern, .aimp: return true
         case .classic, .nullPlayerModern, .audion, .sonique: return false
+        }
+    }
+
+    /// The skin enforces its own least main-window size (`.wal`'s `minimum_w`/`minimum_h`, `.wmz`'s
+    /// `WMPResizeLimits`, an AIMP form's layout), so `WindowManager` never pins the window's
+    /// `minSize` to its current size.
+    var sizesOwnMainWindow: Bool {
+        switch self {
+        case .winampModern, .wmp, .aimp: return true
+        case .classic, .nullPlayerModern, .audion, .sonique: return false
+        }
+    }
+
+    /// The environment flag that logs where this family's windows are placed (`<flag>=1`), and the
+    /// tag its own lines carry.
+    var placeTrace: (flag: String, tag: String) {
+        switch self {
+        case .wmp: return ("WMP_PLACE_TRACE", "wmp")
+        case .audion: return ("AUDION_PLACE_TRACE", "audion")
+        case .sonique: return ("SONIQUE_PLACE_TRACE", "sonique")
+        case .aimp: return ("AIMP_PLACE_TRACE", "aimp")
+        case .winampModern, .classic, .nullPlayerModern: return ("WINAMP_MODERN_PLACE_TRACE", "wal")
         }
     }
 }
@@ -74,6 +97,7 @@ enum PlayerUIMode: String, CaseIterable {
     case wmp
     case audion
     case sonique
+    case aimp
 
     static let userDefaultsKey = "uiMode"
     private static let legacyModernEnabledKey = "modernUIEnabled"
@@ -87,6 +111,7 @@ enum PlayerUIMode: String, CaseIterable {
         case .wmp: return "Media Player"
         case .audion: return "Audion Faces"
         case .sonique: return "Sonique"
+        case .aimp: return "AIMP"
         }
     }
 
@@ -100,6 +125,7 @@ enum PlayerUIMode: String, CaseIterable {
         case .wmp: return .wmp
         case .audion: return .audion
         case .sonique: return .sonique
+        case .aimp: return .aimp
         }
     }
 
@@ -109,6 +135,7 @@ enum PlayerUIMode: String, CaseIterable {
         case .wmp: return AppCapabilities.supports(.wmpSkinMode)
         case .audion: return AppCapabilities.supports(.audionFaceMode)
         case .sonique: return AppCapabilities.supports(.soniqueSkinMode)
+        case .aimp: return AppCapabilities.supports(.aimpSkinMode)
         case .classic, .nullPlayerModern, .winampModern: return true
         }
     }
@@ -131,14 +158,14 @@ enum PlayerUIMode: String, CaseIterable {
     /// bands so each of its drawer's 20 sliders drives a band of its own.
     var usesModernEQLayout: Bool {
         switch self {
-        case .classic, .winampModern, .wmp, .audion: return false
+        case .classic, .winampModern, .wmp, .audion, .aimp: return false
         case .modern, .metal, .sonique: return true
         }
     }
 
     var modernSkinFamily: ModernSkinFamily? {
         switch self {
-        case .classic, .winampModern, .wmp, .audion, .sonique: return nil
+        case .classic, .winampModern, .wmp, .audion, .sonique, .aimp: return nil
         case .modern: return .modern
         case .metal: return .metal
         }

@@ -105,6 +105,12 @@ extension ContextMenuBuilder {
                 skinMenuItem($0.name, #selector(MenuActions.selectSoniqueSkin(_:)), representedObject: $0.name,
                              isOn: isActive && importer.selection.name == $0.name)
             }
+        case .aimp:
+            let importer = AIMPSkinImporter()
+            return importer.installedSkins().map {
+                skinMenuItem($0.name, #selector(MenuActions.selectAIMPSkin(_:)), representedObject: $0.name,
+                             isOn: isActive && importer.selection.name == $0.name)
+            }
         }
     }
 
@@ -405,6 +411,20 @@ extension ContextMenuBuilder {
             options: options, skins: [skinRows(for: .sonique)])
     }
 
+    // MARK: - AIMP skins
+
+    static func buildAIMPSkinsMenu() -> NSMenu {
+        let options = [
+            skinMenuItem("Load Skin...", #selector(MenuActions.loadAIMPSkinFromFile)),
+            skinMenuItem("Get More Skins...", #selector(MenuActions.getMoreAIMPSkins)),
+            skinMenuItem("Open Skins Folder...", #selector(MenuActions.openAIMPSkinsFolder)),
+            removeSkinItem(for: .aimp),
+        ].compactMap { $0 }
+        return buildSkinFamilyMenu(
+            switchItem: switchItem(to: .aimp, action: #selector(MenuActions.setAIMPMode)),
+            options: options, skins: [skinRows(for: .aimp)])
+    }
+
     /// Above this many skins a list is grouped into A–Z submenus.
     static let groupedSkinsFlatListLimit = 40
 
@@ -672,13 +692,14 @@ extension MenuActions {
         case wmp(name: String)
         case audion(name: String)
         case sonique(name: String)
+        case aimp(name: String)
 
         var name: String {
             switch self {
             case .classic(let url): return url.deletingPathExtension().lastPathComponent
             case .modernFamily(let skin, _): return skin.name
             case .winampModern(let skin): return skin.name
-            case .wmp(let name), .audion(let name), .sonique(let name): return name
+            case .wmp(let name), .audion(let name), .sonique(let name), .aimp(let name): return name
             }
         }
     }
@@ -702,6 +723,9 @@ extension MenuActions {
         case .sonique:
             guard AppCapabilities.supports(.soniqueSkinMode) else { return nil }
             return SoniqueSkinImporter().selection.name.map { .sonique(name: $0) }
+        case .aimp:
+            guard AppCapabilities.supports(.aimpSkinMode) else { return nil }
+            return AIMPSkinImporter().selection.name.map { .aimp(name: $0) }
         }
     }
 
@@ -715,7 +739,7 @@ extension MenuActions {
         let alert = NSAlert()
         alert.messageText = "Remove Skin?"
         switch skin {
-        case .wmp, .audion, .sonique:
+        case .wmp, .audion, .sonique, .aimp:
             alert.informativeText = "\u{201c}\(skin.name)\u{201d} will be removed from NullPlayer. "
                 + "The original downloaded file is not affected."
         case .classic, .modernFamily, .winampModern:
@@ -749,6 +773,8 @@ extension MenuActions {
                 removeAudionFace(named: name)
             case .sonique(let name):
                 removeSoniqueSkin(named: name)
+            case .aimp(let name):
+                removeAIMPSkin(named: name)
             }
         } catch {
             NSAlert(error: error).runModal()
@@ -775,7 +801,7 @@ extension MenuActions {
 
 // MARK: - Audion Faces actions
 
-/// The Skins menu's Audion entries; all but Get More are `SingleCanvasMainWindow`'s.
+/// The Skins menu's Audion entries; all but Get More are `SkinFileMainWindow`'s.
 @MainActor
 extension MenuActions {
 

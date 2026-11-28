@@ -229,6 +229,14 @@ final class PeppyMeterConfigTests: XCTestCase {
     func testVolumeMappingMidpoint() {
         XCTAssertEqual(PeppyMeterLevels.volume(fromDBFS: -21, floor: -42), 50, accuracy: 0.001)
     }
+
+    func testDBFSUndoesTheVolumeMapping() {
+        for dbfs in [-42.0, -30, -21, -8, 0] {
+            let volume = PeppyMeterLevels.volume(fromDBFS: dbfs, floor: -42)
+            XCTAssertEqual(PeppyMeterLevels.dbfs(fromVolume: volume, floor: -42), dbfs, accuracy: 0.001)
+        }
+        XCTAssertEqual(PeppyMeterLevels.dbfs(fromVolume: 50, floor: 0), 0)
+    }
 }
 
 private final class TestMenuTarget: NSObject {

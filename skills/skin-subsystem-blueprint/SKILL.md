@@ -102,11 +102,11 @@ is validated as the bytes committed, the one same-directory move or replace, and
 delete. The family keeps its file test, loader call and naming. WMP, `.wal`, Audion and Sonique all
 go through it (Sonique S13, 2026-10-18). Beside it, **`SkinSelection(key:)`** is the saved choice
 (WMP, Audion and Sonique; WMP keeps its view id itself, `.wal` its bundled fallback). A
-single-canvas window (`SingleCanvasMainWindow`, Audion and Sonique) supplies its selection, URL lookup,
+skin-file window (`SkinFileMainWindow`: Audion and Sonique, both single-canvas, and AIMP) supplies its selection, URL lookup,
 loader, `loadedSkinURL` and `present(_:error:)`, and gets `reloadSelectedSkin`, `selectSkin(named:)` and
 `resetToUnskinned` over one `SkinLoadTask` (`App/Skinning/`, Sonique S18); its Skins-menu actions
 (switch, choose, load from file, open folder, remove) are one protocol extension
-(`SingleCanvasMainWindow+SkinsMenu`), given its `mode`, `feature`, `importer()` and `importFromPanel()`,
+(`SkinFileMainWindow+SkinsMenu`), given its `mode`, `feature`, `importer()` and `importFromPanel()`,
 which the family's `@objc` entry points call. Sonique, whose skin is one file, conforms to
 **`SkinFileCatalogue`** (`App/Skinning/`): it names its folder, selection, family and extension, and
 gets the listing by name, the selection lookup, removal and the install commit; it keeps its own

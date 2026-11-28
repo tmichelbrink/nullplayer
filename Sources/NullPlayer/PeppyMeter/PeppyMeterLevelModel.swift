@@ -9,6 +9,14 @@ enum PeppyMeterLevels {
         let clamped = min(0.0, max(floor, dbfs))
         return (clamped - floor) / (0 - floor) * 100.0
     }
+
+    /// The level in dBFS a `volume` (0…100) stands for: `volume(fromDBFS:floor:)` undone, for a meter
+    /// that reads `PeppyMeterLevelModel`'s smoothed levels on a scale of its own (a skin's
+    /// linear needles). A `floor` of 0 or more has no range to undo, and reads 0 dBFS.
+    static func dbfs(fromVolume volume: Double, floor: Double) -> Double {
+        guard floor < 0 else { return 0 }
+        return floor - floor * volume / 100
+    }
 }
 
 /// Drives PeppyMeter needle/bar levels from the shared stereo audio tap.
