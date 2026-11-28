@@ -446,6 +446,26 @@ private func convertToWhite(_ charImage: CGImage, charWidth: Int, charHeight: In
 }
 ```
 
+### Unfocused selection
+
+While its window is not key, a list's selection dims (M54), the way a macOS list greys an unfocused
+one, in the skin's own colours: `UnfocusedSelection` (`App/Skinning/`) draws the fill at half alpha
+(so it composites halfway to whatever is behind it — list colour, art or Cava) and moves selected
+text halfway to the plain row's colour. Whether a list dims is `UnfocusedSelection.dims(in:)`,
+the one family seam: every family but `.wal`, which instead takes the skin's
+`wasabi.list.text.selected{,.background}.inactive` pair through `UnfocusedSelection.hostedStyle(in:)` and
+keeps its selection when the skin declares neither (`winamp-modern-skin-guide`,
+`reference/rendering/colour.md`). Only a `.wal` *fallback library* shows that pair: a `.wal`
+fallback Playlist draws the NullPlayer row style, which has no selection bar and white selected
+text, and it keeps that in both states — swapping in the inactive bar would give the selection a bar
+only once the window loses focus, louder than the focused one (decided on #835). The draw sites are `PlaylistView.RowStyle.unfocused()`,
+`LibraryBrowserListPainter.Style.unfocused()` (both library browsers), `ModernPlaylistView`'s row
+loop and `WMPPlaylistSurfaceView` (a `.wmz` `<PLAYLIST>` pane, which observes its own window's key
+changes). Each window controller redraws its view on `windowDidBecomeKey` *and*
+`windowDidResignKey`; a window that only redraws on the first keeps the focused look after it
+loses focus. A list in a layer-backed subview needs its own redraw too: the Original library's
+embedded Queue is redrawn through `ModernLibraryBrowserView.windowKeyStateDidChange()`. `ClassicLibraryBrowserView` caches its hosted style per key state.
+
 ### Auto-Selection
 
 When the playlist opens while music is playing, the current track is auto-selected:
@@ -762,6 +782,13 @@ drawing a 275×116 skin scaled down inside a 197×297 window at 100% — and the
 *vanished* at any other UI Size, which is what pinned the mechanism. This is the same rule
 `AppStateManager.mainFrameForRestore` applies at launch (see the `winamp-modern-skin-guide`
 rendering reference, BB2c); a test asserts the two agree.
+
+**Sub-windows keep only their position across a family switch.** `recreateModeDependentLayout`
+passes a sub-window's snapshot frame through `carried(_:)`, which is nil when the switch crosses
+families, so the window opens at the incoming family's own default size and placement; a detached
+one gets its top-left back from `restoreDetachedWindowFrames`. The Equalizer
+follows this rule (M94: Classic and Audion kept a Sonique-era 320-wide Equalizer). The Playlist
+still carries its whole frame (M96, `tasks/MISC_TASKS.md`).
 
 **Audio-consumer ordering safety**: consumer sets in `AudioEngine` (spectrum/waveform/
 stereo/magnitudes) are **ref-counted** (`[String: Int]`), so a late `remove` from an old
