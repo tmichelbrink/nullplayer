@@ -23,7 +23,8 @@ enum AIMPAction: Hashable, Sendable, CustomStringConvertible {
     /// `perform`) and the window's own (`AIMPSkinMainView.perform`). A key for one it does not do
     /// is dimmed and says so (`AIMPSkinLayout.unavailable`).
     /// An action only a press of the user's may ask for: quitting, and writing the playing track to
-    /// the clipboard. A skin's frame, timer and load scripts run unasked, and may not.
+    /// the clipboard. A skin's frame, timer and load scripts run unasked, and may not; nor may the
+    /// handlers the pointer runs passing over a control (entering, moving, leaving).
     var needsUserInput: Bool {
         [.mainExit, .playableFileCopyInfoToClipboard, .playableFileCopyFileToClipboard].contains(self)
     }

@@ -31,12 +31,15 @@ enum AIMPSkinFonts {
     /// A family's name goes to its upright face, whichever file comes first: Segoe UI's Semibold
     /// file names its family "Segoe UI" too.
     static func shelf(_ files: [Data]) -> Shelf? {
+        guard !files.isEmpty else { return nil }
+        // Read for each shelf, not once: the user may enable or disable a family between two skins.
+        let installed = installedFamilies()
         var fonts: [String: CGFont] = [:], uprights = Set<String>()
         for data in files {
             guard let provider = CGDataProvider(data: data as CFData), let font = CGFont(provider) else { continue }
             let face = CTFontCreateWithGraphicsFont(font, 12, nil, nil)
             let family = (CTFontCopyFamilyName(face) as String).lowercased(), full = (CTFontCopyFullName(face) as String).lowercased()
-            guard !isInstalled(family) else { continue }
+            guard !installed.contains(family) else { continue }
             let upright = isUpright(face)
             if fonts[family] == nil || (upright && !uprights.contains(family)) { fonts[family] = font }
             if upright { uprights.insert(family) }
@@ -51,8 +54,8 @@ enum AIMPSkinFonts {
             && (CTFontCopyName(face, kCTFontStyleNameKey) as String?).map { ["regular", "normal", "book", "roman"].contains($0.lowercased()) } ?? true
     }
 
-    /// The system's font families, lowercased: read once, a copy of hundreds of names.
-    private static let installed: Set<String> = Set((CTFontManagerCopyAvailableFontFamilyNames() as? [String] ?? []).map { $0.lowercased() })
-
-    private static func isInstalled(_ family: String) -> Bool { installed.contains(family.lowercased()) }
+    /// The system's font families now, lowercased: a copy of hundreds of names, read once a shelf.
+    private static func installedFamilies() -> Set<String> {
+        Set((CTFontManagerCopyAvailableFontFamilyNames() as? [String] ?? []).map { $0.lowercased() })
+    }
 }

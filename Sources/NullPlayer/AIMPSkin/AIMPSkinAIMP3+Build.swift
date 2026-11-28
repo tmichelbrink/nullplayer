@@ -7,6 +7,8 @@ extension AIMPSkinAIMP3 {
     struct Build {
         let shape: Shape
         let dialect: AIMPSkinDialect
+        /// The `.lng` strings the captions read (`@Lng:N;`).
+        var strings: [String: String] = [:]
 
         /// `companions`: the windows beside the main form, each with its own form (AIMP 2's equalizer).
         func index(_ form: (root: Shaped, sizingEdge: String?), companions: [(companion: AIMPSkin.Companion, root: Shaped)] = [])
@@ -32,7 +34,8 @@ extension AIMPSkinAIMP3 {
             companions.forEach { gather($0.root) }
             var sizing: [String: AIMPSkinIndex.Sizing] = [:]
             if let edge = form.sizingEdge.flatMap(Double.init), edge > 0 { sizing[""] = .init(edge: CGFloat(edge), initialSize: nil) }
-            var index = AIMPSkinIndex(names: names, companions: companions.map(\.companion), sizing: sizing, dialect: dialect)
+            var index = AIMPSkinIndex(names: names, companions: companions.map(\.companion), sizing: sizing, strings: strings,
+                                      dialect: dialect)
             index.hiddenItems.formUnion(hidden)
             var made = Made(index: index)
             func window(_ root: Shaped) -> AIMPSkinItem {

@@ -56,14 +56,21 @@ enum AIMPSkinScript {
             var description: String { what }
         }
 
+        /// A step, refused once either limit is spent: a run after one that spent the text budget
+        /// stops at its first step too.
         func step() throws {
             steps += 1
-            guard steps < Self.stepLimit else { throw Spent(what: "step budget") }
+            try checkLimits()
         }
 
         /// Charges `count` bytes of text work.
         func charge(_ count: Int) throws {
             bytes += count
+            try checkLimits()
+        }
+
+        private func checkLimits() throws {
+            guard steps < Self.stepLimit else { throw Spent(what: "step budget") }
             guard bytes < Self.byteLimit else { throw Spent(what: "text budget") }
         }
 
@@ -86,10 +93,17 @@ enum AIMPSkinScript {
         /// load-time finding (`AM0008`).
         var unreadable: [String: String] = [:]
 
-        init(_ archive: AIMPSkinArchive, findings: inout [AIMPSkinFinding]) {
+        /// `inflated`: what the load has inflated so far, counted from the sizes the container
+        /// declares (`AIMPSkinPolicy.loadInflatedBytes`, the pictures' too); each script is charged
+        /// before it is inflated, and a skin whose scripts take it past the limit does not load.
+        init(_ archive: AIMPSkinArchive, inflated: inout Int, findings: inout [AIMPSkinFinding]) throws {
             for ext in [".script", ".fsxml"] {
                 for (name, entry) in archive.entries.sorted(by: { $0.key < $1.key }) where name.hasSuffix(ext) {
                     let stem = String(name.dropLast(ext.count))
+                    inflated += entry.declaredSize
+                    guard inflated <= AIMPSkinPolicy.loadInflatedBytes else {
+                        throw AIMPSkinFinding(.inflatedTooLarge, "The pictures and scripts inflate past \(AIMPSkinPolicy.loadInflatedBytes) bytes.")
+                    }
                     do {
                         // A script that does not inflate is unreadable as one that does not decode is.
                         let data = try archive.payload(entry)

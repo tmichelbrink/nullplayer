@@ -21,8 +21,15 @@ final class AIMPSkinScriptSchedulerTests: XCTestCase {
     </compoundstmt></procedure></program>
     """
 
+    /// Asks the player to quit: an action only a press may ask for.
+    private static let quit = """
+    <program><procedure><name text="Execute"/><compoundstmt>
+      <callstmt><dsgn><node text="FindObject"/><expr><string text="'acMainExit'"/></expr><node text="Execute"/></dsgn></callstmt>
+    </compoundstmt></procedure></program>
+    """
+
     private static func skin() throws -> AIMPSkin {
-        try AIMPSkinScriptTests.skin(scripts: ["Bump": bump, "Runaway": runaway])
+        try AIMPSkinScriptTests.skin(scripts: ["Bump": bump, "Runaway": runaway, "Quit": quit])
     }
 
     /// With the AIMP queue held, a handler asked for does not run: the main thread goes on, and
@@ -132,6 +139,19 @@ final class AIMPSkinScriptSchedulerTests: XCTestCase {
         }
         XCTAssertEqual(asked, [.action(.playerPlay), .action(.playerPlay)])
         XCTAssertEqual(runtime.state.script.variables["seen"], "2")
+    }
+
+    /// A handler the pointer runs passing over a control may not ask for what only a press may
+    /// (`AIMPAction.needsUserInput`); the same handler run by a press may.
+    func testThePointersHandlersMayNotAskForWhatOnlyAPressMay() throws {
+        let runtime = AIMPSkinRuntime(skin: try Self.skin(), player: .probe)
+        runtime.scripts.timing = .inline
+        var asked: [AIMPSkinCommand] = []
+        runtime.onAction = { asked.append($0) }
+        runtime.asOneEvent { runtime.runHandler("Quit", sender: "Key", byUser: false) }
+        XCTAssertEqual(asked, [], "a hover")
+        runtime.runHandler("Quit", sender: "Key")
+        XCTAssertEqual(asked, [.action(.mainExit)], "a press")
     }
 
     // MARK: - Changes

@@ -98,6 +98,62 @@ final class AIMPSkinHostileInputTests: XCTestCase {
         }
     }
 
+    /// AM0005: the scripts are charged against the load's inflation budget with the pictures, before
+    /// each is inflated: a skin whose pictures leave too little for its scripts does not load.
+    func testScriptsShareTheLoadsInflationBudget() throws {
+        let archive = try AIMPSkinArchive.read(Self.project([Self.form, ("Big.fsxml", Data(count: 64))]))
+        var findings: [AIMPSkinFinding] = []
+        var inflated = AIMPSkinPolicy.loadInflatedBytes - 63
+        XCTAssertThrowsError(try AIMPSkinScript.Library(archive, inflated: &inflated, findings: &findings)) { error in
+            XCTAssertEqual((error as? AIMPSkinFinding)?.code, .inflatedTooLarge)
+        }
+        inflated = AIMPSkinPolicy.loadInflatedBytes - 64
+        XCTAssertNoThrow(try AIMPSkinScript.Library(archive, inflated: &inflated, findings: &findings), "exactly the limit")
+    }
+
+    /// AM0009: an `SXML` name table counting more names than the node limit is refused from its
+    /// count, before a name is read.
+    func testAnSXMLNameTablePastTheLimitIsRefused() {
+        var count = AIMPSkinPolicy.xmlNodes + 1, varint: [UInt8] = []
+        while count >= 0x80 { varint.append(UInt8(count & 0x7F) | 0x80); count >>= 7 }
+        varint.append(UInt8(count))
+        let data = Data("SXML".utf8) + Self.u32(1) + Self.u32(0) + Data([1] + varint)
+        XCTAssertThrowsError(try AIMPNode.parse(data, name: "Names.xml")) { error in
+            XCTAssertEqual((error as? AIMPSkinFinding)?.code, .xmlMalformed)
+            XCTAssertTrue("\(error)".contains("names"), "\(error)")
+        }
+    }
+
+    /// An AIMP 3.0 object's size near `Int.max` is held as the layout's numbers are, rather than
+    /// trapping where it is made whole again.
+    func testAnAIMP3ObjectsHugeSizeIsHeld() throws {
+        let ini = INIFile("[Parents]\nVolumeBar=MAIN\n[VolumeBar]\nPlaceWidth=9223372036854775807\nPlaceHeight=-9223372036854775807\n",
+                          repeatedSections: .continued)
+        let object = try XCTUnwrap(AIMPSkinAIMP3.objects(ini).first)
+        XCTAssertEqual(object.size, CGSize(width: 1_000_000, height: -1_000_000))
+        XCTAssertEqual(AIMPSkinAIMP3.Shape.place(anchors: object.anchors, margins: object.margins, size: object.size).size?.width, 1_000_000)
+    }
+
+    /// Only the DPI suffixes mark a picture's variants: `Meter-2` is a picture of its own.
+    func testOnlyDPISuffixesAreVariants() throws {
+        let skin = try AIMPSkinLoader.load(data: Self.project([
+            Self.form, ("Meter-2.img", Self.acl(width: 4, height: 4)), ("Meter-120.img", Self.acl(width: 5, height: 5)),
+        ]))
+        XCTAssertNotNil(skin.images["meter-2.img"])
+        XCTAssertNil(skin.images["meter-120.img"], "a DPI variant is left out")
+    }
+
+    /// An `ACLIMG32`'s size is read from the chunk its pixels are: a `bitz` too short for its packed
+    /// size is passed over for both, so its 2×2 cannot lay out `bits`' 1×4.
+    func testAnACLImagesSizeAndPixelsComeFromOneChunk() throws {
+        var data = Data("ACLIMG32".utf8) + Data(count: 8)
+        data += Data("bitz".utf8) + Self.u32(12) + Self.u32(0) + Self.u32(2) + Self.u32(2)
+        data += Data("bits".utf8) + Self.u32(28) + Self.u32(0) + Self.u32(1) + Self.u32(4) + Data(repeating: 0xFF, count: 16)
+        let image = try AIMPSkinImage(data, name: "Mixed.img", budget: AIMPSkinPixelBudget(), source: { data })
+        XCTAssertEqual([image.width, image.height], [1, 4])
+        XCTAssertNotNil(image.frame(0), "its pixels decode at that size")
+    }
+
     /// An entry name met twice keeps its first entry: a later copy cannot swap the form or a
     /// picture behind the one read first.
     func testADuplicateEntryKeepsTheFirst() throws {

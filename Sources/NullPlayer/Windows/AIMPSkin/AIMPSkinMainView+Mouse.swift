@@ -54,16 +54,19 @@ extension AIMPSkinMainView {
             press.hold(repeats: true) { [weak self] in self?.runtime?.onAction?(.action(hold)) }
         }
         pressDown(target, with: event)
-        // A press the skin's handler does nothing with (the Onkyos' remote-control panels, whose
-        // window NullPlayer lacks) moves the window, as a press on bare skin does. The handler runs
-        // off the main thread, so the press is the key's until it answers. Not a key that acts as
-        // it comes up: its release must run however the two answers land.
-        if case .hold(let down, nil) = target.kind, target.releaseHandler == nil {
+        // A held key's handler runs as the button goes down, its `up` as it comes up (Soot's
+        // `SbtnOnDown` and `SbtnOnUp`). A press the down handler does nothing with (the Onkyos'
+        // remote-control panels, whose window NullPlayer lacks) moves the window, as a press on bare
+        // skin does. The handler runs off the main thread, so the press is the key's until it
+        // answers. Not a key that acts as it comes up: its release must run however the two answers land.
+        if case .hold(let down, let up) = target.kind {
             let point = canvasPoint(event)
             let arguments = ["X": Double(point.x - target.rect.minX), "Y": Double(point.y - target.rect.minY)]
             let serial = press.serial
+            let unpaired = up == nil && target.releaseHandler == nil
             runtime?.runHandler(down, sender: target.name, arguments: arguments) { [weak self] didSomething in
-                guard let self, !didSomething, self.press.serial == serial, self.press.target?.control == target.control else { return }
+                guard unpaired, let self, !didSomething, self.press.serial == serial,
+                      self.press.target?.control == target.control else { return }
                 _ = self.press.end()
                 self.interaction.pressed = nil
                 self.drag.begin(event)
@@ -232,15 +235,16 @@ extension AIMPSkinMainView {
                 let inside = point.map(handlers.rect.contains) ?? false, was = pointerOverHandlers.contains(handlers.name)
                 if inside, !was {
                     pointerOverHandlers.insert(handlers.name)
-                    if let enter = handlers.enter { runtime.runHandler(enter, sender: handlers.name) }
+                    if let enter = handlers.enter { runtime.runHandler(enter, sender: handlers.name, byUser: false) }
                 }
                 if inside, let move = handlers.move, let point {
                     runtime.runHandler(move, sender: handlers.name,
-                                       arguments: ["X": Double(point.x - handlers.rect.minX), "Y": Double(point.y - handlers.rect.minY)])
+                                       arguments: ["X": Double(point.x - handlers.rect.minX), "Y": Double(point.y - handlers.rect.minY)],
+                                       byUser: false)
                 }
                 if !inside, was {
                     pointerOverHandlers.remove(handlers.name)
-                    if let leave = handlers.leave { runtime.runHandler(leave, sender: handlers.name) }
+                    if let leave = handlers.leave { runtime.runHandler(leave, sender: handlers.name, byUser: false) }
                 }
             }
         }

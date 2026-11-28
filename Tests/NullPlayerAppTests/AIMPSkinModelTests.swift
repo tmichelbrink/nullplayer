@@ -513,6 +513,8 @@ final class AIMPSkinModelTests: XCTestCase {
         XCTAssertEqual(origin("SpeakerRightWindow", CGSize(width: 80, height: 300)), CGPoint(x: 500, y: 500),
                        "a speaker taller than the deck stands level with its bottom")
         XCTAssertEqual(origin("Amplifier", CGSize(width: 300, height: 50)), CGPoint(x: 100, y: 450), "below, at its left edge")
+        XCTAssertEqual(origin("SpeakerWindow", CGSize(width: 80, height: 300)), CGPoint(x: 100, y: 200),
+                       "a tall speaker below stays below, clear of the deck")
         let lid = try Self.node(#"<property name="Placement" value="1" margins="0,0,0,7"/>"#)
         var k2 = AIMPSkin.Companion(name: "Lid", title: "Lid", initiallyVisible: true, role: .other)
         k2.declaredPlacement = .init(lid)
@@ -750,6 +752,75 @@ final class AIMPSkinModelTests: XCTestCase {
         XCTAssertEqual(drawn.name, "Tahoma", "the repointed resource's face")
         XCTAssertEqual(drawn.height, 30, "what the skin set over the resource stays")
         XCTAssertEqual(font.resolved(in: resources, links: [:]), font)
+    }
+
+    /// A chain of redirects resolves however long it is, scripts' links and the skin's aliases
+    /// alike; one that comes round again names nothing.
+    func testLongAliasChainsResolveAndLoopsStop() throws {
+        func resource(_ xml: String) throws -> AIMPSkinResource { AIMPSkinResource(["Resource": try Self.node(xml)]) }
+        var resources: [String: AIMPSkinResource] = ["R12": try resource(#"<property name="Resource" value="End"/>"#)]
+        for step in 0..<12 { resources["R\(step)"] = try resource("<property name=\"Resource\" link=\"R\(step + 1)\"/>") }
+        XCTAssertEqual(AIMPSkin.resource("R0", in: resources)?.entry?.value, "End", "twelve aliases")
+        XCTAssertEqual(AIMPSkin.resource("Start", in: resources, links: ["Start": "R0"])?.entry?.value, "End", "a link, then the aliases")
+        resources["R12"] = try resource(#"<property name="Resource" link="R3"/>"#)
+        XCTAssertNil(AIMPSkin.resource("R0", in: resources), "a loop nine names round")
+    }
+
+    /// A setting a control declares over its font resource stays when a script repoints the resource,
+    /// even where it equals what the resource gave; what it left to the resource follows it.
+    func testDeclaredFontSettingsStayWhenTheResourceIsRepointed() throws {
+        func resource(_ xml: String) throws -> AIMPSkinResource { AIMPSkinResource(["Resource": try Self.node(xml)]) }
+        let resources = [
+            "Font.Big": try resource(#"<property name="Resource"><property name="Name" value="Arial"/><property name="Height" value="20"/></property>"#),
+            "Font.Small": try resource(#"<property name="Resource"><property name="Name" value="Tahoma"/><property name="Height" value="9"/></property>"#),
+        ]
+        let font = AIMPSkinFont(try Self.node(#"<property name="Font"><property name="ID" value="Font.Big"/><property name="Height" value="20"/></property>"#),
+                                resources: resources)
+        let drawn = font.resolved(in: resources, links: ["Font.Big": "Font.Small"])
+        XCTAssertEqual(drawn.height, 20, "declared, though the resource gave the same")
+        XCTAssertEqual(drawn.name, "Tahoma", "left to the resource")
+    }
+
+    /// A resource's empty `link` names nothing: its nested `ID` does.
+    func testAnEmptyLinkFallsBackToTheNestedID() throws {
+        let entry = AIMPSkinResource.Entry(try Self.node(#"<property name="Resource" link=""><property name="ID" value="Picture"/></property>"#))
+        XCTAssertEqual(entry.alias, "Picture")
+        XCTAssertEqual(AIMPSkinResource.Entry(try Self.node(#"<property name="Resource" link="Other"><property name="ID" value="Picture"/></property>"#)).alias,
+                       "Other", "a link that names something comes first")
+    }
+
+    /// An item's colour given in a nested `Value` is read, but is not one it declares: as AIMP 5.40
+    /// draws Windows Media Player 8 and 9, whose title strips would otherwise paint over their search box.
+    func testAColourInANestedValueIsNotDeclared() throws {
+        func item(_ color: String) throws -> AIMPSkinItem {
+            AIMPSkinItem(try Self.node("<item name=\"Panel\"><properties>\(color)</properties></item>"),
+                         compile: { _ in XCTFail("no controls"); fatalError() }, names: AIMPSkinIndex.Names())
+        }
+        let nested = try item(#"<property name="Color"><property name="Value" value="4278190335"/></property>"#)
+        XCTAssertEqual(nested.color, .argb(0xFF00_00FF))
+        XCTAssertFalse(nested.declaresColor)
+        XCTAssertTrue(try item(#"<property name="Color" value="4278190335"/>"#).declaresColor)
+        XCTAssertFalse(try item("").declaresColor)
+    }
+
+    /// A text document's `CDATA` is its element's text, with the text around it.
+    func testCDATAIsAnElementsText() throws {
+        XCTAssertEqual(try Self.node("<caption>Now <![CDATA[<playing>]]></caption>").text, "Now <playing>")
+    }
+
+    /// A `FileInfo` template's playing row, clock and day count towards its fingerprint where it
+    /// shows them, and only there: the clock does not move a title's.
+    func testTheTemplateFingerprintFollowsWhatTheTemplateShows() {
+        var player = AIMPSkinPlayerSnapshot()
+        let before = (title: player.templateFingerprint("%T"), row: player.templateFingerprint("%IN. %T"),
+                      clock: player.templateFingerprint("%TC"), day: player.templateFingerprint("%DC"))
+        player.playlistIndex += 1
+        player.timeOfDay += 1
+        player.today = Date(timeIntervalSince1970: 86_400 * 400)
+        XCTAssertEqual(player.templateFingerprint("%T"), before.title)
+        XCTAssertNotEqual(player.templateFingerprint("%IN. %T"), before.row)
+        XCTAssertNotEqual(player.templateFingerprint("%TC"), before.clock)
+        XCTAssertNotEqual(player.templateFingerprint("%DC"), before.day)
     }
 
     func testDelphiColoursReadAsARGB() {

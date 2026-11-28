@@ -288,6 +288,7 @@ extension AIMPSkinFont {
         }
         if let whole = AIMPSkinFont(flat: property?.reference) { font = whole }
         self = property.map { AIMPSkinFont(declared: Declaration($0), over: font, clearIsDelphi: true) } ?? font
+        if let property, resource != nil { resource?.declared = Declaration(property).declaredSettings }
         // A face named empty (`.acs3`'s `,0,12,0`) is AIMP's default.
         if name.isEmpty { name = Self.standard.name }
     }

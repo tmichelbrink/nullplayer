@@ -100,7 +100,8 @@ extension AIMPSkinAIMP2 {
             }
         } else {
             for section in ini.sections {
-                let corner = section.lines.filter { $0.key == "TLC" || $0.key == "TRC" }.map { AIMPNode.numbers($0.value) }
+                // In any case, the first of each, as `TMemIniFile` reads a key (`tlc`, `TLC`).
+                let corner = ["TLC", "TRC"].compactMap { section[$0] }.map { AIMPNode.numbers($0) }
                 if !corner.isEmpty { ranges[section.name.lowercased()] = corner }
             }
         }

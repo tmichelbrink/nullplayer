@@ -161,7 +161,14 @@ extension AIMPSkinScript.Run {
         if let handled = try bindingsMethod(target, member, args) { return handled }
         switch (target, member) {
         case (.resource(let id), .set) where args.count == 2:
-            if args[0].string == "ID" { engine.state.script.resourceLinks[id] = args[1].string }
+            // A resource the skin declares is always repointed (A4 3.2's theme scripts repoint more
+            // than `storedKeyLimit`); a name it does not declare is held as `ConfigSet`'s store is,
+            // since `FindResource` answers any name and a loop of fresh ones would grow every job's state.
+            let target = args[1].string, links = engine.state.script.resourceLinks
+            if args[0].string == "ID", id.utf8.count <= Self.longestPropertyPath, target.utf8.count <= Self.longestPropertyPath,
+               skin.resources[id] != nil || links[id] != nil || links.count < Self.storedKeyLimit {
+                engine.state.script.resourceLinks[id] = target
+            }
             // A resource's other settings are the skin's to keep; nothing here draws them yet.
             return .none
         case (.resource(let id), .get) where args.count == 1:
@@ -181,11 +188,12 @@ extension AIMPSkinScript.Run {
         // control into another item (Soot's all-in-one mode, A4 3.2's layouts).
         case (.object(let object), .parent) where args.isEmpty:
             return flow.parent(of: object.name).map { .object(HostObject($0, in: skin)) } ?? .none
+        // Only a form a site holds docks (`AIMPSkinDataflow.isDocked`); any other name would only grow the state.
         case (.object(let object), .dock) where args.isEmpty:
-            engine.state.script[object.name].docked = true
+            if skin.index.siteOf[object.name] != nil { engine.state.script[object.name].docked = true }
             return .none
         case (.object(let object), .undock) where args.isEmpty:
-            engine.state.script[object.name].docked = false
+            if skin.index.siteOf[object.name] != nil { engine.state.script[object.name].docked = false }
             return .none
         case (.object, .getResourceName), (.resource, .getResourceName):
             return .string(target.string)

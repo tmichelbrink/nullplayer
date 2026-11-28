@@ -110,9 +110,6 @@ extension AIMPSkinAIMP3 {
         /// AIMP 2's: a window of the skin's own that the equalizer keys show and hide; nil when they
         /// open the equalizer as AIMP's action does.
         var equalizerWindow: String?
-        /// AIMP 2's: the window's least size, where the skin asks for more than its parts take
-        /// (`[File] FormMinW`/`FormMinH`: Hameleon's playlist room).
-        var minimumSize: CGSize?
         /// AIMP 2's: the playlist keeps 170 px of its own (AIMP 5.40 does not open AIMP 2 skins); an
         /// AIMP 3.0 skin's takes none, as AIMP 5.40 opens it.
         var playlistRoom = false
@@ -141,9 +138,11 @@ extension AIMPSkinAIMP3 {
 
         /// The form's one item, `AIMP3Form`, holding the layout's items, no smaller than they take;
         /// `sizingEdge` (`[MainFrame] SizingHitTestAreaWidth`): the window sizes from its edges.
+        /// `minimumSize`, AIMP 2's main window's: its least size, where the skin asks for more than its
+        /// parts take (`[File] FormMinW`/`FormMinH`: Hameleon's playlist room).
         /// The `<layout>`'s own `MinSize`/`MaxSize` are left out: AIMP 5.40 opens Cute below its
         /// 830x550 and 4CarPC over its 800x480, at what their items take.
-        mutating func form(_ layout: [Layout], sizingEdge: String?) -> (root: Shaped, sizingEdge: String?) {
+        mutating func form(_ layout: [Layout], sizingEdge: String?, minimumSize: CGSize? = nil) -> (root: Shaped, sizingEdge: String?) {
             var items: [Shaped] = []
             for child in layout { items.append(item(child)) }
             var size = Self.layout(dock: .client).slot(Self.aggregate(items))

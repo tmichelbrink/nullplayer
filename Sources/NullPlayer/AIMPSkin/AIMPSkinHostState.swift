@@ -121,8 +121,15 @@ struct AIMPSkinPlayerSnapshot: Equatable, Sendable {
 
     /// A hash of every field above a template can show (`AIMPSkinTemplate`), which a concatenator's
     /// text changes with (`AIMPSkinDataflow.inputs(of:)`): a field added above belongs in it too.
-    var templateFingerprint: Int {
+    /// The playing row (`%IN`), the clock (`%TC`) and the day (`%DC`) count where `template` shows
+    /// them: the clock moves every second, and would run every script watching a title.
+    func templateFingerprint(_ template: String) -> Int {
         var hasher = Hasher()
+        if template.contains("%IN") { hasher.combine(playlistIndex) }
+        if template.contains("%TC") { hasher.combine(timeOfDay) }
+        if template.contains("%DC") {
+            hasher.combine(today.map { Calendar.current.dateComponents([.year, .month, .day], from: $0) })
+        }
         for text in [title, artist, album, genre, fileType, fileName, fileDirectory] { hasher.combine(text) }
         for number in [year, bitrate, sampleRate, channels, durationSeconds, trackNumber, discNumber] { hasher.combine(number) }
         hasher.combine(fileSize)

@@ -89,7 +89,13 @@ private struct SXMLReader {
     mutating func document() throws -> AIMPNode {
         guard bytes.end >= 13 else { throw malformed("Truncated header.") }
         bytes.offset = 12 + (try bytes.u32(at: 4))
-        for _ in 0..<(try bytes.varint()) {
+        // Each name is a string held for the document's life, even an empty one of one byte: held to
+        // the node limit (a real document names a few hundred tags and attributes).
+        let count = try bytes.varint()
+        guard count <= AIMPSkinPolicy.xmlNodes else {
+            throw malformed("\(count) names, more than \(AIMPSkinPolicy.xmlNodes).")
+        }
+        for _ in 0..<count {
             names.append(try bytes.ascii(try bytes.varint()))
         }
         bytes.offset = 13
@@ -203,6 +209,11 @@ private final class TextXMLReader: NSObject, XMLParserDelegate {
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {
         stack.last?.text += string
+    }
+
+    /// A `CDATA` section is the element's text too: the parser hands it over apart.
+    func parser(_ parser: XMLParser, foundCDATA CDATABlock: Data) {
+        stack.last?.text += String(decoding: CDATABlock, as: UTF8.self)
     }
 
     func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?,

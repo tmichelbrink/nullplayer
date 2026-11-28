@@ -109,12 +109,17 @@ final class AIMPSkinRuntime {
 
     /// Whether a new build of the playlist only filled in file sizes (read off the main thread after
     /// a rebuild, for the totals): the same tracks in the same rows, so a row chosen meanwhile stays
-    /// chosen. A build whose rows are all the same moved its tracks (`AIMPSkinAudioEngineHost`
+    /// chosen. Each row keeps its title, length, folder and type, and its size unless it had none:
+    /// two tracks of one title and length from different folders, or of different sizes, swapped,
+    /// are a move. A build whose rows are all the same moved its tracks (`AIMPSkinAudioEngineHost`
     /// builds anew only for a change), so it is not one.
-    private static func onlySizesMoved(_ new: [AIMPSkinPlayerSnapshot.Playlist.Row],
-                                       _ old: [AIMPSkinPlayerSnapshot.Playlist.Row]) -> Bool {
+    static func onlySizesMoved(_ new: [AIMPSkinPlayerSnapshot.Playlist.Row],
+                               _ old: [AIMPSkinPlayerSnapshot.Playlist.Row]) -> Bool {
         guard new.count == old.count, new != old else { return false }
-        return zip(new, old).allSatisfy { $0.title == $1.title && $0.seconds == $1.seconds }
+        return zip(new, old).allSatisfy { new, old in
+            new.title == old.title && new.seconds == old.seconds && new.group == old.group && new.codec == old.codec
+                && (old.bytes == 0 || new.bytes == old.bytes)
+        }
     }
 
     /// How many rows the skin's playlist showed in its last frame; nil before one.
@@ -344,24 +349,26 @@ final class AIMPSkinRuntime {
     private var reportedSpentBudget = false
 
     /// Runs `job` as an event (with its own budget, unless inside `asOneEvent`): what it changes and
-    /// asks for is taken when it lands, then `done` hears whether it did anything.
-    private func run(_ job: AIMPSkinScript.Job, done: (@MainActor (Bool) -> Void)? = nil) {
+    /// asks for is taken when it lands, then `done` hears whether it did anything. `byUser`: a press
+    /// of the user's asked for it, not the pointer passing over (`AIMPAction.needsUserInput`).
+    private func run(_ job: AIMPSkinScript.Job, byUser: Bool = true, done: (@MainActor (Bool) -> Void)? = nil) {
+        let asked = Asked(job: job, byUser: byUser && job != .load, done: done)
         if event != nil {
-            event?.append((job, done))
+            event?.append(asked)
         } else {
-            run([(job, done)])
+            run([asked])
         }
     }
 
-    /// A job, and what hears whether it did anything.
-    private typealias Asked = (job: AIMPSkinScript.Job, done: (@MainActor (Bool) -> Void)?)
+    /// A job, whether the user's press asked for it, and what hears whether it did anything.
+    private typealias Asked = (job: AIMPSkinScript.Job, byUser: Bool, done: (@MainActor (Bool) -> Void)?)
 
     private func run(_ jobs: [Asked]) {
         guard !jobs.isEmpty else { return }
         scripts.run(jobs.map(\.job), host: host) { [weak self] outcomes in
             for (outcome, asked) in zip(outcomes, jobs) {
                 self?.apply(outcome.changes)
-                self?.send(outcome, byUser: asked.job != .load)
+                self?.send(outcome, byUser: asked.byUser)
                 asked.done?(outcome.didSomething)
             }
         }
@@ -387,10 +394,11 @@ final class AIMPSkinRuntime {
     func setCounter(_ name: String, to position: Int) { run(.setCounter(name, to: position)) }
 
     /// Runs a skin event handler with `sender` as `Sender`, and the actions it asks for; `done`
-    /// hears whether it did anything, once it has run.
-    func runHandler(_ handler: String, sender: String, arguments: [String: Double] = [:],
+    /// hears whether it did anything, once it has run. `byUser` false for the pointer's handlers
+    /// (entering, moving over, leaving): they may not ask for what only a press may.
+    func runHandler(_ handler: String, sender: String, arguments: [String: Double] = [:], byUser: Bool = true,
                     done: (@MainActor (Bool) -> Void)? = nil) {
-        run(.handle(handler, sender: sender, arguments: arguments), done: done)
+        run(.handle(handler, sender: sender, arguments: arguments), byUser: byUser, done: done)
     }
 
     /// Moves a skin counter as `step` says from its position, wrapped by its `Module`: a click on a

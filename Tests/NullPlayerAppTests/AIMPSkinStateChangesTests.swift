@@ -34,6 +34,27 @@ final class AIMPSkinStateChangesTests: XCTestCase {
         after.script["Knob"] = object
         carried(AIMPSkinState(), after)
         carried(after, AIMPSkinState())
+
+        // The same record with every part changed: each field is carried over the one before.
+        var changed = object
+        changed.activePage = 5
+        changed.counter = 6
+        changed.visible = true
+        changed.autoHidden = false
+        changed.scrollTop = 20
+        changed.properties = ["Resources.BackgroundColor": "2"]
+        changed.expression = "%A"
+        changed.docked = false
+        changed.parent = "Other"
+        changed.timerEnabled = true
+        changed.timerInterval = 500
+        changed.timerGate = 0
+        changed.visibleGate = 1
+        changed.margins = [1: 8]
+        changed.text = "Changed"
+        var updated = AIMPSkinState()
+        updated.script["Knob"] = changed
+        carried(after, updated)
     }
 
     func testEveryPartOfAMotionIsCarried() {
@@ -49,6 +70,16 @@ final class AIMPSkinStateChangesTests: XCTestCase {
         after.animation["Lamp"] = motion
         carried(AIMPSkinState(), after)
         carried(after, AIMPSkinState())
+
+        var changed = motion
+        changed.timerFired = 2
+        changed.scriptInputs = [0.25]
+        changed.frame = 4
+        changed.stepped = 3
+        changed.opacity = 64
+        var updated = AIMPSkinState()
+        updated.animation["Lamp"] = changed
+        carried(after, updated)
     }
 
     func testTheScriptsStoresAndTheListsAreCarried() {

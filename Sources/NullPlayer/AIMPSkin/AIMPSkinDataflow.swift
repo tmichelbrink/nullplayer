@@ -151,7 +151,7 @@ struct AIMPSkinDataflow {
         var numbers = (skin.index.providers[name]?.bindings.links ?? []).flatMap { input -> [Double] in
             let numbers = inputs(of: input, depth: depth + 1)
             guard input.pin == "FileInfo" else { return numbers }
-            return numbers + [Double(host.player.templateFingerprint)]
+            return numbers + [Double(host.player.templateFingerprint(input.textFormat ?? "%T"))]
         }
         if numbers.count > Self.mostInputs {
             var hasher = Hasher()

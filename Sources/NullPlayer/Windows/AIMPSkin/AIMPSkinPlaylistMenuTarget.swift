@@ -19,8 +19,12 @@ final class AIMPSkinPlaylistMenuTarget: NSObject, PlaylistMenuTarget {
     private var engine: AudioEngine { WindowManager.shared.audioEngine }
 
     /// The selected rows still in the playlist and shown by the quick search: a command never
-    /// reaches a track the search hides.
-    var selection: Set<Int> { (runtime?.state.lists.playlistSelection ?? []).intersection(shown) }
+    /// reaches a track the search hides. The rows are refreshed first (`shown`): a refresh that
+    /// finds the playlist changed clears the selection, which must not be read before it.
+    var selection: Set<Int> {
+        let shown = shown
+        return (runtime?.state.lists.playlistSelection ?? []).intersection(shown)
+    }
 
     /// The rows the quick search shows (all of them with no search), in order.
     private var shownRows: [Int] {
@@ -67,10 +71,11 @@ final class AIMPSkinPlaylistMenuTarget: NSObject, PlaylistMenuTarget {
         select([], anchor: nil)
     }
 
+    /// The shown rows not selected go; the rows the quick search hides stay with the selection.
     func cropSelection(_ sender: Any?) {
-        let keep = selection
-        guard !keep.isEmpty else { return }
-        PlaylistMenuBuilder.cropPlaylist(to: keep)
+        let shown = shown, selected = selection
+        guard !selected.isEmpty else { return }
+        PlaylistMenuBuilder.cropPlaylist(to: selected.union(Set(engine.playlist.indices).subtracting(shown)))
         select([], anchor: nil)
     }
 

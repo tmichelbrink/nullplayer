@@ -32,6 +32,9 @@ extension AIMPSkinScript {
 
         func id(ofPin pin: String) -> Int? { links.first { $0.link.target == pin }?.id }
 
+        /// Every link gone; the ids go on from the last, so a handle to a cleared link finds nothing.
+        mutating func removeAll() { links.removeAll() }
+
         @discardableResult
         mutating func add(_ link: AIMPSkinLink) -> Int {
             nextID += 1
@@ -86,7 +89,7 @@ extension AIMPSkinScript.Run {
             if let id { bindingSets[set]?[id] = nil }
             return Value.none
         case .clear:
-            bindingSets[set] = AIMPSkinScript.BindingSet()
+            bindingSets[set, default: AIMPSkinScript.BindingSet()].removeAll()
             return Value.none
         case .getDataAsText:
             return .string(link.map(text) ?? "")

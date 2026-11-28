@@ -189,7 +189,8 @@ extension AIMPSkinAIMP3.Shape {
         let rows: [(resource: String, title: String, details: String, fill: String?)] = [
             ("ItemLine1Font", "NrmHdr", "Nrm", nil), ("ItemLine1FontPlaying", "ActHdr", "Act", "ABK"),
             ("ItemLine1FontSelected", "SelHdr", "Sel", "SBK"),
-            ("ItemLine1FontPlayingSelected", "SelActHdr", "SelAct", playlist["SABK"] == nil ? "SBK" : "SABK"),
+            // A playing and selected row is filled by `SABK` alone (`playlist(_:)`): with none, the list shows through.
+            ("ItemLine1FontPlayingSelected", "SelActHdr", "SelAct", "SABK"),
         ]
         for (resource, title, details, fill) in rows {
             if let font = playlist[title] {
@@ -235,24 +236,34 @@ extension AIMPSkinAIMP3.Shape {
     /// skin gives one, else the list's (Hysteria's playing row, light grey on its dark list, takes
     /// black titles).
     private func rowIsDark(_ key: String?, list: Bool) -> Bool {
-        guard let key, let bgr = playlist[key].flatMap({ Int($0) }) else { return list }
-        return Self.luminance(red: UInt8(bgr & 0xFF), green: UInt8((bgr >> 8) & 0xFF), blue: UInt8((bgr >> 16) & 0xFF)) < 0.5
+        guard let key, let dark = Self.isDark(playlist[key]) else { return list }
+        return dark
     }
 
     /// Whether the list's background, its `PlaylistWallpaper` or else its `BK` colour, is dark.
     private func listIsDark() -> Bool {
         if let picture = picture("PlaylistWallpaper")?.frame(0) {
+            // The context draws into the buffer only while it is borrowed.
             var pixel = [UInt8](repeating: 0, count: 4)
-            if let context = CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
-                                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) {
+            let drawn = pixel.withUnsafeMutableBytes { buffer -> Bool in
+                guard let context = CGContext(data: buffer.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                              space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
                 context.interpolationQuality = .medium
                 context.draw(picture, in: CGRect(x: 0, y: 0, width: 1, height: 1))
-                return Self.luminance(red: pixel[0], green: pixel[1], blue: pixel[2]) < 0.5
+                return true
             }
+            if drawn { return Self.luminance(red: pixel[0], green: pixel[1], blue: pixel[2]) < 0.5 }
         }
-        let bgr = playlist["BK"].flatMap { Int($0) } ?? 0
-        return Self.luminance(red: UInt8(bgr & 0xFF), green: UInt8((bgr >> 8) & 0xFF), blue: UInt8((bgr >> 16) & 0xFF)) < 0.5
+        return Self.isDark(playlist["BK"]) ?? true
+    }
+
+    /// Whether a `[Playlist]` colour, a Delphi number, is dark, decoded as the list is painted
+    /// (`playlist(_:)`: a system colour such as the window's, `$FF000005`, is white); nil for no number.
+    private static func isDark(_ value: String?) -> Bool? {
+        guard let number = value.flatMap({ Int64($0) }) else { return nil }
+        let argb = AIMPSkinColor.argb(delphi: number)
+        return luminance(red: UInt8((argb >> 16) & 0xFF), green: UInt8((argb >> 8) & 0xFF), blue: UInt8(argb & 0xFF)) < 0.5
     }
 
     private static func luminance(red: UInt8, green: UInt8, blue: UInt8) -> Double {

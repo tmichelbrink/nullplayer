@@ -55,7 +55,8 @@ extension AIMPSkinResource.Entry {
     init(_ node: AIMPNode) {
         value = node["value"]
         holdsValue = !(node["value"] ?? "").isEmpty || node.named["Value"] != nil
-        alias = (node["link"] ?? node.named["ID"]?["value"]).flatMap { $0.isEmpty ? nil : $0 }
+        // An empty `link` names nothing: the nested `ID` does (`link=""` beside it).
+        alias = [node["link"], node.named["ID"]?["value"]].lazy.compactMap { $0 }.first { !$0.isEmpty }
         number = (node.named["Value"] ?? node.child("property")).flatMap { $0["value"] }.flatMap { Int64($0) }
         allowsColoration = node["AllowColoration"] == "1"
         colorID = node["ColorID"]
@@ -69,5 +70,15 @@ extension AIMPSkinFont.Declaration {
     init(_ node: AIMPNode) {
         values = node.named.mapValues { $0["value"] ?? "" }
         colorID = node.named["ColorID"]?["value"]
+    }
+
+    /// Which of `Name`, `Height`, `Style` and `Color` it sets, as `AIMPSkinFont(declared:over:)` reads them.
+    var declaredSettings: Set<String> {
+        var settings: Set<String> = []
+        if let name = values["Name"], !name.isEmpty { settings.insert("Name") }
+        if let height = values["Height"].flatMap(Int.init), height != .min { settings.insert("Height") }
+        if values["Style"] != nil { settings.insert("Style") }
+        if values["Color"].flatMap({ Int64($0) }) != nil { settings.insert("Color") }
+        return settings
     }
 }

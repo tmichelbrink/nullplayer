@@ -60,7 +60,8 @@ struct AIMPSkin: Sendable {
             case .above: origin = CGPoint(x: deck.minX, y: deck.maxY)
             case .below: origin = CGPoint(x: deck.minX, y: deck.minY - size.height)
             }
-            if isSpeaker, size.height > deck.height { origin.y = deck.minY }
+            // Beside it only: a speaker below or above stays clear of the deck.
+            if isSpeaker, size.height > deck.height, placement == .left || placement == .right { origin.y = deck.minY }
             return origin
         }
 
@@ -135,7 +136,13 @@ struct AIMPSkin: Sendable {
         -> (id: String, entry: AIMPSkinResource.Entry?, chain: [AIMPSkinResource.Entry])? {
         guard var name = reference, !name.isEmpty else { return nil }
         var chain: [AIMPSkinResource.Entry] = []
-        for _ in 0..<8 {
+        // Every redirect is followed to the end of its chain, however long; one that comes back to a
+        // name already passed is a loop, and names nothing. Most chains are a step or two: the names
+        // passed are only kept from the eighth on.
+        var passed: Set<String> = [], steps = 0
+        while true {
+            steps += 1
+            if steps > 8, !passed.insert(name).inserted { return nil }
             if let link = links[name] {
                 name = link
                 continue
@@ -146,7 +153,6 @@ struct AIMPSkin: Sendable {
             guard !entry.holdsValue, let alias = entry.alias, alias != name else { return (name, entry, chain) }
             name = alias
         }
-        return nil
     }
 
     /// The image a skin, texture or resource reference names (`resource(_:in:links:)`): the entry
@@ -225,6 +231,9 @@ struct AIMPSkinFont: Equatable, Sendable {
         let height: Int
         let bold: Bool
         let color: UInt32
+        /// The settings (`Name`, `Height`, `Style`, `Color`) the control declared over the resource
+        /// itself: they stay when the resource is repointed, even where they equal what it gave.
+        var declared: Set<String> = []
     }
 
     /// As drawn, through the resource aliases a script repointed (M5's and Soot's themes): what the
@@ -233,10 +242,11 @@ struct AIMPSkinFont: Equatable, Sendable {
         var font = self
         if let resource, !links.isEmpty, let chain = AIMPSkin.resource(resource.id, in: resources, links: links)?.chain, !chain.isEmpty {
             let now = AIMPSkinFont(resource: chain)
-            if name == resource.name { font.name = now.name }
-            if height == resource.height { font.height = now.height }
-            if bold == resource.bold { font.bold = now.bold }
-            if color == resource.color { font.color = now.color }
+            let declared = resource.declared
+            if name == resource.name, !declared.contains("Name") { font.name = now.name }
+            if height == resource.height, !declared.contains("Height") { font.height = now.height }
+            if bold == resource.bold, !declared.contains("Style") { font.bold = now.bold }
+            if color == resource.color, !declared.contains("Color") { font.color = now.color }
             if colorID == nil { font.colorID = now.colorID }
         }
         if let id = font.colorID, let argb = AIMPSkin.color(id, in: resources, links: links) { font.color = argb }
@@ -328,6 +338,9 @@ enum AIMPSkinLoader {
     /// The font files one skin's shelf holds together: M5's three families are a few MB, so a skin
     /// whose fonts sum past this is a bomb, not a type specimen.
     static let fontBytes = 256 * 1_024 * 1_024
+    /// The suffixes of a picture's DPI variants (`Meter-120`); any other number is the picture's own
+    /// name (`Meter-2`).
+    static let dpiSuffixes: Set<String> = ["120", "144", "168", "192"]
 
     /// The production entry point: leaves the caller's executor before the file is touched, for a
     /// thread with the stack a skin's layout needs (`AIMPSkinWorker`).
@@ -394,7 +407,7 @@ enum AIMPSkinLoader {
             let stem = String(name.dropLast(ext.count))
             if ext != ".img", archive.entries[stem + ".img"] != nil { continue }
             if ext == ".bmp", archive.entries[stem + ".myimg"] != nil { continue }
-            if let dash = stem.lastIndex(of: "-"), Int(stem[stem.index(after: dash)...]) != nil { continue }
+            if let dash = stem.lastIndex(of: "-"), Self.dpiSuffixes.contains(String(stem[stem.index(after: dash)...])) { continue }
             inflated += entry.declaredSize
             guard inflated <= AIMPSkinPolicy.loadInflatedBytes else {
                 throw AIMPSkinFinding(.inflatedTooLarge, "The pictures inflate past \(AIMPSkinPolicy.loadInflatedBytes) bytes.")
@@ -405,10 +418,8 @@ enum AIMPSkinLoader {
                 let image = ext == ".bmp"
                     ? try AIMPSkinImage(bitmap: payload, name: entry.name, layout: layouts[stem] ?? .init(), budget: budget, source: source)
                     : try AIMPSkinImage(payload, name: entry.name, budget: budget, source: source)
-                let frame = image.frameSize
-                guard frame.width <= CGFloat(AIMPSkinPolicy.imageSide), frame.height <= CGFloat(AIMPSkinPolicy.imageSide) else {
-                    throw AIMPSkinFinding(.imageTooLarge, "\(entry.name) has \(Int(frame.width))×\(Int(frame.height)) frames.")
-                }
+                // AIMP 2's are cut into frames as its form is read: their frames are checked then.
+                if archive.format != .acsp { try Self.checkFrames(of: image, name: entry.name) }
                 guard image.width * image.height <= budget.limit else {
                     throw AIMPSkinFinding(.pixelBudgetExceeded,
                                           "\(entry.name) alone has \(image.width * image.height) pixels, more than \(budget.limit).")
@@ -420,17 +431,19 @@ enum AIMPSkinLoader {
         }
 
         var scriptFindings: [AIMPSkinFinding] = []
-        let scripts = AIMPSkinScript.Library(archive, findings: &scriptFindings)
+        let scripts = try AIMPSkinScript.Library(archive, inflated: &inflated, findings: &scriptFindings)
         scriptFindings.forEach(documents.record)
         let companions: [AIMPSkin.Companion], resources: [String: AIMPSkinResource], index: AIMPSkinIndex
         if let mainForm {
             (companions, resources, index) = Self.markupForms(mainForm, documents: documents, strings: strings)
         } else if let ini = archive.mainINI, archive.format == .acsp {
             resources = [:]
-            (index, companions, images) = try AIMPSkinAIMP2(documents: documents, ini: ini, images: images).read(dialect: AIMPSkinDialect(archive))
+            (index, companions, images) = try AIMPSkinAIMP2(documents: documents, ini: ini, images: images, strings: strings)
+                .read(dialect: AIMPSkinDialect(archive))
+            for (name, image) in images.sorted(by: { $0.key < $1.key }) { try Self.checkFrames(of: image, name: name) }
         } else if let ini = archive.mainINI {
             (companions, resources) = ([], [:])
-            index = try AIMPSkinAIMP3.read(documents, ini: ini, images: images, dialect: AIMPSkinDialect(archive))
+            index = try AIMPSkinAIMP3.read(documents, ini: ini, images: images, strings: strings, dialect: AIMPSkinDialect(archive))
         } else {
             throw AIMPSkinFinding(.noMainForm, "The skin has no AIMPMainForm.")
         }
@@ -444,6 +457,14 @@ enum AIMPSkinLoader {
             AIMPSkinRenderer.naturalSize(skin, form: form).map { (form ?? "", $0) }
         }, uniquingKeysWith: { first, _ in first })
         return skin
+    }
+
+    /// AM0006: each of `image`'s frames at most `imageSide` each way.
+    private static func checkFrames(of image: AIMPSkinImage, name: String) throws {
+        let frame = image.frameSize
+        guard frame.width <= CGFloat(AIMPSkinPolicy.imageSide), frame.height <= CGFloat(AIMPSkinPolicy.imageSide) else {
+            throw AIMPSkinFinding(.imageTooLarge, "\(name) has \(Int(frame.width))×\(Int(frame.height)) frames.")
+        }
     }
 
     /// A skin's XML forms and `Schema.xml`: the windows beside the main form, the resources, and the

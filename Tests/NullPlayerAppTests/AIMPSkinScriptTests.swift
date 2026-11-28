@@ -441,13 +441,18 @@ final class AIMPSkinScriptTests: XCTestCase {
         XCTAssertEqual(engine.state.script.variables["given"] ?? "0", "0")
     }
 
-    /// A form docks and undocks; an item moves only into an item of the skin, never under what it
-    /// holds; a control moves into an item or a control. Each refused move is checked on its own.
+    /// A form docks and undocks into the site that holds it, and a name no site holds is not kept;
+    /// an item moves only into an item of the skin, never under what it holds; a control moves into
+    /// an item or a control. Each refused move is checked on its own.
     func testDockingAndMovingItems() throws {
+        func site(_ form: String) -> String {
+            "<item class=\"LayoutDockSite\" name=\"\(form)Site\"><properties><property name=\"ControlName\" value=\"\(form)\"/></properties></item>"
+        }
         let skin = try Self.skin(form: """
-        <layout><items><item name="AioHost"/><item name="Table"><items><item name="Inner"/></items></item></items>
+        <layout><items><item name="AioHost"/><item name="Table"><items><item name="Inner"/></items></item>
+          \(site("LibraryForm"))\(site("PlaylistForm"))</items>
           <controls><control name="Knob" class="Button"/><control name="Holder" class="Button"/></controls></layout>
-        """)
+        """, entries: ["LibraryForm", "PlaylistForm"].map { ("\($0).xml", "<form name=\"\($0)\"/>") })
         let engine = AIMPSkinScript.Engine(skin: skin, host: AIMPSkinHostState(player: .probe), state: AIMPSkinState())
         func find(_ name: String) -> String { "<dsgn><node text=\"FindObject\"/><expr><string text=\"'\(name)'\"/></expr></dsgn>" }
         func run(_ statements: String) throws {
@@ -471,6 +476,7 @@ final class AIMPSkinScriptTests: XCTestCase {
         try run("""
         <callstmt><dsgn><node text="FindObject"/><expr><string text="'LibraryForm'"/></expr><node text="Undock"/></dsgn></callstmt>
         <callstmt><dsgn><node text="FindObject"/><expr><string text="'PlaylistForm'"/></expr><node text="Dock"/></dsgn></callstmt>
+        <callstmt><dsgn><node text="FindObject"/><expr><string text="'NoSuchForm'"/></expr><node text="Dock"/></dsgn></callstmt>
         """)
         XCTAssertEqual(engine.state.script.objects.values(\.docked), ["LibraryForm": false, "PlaylistForm": true])
 
@@ -483,6 +489,55 @@ final class AIMPSkinScriptTests: XCTestCase {
           <expr><dsgn><node text="FindObject"/><expr><string text="'Table'"/></expr><node text="Parent"/></dsgn></expr></assignstmt>
         """)
         XCTAssertEqual(engine.state.script.variables["where"], "AioHost")
+    }
+
+    /// Once either limit of a shared budget is spent, a later run on it stops at its first step: a
+    /// job after one that spent the text budget commits nothing.
+    func testASpentTextBudgetStopsTheNextRunsSteps() throws {
+        let budget = AIMPSkinScript.Budget()
+        XCTAssertThrowsError(try budget.charge(AIMPSkinScript.Budget.byteLimit))
+        XCTAssertThrowsError(try budget.step(), "the text budget is spent")
+        let skin = try Self.skin(scripts: ["Count": """
+        <program><procedure><name text="Execute"/><compoundstmt>
+          <assignstmt><dsgn><node text="Given"/></dsgn><expr><number text="1"/></expr></assignstmt>
+        </compoundstmt></procedure></program>
+        """])
+        let engine = AIMPSkinScript.Engine(skin: skin, host: AIMPSkinHostState(player: .probe), state: AIMPSkinState(), budget: budget)
+        XCTAssertTrue(engine.handle("Count", sender: "Count"), "stopped on the limit")
+        XCTAssertEqual(engine.state.script.variables["given"] ?? "0", "0")
+    }
+
+    /// `FindResource(id).Set('ID', …)` keeps as many aliases as `ConfigSet` keeps keys: a loop of
+    /// fresh names stops growing the state; an alias already kept can still be repointed.
+    func testResourceAliasesAreHeldToTheStoreLimit() throws {
+        let engine = try Self.engine()
+        func repoint(_ id: String, to target: String) throws {
+            try engine.run(AIMPSkinScript.compile(Self.node("""
+            <program><procedure><name text="Execute"/><compoundstmt>
+              <callstmt><dsgn><node text="FindResource"/><expr><string text="'\(id)'"/></expr><node text="Set"/>
+                <expr><string text="'ID'"/></expr><expr><string text="'\(target)'"/></expr></dsgn></callstmt>
+            </compoundstmt></procedure></program>
+            """)))
+        }
+        let limit = AIMPSkinScript.Run.storedKeyLimit
+        for index in 0..<(limit + 5) { try repoint("Skin.Alias\(index)", to: "Skin.Face") }
+        XCTAssertEqual(engine.state.script.resourceLinks.count, limit)
+        try repoint("Skin.Alias0", to: "Skin.Face_7")
+        XCTAssertEqual(engine.state.script.resourceLinks["Skin.Alias0"], "Skin.Face_7")
+        try repoint("Skin.Alias1", to: String(repeating: "x", count: AIMPSkinScript.Run.longestPropertyPath + 1))
+        XCTAssertEqual(engine.state.script.resourceLinks["Skin.Alias1"], "Skin.Face", "a target too long is not kept")
+    }
+
+    /// A cleared binding set's links stay gone: a new link takes a fresh id, so a handle the script
+    /// kept to an old one finds nothing.
+    func testAClearedBindingSetKeepsOldHandlesInvalid() {
+        var set = AIMPSkinScript.BindingSet()
+        let old = set.add(AIMPSkinLink(source: "A", pin: "Position", target: "Value", names: AIMPSkinIndex.Names()))
+        set.removeAll()
+        let new = set.add(AIMPSkinLink(source: "B", pin: "Position", target: "Value", names: AIMPSkinIndex.Names()))
+        XCTAssertNotEqual(old, new)
+        XCTAssertNil(set[old])
+        XCTAssertEqual(set[new]?.source, "B")
     }
 
     /// A flat chain of operands deeper than evaluation goes does not compile, so its tree is never

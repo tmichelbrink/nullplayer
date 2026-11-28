@@ -17,14 +17,14 @@ import Foundation
 enum AIMPSkinAIMP3 {
     /// The main form, its index, read from the skin's layout documents and `main.ini`.
     static func read(_ documents: AIMPSkinDocuments, ini: INIFile, images: [String: AIMPSkinImage],
-                     dialect: AIMPSkinDialect) throws -> AIMPSkinIndex {
+                     strings: [String: String] = [:], dialect: AIMPSkinDialect) throws -> AIMPSkinIndex {
         let layout = try documents.throwing("MainFrame.xml", missing: "An AIMP 3.0 skin with no MainFrame.xml.", documents.node)
         // A dock site's frame that does not read is a finding (`documents`), and the site is left as
         // if it had none.
         var shape = Shape(frame: { documents.node($0).map(Layout.items) }, images: images, objects: objects(ini),
                           activeTab: ini["TabCtrl", "ActiveTab"], playlist: playlistSettings(ini))
         let form = shape.form(Layout.items(of: layout), sizingEdge: ini["MainFrame", "SizingHitTestAreaWidth"])
-        return Build(shape: shape, dialect: dialect).index(form)
+        return Build(shape: shape, dialect: dialect, strings: strings).index(form)
     }
 
     /// How each BMP picture is cut, by lowercased object name: its `main.ini` section's `SkinFrames`,
@@ -160,13 +160,16 @@ extension AIMPSkinAIMP3 {
         return (ini["Parents"]?.lines ?? []).compactMap { name, item in
             let own = ini[name]
             func setting(_ key: String) -> String? { own?[key] }
+            // Held as the layout's numbers are (`AIMPNode.numbers`): a size near `Int.max` would
+            // round past it as a `CGFloat` and trap where it is made whole again.
+            func dimension(_ key: String) -> Int { min(max(Int(setting(key) ?? "") ?? 0, -1_000_000), 1_000_000) }
             guard let kind = Kind(custom: ini["CustomObjects", name], base: original(of: name, clones: clones), setting: setting) else {
                 return nil
             }
             return Object(name: name, item: item,
                           anchors: AIMPNode.numbers(setting("PlaceAnchors") ?? "1,1,0,0"),
                           margins: AIMPNode.numbers(setting("PlaceMargins") ?? "0,0,0,0"),
-                          size: CGSize(width: Int(setting("PlaceWidth") ?? "") ?? 0, height: Int(setting("PlaceHeight") ?? "") ?? 0),
+                          size: CGSize(width: dimension("PlaceWidth"), height: dimension("PlaceHeight")),
                           z: Int(setting("ZOrder") ?? "") ?? 0, kind: kind, font: setting("Font"),
                           textAlign: setting("TextAlign").flatMap { Int($0) }, orientation: setting("Orientation").flatMap { Int($0) })
         }

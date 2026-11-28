@@ -171,6 +171,55 @@ final class AIMPSkinACSPTests: XCTestCase {
         XCTAssertNotNil(Self.controls(skin).values.first { if case .playlist = $0.kind { true } else { false } }, "the playlist docks under the player")
     }
 
+    /// A band with no picture of its own takes the ninth's parts, but keeps those it ships.
+    func testAnEqualizerBandKeepsThePartsItShips() throws {
+        let ini = Self.ini("[SKIN_OBJS]\nAIMPSlider3=0,0,4,20\n[PARENTS]\n")
+        let skin = try AIMPSkinLoader.load(data: Self.package(version: 2, name: "V2", author: "", entries: [
+            ("main.ini", ini), ("MainClient_skin.bmp", Self.solid(width: 40, height: 20)),
+            ("AIMPSlider9_skin.bmp", Self.solid(width: 4, height: 20)), ("AIMPSlider9_thumb_skin.bmp", Self.solid(width: 4, height: 2)),
+            ("AIMPSlider3_thumb_skin.bmp", Self.solid(width: 4, height: 6)),
+        ]))
+        XCTAssertEqual(skin.images["aimpslider3.img"]?.height, 20, "the ninth's body")
+        XCTAssertEqual(skin.images["aimpslider3_thumb.img"]?.height, 6, "its own thumb")
+        XCTAssertEqual(skin.images["aimpslider4_thumb.img"]?.height, 2, "a band with nothing takes the ninth's thumb")
+    }
+
+    /// `[File] FormMinW`/`FormMinH` hold the main window, not the equalizer window beside it; a
+    /// panel's `TLC` and `TRC` read in any case; a filmstrip wider than one frame may be is cut
+    /// into its frames before its frames are measured.
+    func testVersion3MainWindowSettingsAndWideStrips() throws {
+        let ini = Self.ini("""
+        [File]
+        FormMinW=200
+        FormMinH=150
+        [Parents]
+        PlayBtn=MAIN
+        [PlayBtn]
+        Bounds=0,0,5000,2
+        SkinFrames=4
+        [MainClient]
+        tlc=10,0,15,0
+        trc=25,0,30,0
+        """)
+        let layout = Data("<item Align=\"top\" Level=\"0\" Control=\"MainFrame\"/>".utf8)
+        let wide = AIMPSkinPolicy.imageSide + 3_616
+        let skin = try AIMPSkinLoader.load(data: Self.package(version: 3, entries: [
+            ("main.ini", ini), ("MainLayout.xml", layout), ("MainClient.bmp", Self.solid(width: 40, height: 20)),
+            ("PlayBtn.bmp", Self.solid(width: wide, height: 2)), ("MainEquaFrame.bmp", Self.solid(width: 30, height: 30)),
+        ]))
+        XCTAssertEqual(skin.naturalSize(form: nil).map { $0.width >= 200 && $0.height >= 150 }, true, "the main window's least size")
+        XCTAssertEqual(skin.naturalSize(form: "EquaForm"), CGSize(width: 30, height: 30), "the equalizer at what it holds")
+        XCTAssertNotNil(skin.images["mainclient.img"]?.stretchColumns, "`tlc` and `trc` as `TLC` and `TRC`")
+        XCTAssertEqual(skin.images["playbtn.img"]?.frameCount, 4)
+
+        XCTAssertThrowsError(try AIMPSkinLoader.load(data: Self.package(version: 3, entries: [
+            ("main.ini", ini), ("MainLayout.xml", layout), ("MainClient.bmp", Self.solid(width: 40, height: 20)),
+            ("Strip.bmp", Self.solid(width: wide, height: 1)),
+        ]))) { error in
+            XCTAssertEqual((error as? AIMPSkinFinding)?.code, .imageTooLarge, "one frame that wide")
+        }
+    }
+
     func testVersion3TakesItsLayoutFromItsFilesAndSaysWhyNot() throws {
         let ini = Self.ini("[Parents]\nPlayBtn=MAIN\n[PlayBtn]\nBounds=0,0,10,10\n")
         let entries = [("main.ini", ini), ("MainClient.bmp", Self.solid(width: 40, height: 20))]

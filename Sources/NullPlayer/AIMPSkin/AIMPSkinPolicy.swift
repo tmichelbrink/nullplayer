@@ -12,8 +12,8 @@ enum AIMPSkinPolicy {
     /// AM0005. One inflated entry, or a whole `.acs4` body. Technics SL-1200's body is 539 MB
     /// (high-resolution artwork in an `.acs4`), measured 2026-10-31.
     static let inflatedBytes = 1_024 * 1_024 * 1_024
-    /// AM0005, per load: what reading every picture's header may inflate together, counted from the
-    /// sizes the container declares before a byte is inflated. Skins are compressed already, so a
+    /// AM0005, per load: what reading every picture's header and compiling every script may inflate
+    /// together, counted from the sizes the container declares before a byte is inflated. Skins are compressed already, so a
     /// real one inflates to about its file size (`fileBytes`); 32,768 entries of 1 GiB each would
     /// otherwise each be inflated for their header.
     static let loadInflatedBytes = 2 * 1_024 * 1_024 * 1_024

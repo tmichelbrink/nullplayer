@@ -90,6 +90,57 @@ final class AIMPSkinPlaylistMenuTests: XCTestCase {
         XCTAssertEqual(engine.playlist.map(\.title), ["Track 0", "Track 2", "Track 3"], "only the shown track goes")
     }
 
+    /// The selection is read after the rows are refreshed: a reorder the refresh finds clears it, so
+    /// Remove Selected cannot take the track that moved under the selected row.
+    func testTheSelectionIsReadAfterTheRowsAreRefreshed() throws {
+        let (target, runtime) = try make(tracks: 2)
+        var generation = 0
+        target.refreshRows = { [engine] in
+            generation += 1
+            var player = AIMPSkinPlayerSnapshot()
+            player.playlist = .init(rows: engine.playlist.map { .init(title: $0.title ?? "", seconds: 0) }, generation: generation)
+            runtime.update(player: player)
+        }
+        runtime.state.lists.playlistSearch = "Track"
+        target.selectAll(nil)
+        runtime.state.lists.playlistSelection = [0]
+        engine.reversePlaylist()
+        target.removeSelected(nil)
+        XCTAssertEqual(engine.playlist.count, 2, "the reorder cleared the selection before it was read")
+        XCTAssertEqual(runtime.state.lists.playlistSelection, [])
+    }
+
+    /// Crop Selection removes the shown rows not selected, and keeps the ones the search hides.
+    func testCropKeepsTheRowsTheSearchHides() throws {
+        let (target, runtime) = try make(tracks: 12)
+        target.refreshRows = { [engine] in
+            var player = AIMPSkinPlayerSnapshot()
+            player.playlist = .init(rows: engine.playlist.map { .init(title: $0.title ?? "", seconds: 0) }, generation: 1)
+            runtime.update(player: player)
+        }
+        runtime.state.lists.playlistSearch = "1"
+        target.selectAll(nil)
+        XCTAssertEqual(runtime.state.lists.playlistSelection, [1, 10, 11])
+        runtime.state.lists.playlistSelection = [10]
+        target.cropSelection(nil)
+        XCTAssertEqual(engine.playlist.map(\.title), (0..<12).filter { $0 != 1 && $0 != 11 }.map { "Track \($0)" })
+    }
+
+    /// A rebuild that only fills in sizes keeps the selection; two tracks of one title and length
+    /// from different folders, swapped, or of sizes already known, do not.
+    func testOnlyAFilledInSizeKeepsTheSelection() {
+        typealias Row = AIMPSkinPlayerSnapshot.Playlist.Row
+        let a = Row(title: "Mix", seconds: 60, group: "A"), b = Row(title: "Mix", seconds: 60, group: "B")
+        var sizedA = a, sizedB = b
+        sizedA.bytes = 10
+        sizedB.bytes = 20
+        XCTAssertTrue(AIMPSkinRuntime.onlySizesMoved([sizedA, sizedB], [a, b]))
+        XCTAssertFalse(AIMPSkinRuntime.onlySizesMoved([b, a], [a, b]), "swapped across folders")
+        var sameFolder = sizedB
+        sameFolder.group = "A"
+        XCTAssertFalse(AIMPSkinRuntime.onlySizesMoved([sameFolder, sizedA], [sizedA, sameFolder]), "swapped, sizes known")
+    }
+
     func testTheSectionMenusComeFromTheBuilder() throws {
         let (target, runtime) = try make(tracks: 2)
         runtime.state.lists.playlistSelection = []

@@ -259,12 +259,14 @@ struct AIMPSkinImage: Sendable {
     private static func acl(_ data: Data, name: String) throws -> Header {
         let chunks = try chunks(data, name: name)
         var width = 0, height = 0
-        if let pixels = chunks["bitz"] ?? chunks["bits"], pixels.end >= 12 {
+        // The size is read from the chunk the pixels are (`pixelChunk`), so the two always agree.
+        let (pixelChunk, packed) = Self.pixelChunk(chunks)
+        if let pixels = pixelChunk, pixels.end >= 12 {
             width = try pixels.u32(at: 4)
             height = try pixels.u32(at: 8)
         }
         let bytes = try pixelBytes(width, height, name: name)
-        if let raw = chunks["bits"], chunks["bitz"] == nil, raw.end - 12 < bytes {
+        if let raw = pixelChunk, !packed, raw.end - 12 < bytes {
             throw AIMPSkinFinding(.entryUnreadable, "\(name) has \(raw.end - 12) bytes for \(width)×\(height).")
         }
         var layout = Layout()
@@ -285,14 +287,22 @@ struct AIMPSkinImage: Sendable {
     /// The pixels of an `ACLIMG32`'s `bits` chunk, or its `bitz` (a u32 packed size, then zlib).
     private static func aclPixels(_ data: Data, name: String) throws -> Data {
         let chunks = try chunks(data, name: name)
-        if let packed = chunks["bitz"], packed.end >= 16 {
+        switch Self.pixelChunk(chunks) {
+        case (let packed?, true):
             let bytes = try pixelBytes(try packed.u32(at: 4), try packed.u32(at: 8), name: name)
             return try AIMPSkinZlib.inflate(packed.data.dropFirst(16), expected: bytes, name: name)
-        }
-        guard let raw = chunks["bits"], raw.end >= 12 else {
+        case (let raw?, false) where raw.end >= 12:
+            return raw.data.dropFirst(12)
+        default:
             throw AIMPSkinFinding(.entryUnreadable, "\(name) has no pixels.")
         }
-        return raw.data.dropFirst(12)
+    }
+
+    /// The chunk an `ACLIMG32`'s pixels are read from: a `bitz` long enough for its packed size
+    /// (packed), else `bits` (raw).
+    private static func pixelChunk(_ chunks: [String: AIMPSkinBytes]) -> (chunk: AIMPSkinBytes?, packed: Bool) {
+        if let packed = chunks["bitz"], packed.end >= 16 { return (packed, true) }
+        return (chunks["bits"], false)
     }
 
     /// `ASEIMG32`: a 70-byte header, then the pixels.
@@ -333,9 +343,9 @@ struct AIMPSkinImage: Sendable {
                 throw AIMPSkinFinding(.entryUnreadable, "\(name): chunk \(tag) runs past the image.")
             }
             let range = try reader.skip(size)
-            // Only the chunks read here are copied out; any other is passed over.
+            // Only the chunks read here are kept, as slices of the entry (a header read copies no pixels).
             guard Self.chunkTags.contains(tag) else { continue }
-            chunks[tag] = AIMPSkinBytes(data.subdata(in: (data.startIndex + range.lowerBound)..<(data.startIndex + range.upperBound)),
+            chunks[tag] = AIMPSkinBytes(data[(data.startIndex + range.lowerBound)..<(data.startIndex + range.upperBound)],
                                         code: .entryUnreadable)
         }
         return chunks

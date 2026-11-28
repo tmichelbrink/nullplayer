@@ -18,7 +18,7 @@ header checked), every `.lng` through `INIFile` (`INIFile+AIMP`).
 | `AM0002` | yes | the file is over `fileBytes` (1 GB), or a `.zip` entry inflates past its declared size on import |
 | `AM0003` | yes | more than `entries` (32,768) entries |
 | `AM0004` | yes | an entry or header field lies past the end of the file |
-| `AM0005` | yes | one entry, or a whole `.acs4` body, declares or inflates past `inflatedBytes` (1 GB); or a skin's pictures declare more than `loadInflatedBytes` (2 GB) together, counted before any is inflated |
+| `AM0005` | yes | one entry, or a whole `.acs4` body, declares or inflates past `inflatedBytes` (1 GB); or a skin's pictures and scripts declare more than `loadInflatedBytes` (2 GB) together, counted before any is inflated |
 | `AM0006` | yes | an image's *frame* side is over `imageSide` (16,384 px); a filmstrip's full width is not |
 | `AM0007` | yes | one image alone is over `decodedPixels` (256 Mpx), from its header. Pictures decode when first drawn, and a skin keeps at most `decodedPixels` decoded at once (`AIMPSkinPixelBudget`): a decode that would pass it lets the least recently drawn pictures go, to decode again if drawn again |
 | `AM0008` | **no** | an entry does not inflate, is truncated, or is not an image; or a compiled script (`FSXMLBIN`) does not decode, or has a tree the script compiler does not take: it is skipped |

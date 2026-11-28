@@ -36,13 +36,16 @@ struct AIMPSkinAIMP2 {
     let images: [String: AIMPSkinImage]
     /// Version 2's `main.ini` (`[SKIN_OBJS]`) has no layout files; version 3's has.
     let isVersion2: Bool
+    /// The `.lng` strings its `@Lng:N;` captions read (`AIMPSkinLanguage`).
+    let strings: [String: String]
 
     typealias Object = AIMPSkinAIMP3.Object
     typealias Layout = AIMPSkinAIMP3.Layout
 
-    init(documents: AIMPSkinDocuments, ini: INIFile, images: [String: AIMPSkinImage]) {
+    init(documents: AIMPSkinDocuments, ini: INIFile, images: [String: AIMPSkinImage], strings: [String: String] = [:]) {
         self.documents = documents
         self.ini = ini
+        self.strings = strings
         isVersion2 = ini["SKIN_OBJS"] != nil
         let isVersion2 = isVersion2
         func stem(_ file: String) -> String {
@@ -62,9 +65,12 @@ struct AIMPSkinAIMP2 {
         }
         if renamed["srinfo.img"] == nil { renamed["srinfo.img"] = renamed["brinfo.img"] }
         // The skin editor gives the equalizer's bands one picture, the ninth's (every version 2
-        // skin has `AIMPSlider9_skin` and few another band's).
+        // skin has `AIMPSlider9_skin` and few another band's): a band with no picture of its own
+        // takes the ninth's parts, but those it ships.
         for band in 1...18 where renamed["aimpslider\(band).img"] == nil {
-            for part in ["", "_thumb", "_sel"] { renamed["aimpslider\(band)\(part).img"] = renamed["aimpslider9\(part).img"] }
+            for part in ["", "_thumb", "_sel"] where renamed["aimpslider\(band)\(part).img"] == nil {
+                renamed["aimpslider\(band)\(part).img"] = renamed["aimpslider9\(part).img"]
+            }
         }
         self.images = renamed
     }
@@ -108,16 +114,16 @@ struct AIMPSkinAIMP2 {
         var shape = AIMPSkinAIMP3.Shape(frame: { _ in nil }, images: images, objects: objects(placed), activeTab: settings.activeTab,
                                         playlist: settings.playlist)
         shape.equalizerWindow = ownsEqualizer ? Self.equalizerWindow : nil
-        shape.minimumSize = settings.minimumSize
         shape.playlistRoom = true
-        let form = shape.form(main, sizingEdge: settings.sizingEdge)
+        // The main window's least size is its own: the equalizer window opens at what it holds.
+        let form = shape.form(main, sizingEdge: settings.sizingEdge, minimumSize: settings.minimumSize)
         var companions: [(companion: AIMPSkin.Companion, root: AIMPSkinAIMP3.Shaped)] = []
         if ownsEqualizer {
             let equalizer = shape.form([Layout(name: "MainEquaFrame")], sizingEdge: settings.sizingEdge)
             companions.append((AIMPSkin.Companion(name: Self.equalizerWindow, title: "Equalizer", initiallyVisible: false, role: .other,
                                                   placement: .right), equalizer.root))
         }
-        let index = AIMPSkinAIMP3.Build(shape: shape, dialect: dialect).index(form, companions: companions)
+        let index = AIMPSkinAIMP3.Build(shape: shape, dialect: dialect, strings: strings).index(form, companions: companions)
         return (index, companions.map(\.companion), images)
     }
 }
