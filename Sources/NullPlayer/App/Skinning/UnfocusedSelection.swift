@@ -26,7 +26,7 @@ enum UnfocusedSelection {
         let isKey = window?.isKeyWindow ?? true
         switch WindowManager.shared.uiMode.controllerFamily {
         case .winampModern: return false
-        case .classic, .nullPlayerModern, .wmp, .audion, .sonique: return !isKey
+        case .classic, .nullPlayerModern, .wmp, .audion, .sonique, .aimp: return !isKey
         }
     }
 
